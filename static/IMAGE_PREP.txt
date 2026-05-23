@@ -1,0 +1,42 @@
+사주까기 — 이미지 준비물 체크리스트 (디자인·납품용)
+===============================================
+
+공통
+----
+- 포맷: UI/PWA는 PNG·WebP 권장, 로고형은 SVG 병행 가능.
+- 다크 베이스: #0A0A14, 악센트 골드: #D4AF37 / #E8B923 (config.toml·CSS와 동조).
+- 납품 시 1x·2x(@2x) 또는 벡터(SVG) 중 하나는 필수.
+
+1) 앱 아이콘 (512×512, 금박 스타일)
+-----------------------------------
+- 마스터: 512×512 PNG (투명 또는 #0A0A14 라운드 사각 배경).
+-보내기:
+  - static/icons/icon-512.png  ← PWA manifest
+  - static/icons/icon-192.png  ← 홈 화면·apple-touch-icon
+  - static/icons/icon.svg        ← 선택(단일 색상 로고에 적합)
+- 금박: 메탈릭 그라데이션 + 미세 노이즈/엠보; 가장자리 8~12% 세이프 존(마스크·둥근 모서리 잘림 방지).
+- 생성 스크립트 scripts/gen_pwa_icons.py 는 단색 플레이스홀더용 — 최종 아이콘으로 교체.
+
+2) 홈 화면 배경 (한지 질감)
+---------------------------
+- 용도: 랜딩/첫 화면 느낌, PWA standalone 시 상단 여백, 또는 CSS background-image.
+- 권장 파일명(예): static/bg/hanji_tile.webp (타일) 또는 static/bg/hanji_hero_1440.webp (풀블리드).
+- 해상도: 세로 모바일 기준 최소 너비 1080~1440px, 용량 WebP 200~600KB 목표.
+- 타일형이면 seamless; 풀블리드면 상단 20%는 정보 밀도 낮게(텍스트 가독성).
+
+3) 오행 아이콘 5개 (木火土金水)
+-------------------------------
+- 코드 상 오행 순서 참고: saju_app/ui/oheng_visuals.py 의 _EL_ORDER (木→水).
+- 권장 파일명(예): static/icons/oheng/mok.svg, hwa.svg, to.svg, geum.svg, su.svg
+  (또는 wood.png … water.png).
+- 스타일: 동일 선두께·캔버스(예 48×48 안전영역), 색은 saju_app/config.py 의 오행 팔레트와 맞출 것.
+
+4) 신살 아이콘 세트 (12신살 이름 기준)
+-------------------------------------
+- saju_app/core/sinsal.py 의 SINSAL_ORDER 순서(12종):
+  겁살, 재살, 천살, 지살, 년살, 월살, 망신, 장성, 반안, 역마, 육해, 화개
+- 권장: 파일명 한글 대신 로마자/슬러그 — 예) static/icons/sinsal/geopsal.svg … hwagae.svg
+- 동일 그리드·톤(선 아이콘 / 면 아이콘 통일); 작은 크기(20~24px)에서 실루엣만으로 구분 가능하게.
+
+(참고) 현재 UI는 이모지·CSS 바 위주 — 위 에셋을 넣은 뒤에는 oheng_visuals·STEP UI에서
+<img> 또는 background-image 로 연결하는 작업이 별도로 필요합니다.

@@ -1,0 +1,37 @@
+{
+  "name": "saju-briefing-3d",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "clean": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/clean-next.ps1",
+    "dev": "node ./node_modules/next/dist/bin/next dev",
+    "dev:lan": "node ./node_modules/next/dist/bin/next dev -H 0.0.0.0",
+    "dev:clean": "npm run clean && npm run dev",
+    "dev:lan:clean": "npm run clean && npm run dev:lan",
+    "dev:open": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-dev-open.ps1",
+    "open:briefing": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/open-briefing.ps1",
+    "build": "node ./node_modules/next/dist/bin/next build",
+    "start": "node ./node_modules/next/dist/bin/next start",
+    "lint": "node ./node_modules/next/dist/bin/next lint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.117.3",
+    "@react-three/fiber": "^8.17.10",
+    "framer-motion": "^11.11.17",
+    "next": "^14.2.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "swiper": "^11.1.15",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.170.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.7.2"
+  }
+}

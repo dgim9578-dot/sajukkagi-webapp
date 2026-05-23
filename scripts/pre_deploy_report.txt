@@ -1,0 +1,13 @@
+=== 사주까기 배포 전 점검 ===
+
+  OK  app.py 진입점
+  OK  requirements.txt
+  OK  secrets.toml 이 .gitignore 에 등록됨
+  OK  runtime.txt: python-3.11
+  OK  Python 구문 검사 통과
+  OK  핵심 모듈 import
+  OK  .gitignore: saju_app.db
+  OK  .gitignore: step2_form_prefill.json
+  OK  .gitignore: consultation_chat_archive.jsonl
+
+결과: 배포 준비 OK (WARN 은 확인 권장)

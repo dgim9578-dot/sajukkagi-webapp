@@ -1,0 +1,28 @@
+# Python / Streamlit
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.streamlit/secrets.toml
+
+# Local runtime data containing personal information or chat logs
+saju_app.db
+saju_app.db-*
+consultation_chat_archive.jsonl
+step11_shared_chat_bus.json
+shared_chat_dump.json
+step2_form_prefill.json
+*.sqlite
+*.sqlite3
+
+# Local environment
+.env
+*.log
+
+# Frontend (Streamlit 배포에는 불필요 — 별도 Vercel 등으로 배포)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# 배포 점검 임시 파일
+_check_out.txt

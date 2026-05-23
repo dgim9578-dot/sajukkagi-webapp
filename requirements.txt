@@ -1,0 +1,18 @@
+streamlit>=1.38.0
+korean_lunar_calendar
+bcrypt>=4.0.0
+cryptography>=42.0.0
+fpdf2>=2.7.0
+reportlab>=4.0.0
+streamlit-extras>=0.4.2
+streamlit-javascript>=0.1.5
+streamlit-lottie>=0.0.5
+openai
+redis>=5.0.0
+numpy>=1.24.0
+# REST 브리핑 API (선택): uvicorn saju_app.api.app:app --reload --port 8000
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+# WeasyPrint는 HTML→PDF에 강하지만 Windows 네이티브 빌드가 무겁습니다. 필요 시 별도 설치 후 별도 코드 경로로 연결하세요.
+# Redis 백엔드(SAJU_STORAGE=redis) 사용 시: pip install redis
+# 커스텀 iframe 컴포넌트(React 등): https://github.com/streamlit/component-template → streamlit-components-v1

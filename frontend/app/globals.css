@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 오행 테마 — SajuThemeProvider data-theme (saju_storage.THEME_CONFIG 동기) */
+[data-theme="wood"] {
+  --primary: #10b981;
+  --primary-soft: #d1fae5;
+  --gradient: linear-gradient(135deg, #10b981, #34d399);
+}
+
+[data-theme="fire"] {
+  --primary: #ef4444;
+  --primary-soft: #fee2e2;
+  --gradient: linear-gradient(135deg, #ef4444, #f97316);
+}
+
+[data-theme="earth"] {
+  --primary: #d4af37;
+  --primary-soft: #fef3c7;
+  --gradient: linear-gradient(135deg, #d4af37, #fbbf24);
+}
+
+[data-theme="metal"] {
+  --primary: #94a3b8;
+  --primary-soft: #f1f5f9;
+  --gradient: linear-gradient(135deg, #94a3b8, #cbd5e1);
+}
+
+[data-theme="water"] {
+  --primary: #3b82f6;
+  --primary-soft: #dbeafe;
+  --gradient: linear-gradient(135deg, #3b82f6, #6366f1);
+}
+
+.saju-theme-accent {
+  color: var(--primary);
+}
+
+.saju-theme-shell {
+  transition: background-color 0.7s ease, color 0.4s ease;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #050508;
+  color: #f5f5f5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Swiper 전체 화면 덱 — 단일 스크롤(슬라이드 내부만) */
+.briefing-deck-root {
+  overflow: hidden;
+}
+
+.briefing-deck-root .swiper,
+.briefing-deck-root .swiper-wrapper,
+.briefing-deck-root .swiper-slide {
+  height: 100%;
+  min-height: 0;
+}
+
+.briefing-deck-root .swiper-slide {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+button:focus-visible {
+  outline: 2px solid #d4af37;
+  outline-offset: 2px;
+}
+
+.briefing-particles::before,
+.briefing-particles::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.35;
+  background: var(--bp-color, #d4af37);
+  animation: bp-float 6s ease-in-out infinite;
+}
+
+.briefing-particles::before {
+  width: 120px;
+  height: 120px;
+  top: 10%;
+  left: 8%;
+}
+
+.briefing-particles::after {
+  width: 80px;
+  height: 80px;
+  bottom: 15%;
+  right: 12%;
+  animation-delay: 1.2s;
+}
+
+.briefing-particles--heart::before {
+  border-radius: 0;
+  width: 24px;
+  height: 24px;
+  transform: rotate(-45deg);
+}
+
+@keyframes bp-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateY(-12px) scale(1.08);
+    opacity: 0.45;
+  }
+}

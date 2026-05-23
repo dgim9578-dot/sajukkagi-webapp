@@ -1,0 +1,27 @@
+# Streamlit 1.38+ 테마: 앱 우상단 ⋮ → Settings → Theme 에서 Light / Dark 전환
+# https://docs.streamlit.io/develop/concepts/configuration/theming
+#
+# 다크 프리미엄: 고급 한지 + 금박 + Deep Dark
+# 배경 #0A0A14 · 카드 그라데이션은 bootstrap CSS · 악센트 #D4AF37 / #E8B923
+# 본문 #E5E5E5 · 보조 강조 #A5B4FC (링크에 사용)
+
+[theme.light]
+# 라이트: 크림 베이스 + 골드 액센트 (다크와 쌍)
+primaryColor = "#C9A227"
+backgroundColor = "#FAF8F3"
+secondaryBackgroundColor = "#F0EBE0"
+textColor = "#1A1A2E"
+linkColor = "#8A6D1A"
+
+[theme.dark]
+primaryColor = "#D4AF37"
+backgroundColor = "#0A0A14"
+secondaryBackgroundColor = "#1A1A2E"
+textColor = "#E5E5E5"
+linkColor = "#A5B4FC"
+
+# PWA: ``app.py`` 옆 ``static/`` → 브라우저에서는 ``/app/static/...`` (Streamlit 공식 경로)
+[server]
+# 휴대폰·태블릿에서 PC IP(예: http://192.168.x.x:8501)로 접속하려면 0.0.0.0 필요
+address = "0.0.0.0"
+enableStaticServing = true

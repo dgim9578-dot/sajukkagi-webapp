@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>사주프로 — 서버 시작</title>
+  <style>
+    body {
+      font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+      max-width: 520px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      background: #1a1510;
+      color: #f5ecd8;
+      line-height: 1.5;
+    }
+    h1 { font-size: 1.25rem; color: #d4af37; }
+    .card {
+      background: #2a2218;
+      border: 1px solid #5c4a32;
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      margin: 1rem 0;
+    }
+    a.btn {
+      display: block;
+      text-align: center;
+      padding: 0.85rem 1rem;
+      margin: 0.6rem 0;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      color: #1a1510;
+    }
+    a.t1 { background: #7ec8e3; }
+    a.t2 { background: #c9a0dc; }
+    a.both { background: #d4af37; }
+    p.note { font-size: 0.85rem; color: #b8a88a; margin-top: 0.5rem; }
+    code { background: #3d3226; padding: 0.15rem 0.35rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>사주프로 서버 시작</h1>
+  <p style="color:#e8b86d;font-weight:700;">
+    ⚠ <code>192.168.x.x</code> 는 예시입니다. x.x를 그대로 주소창에 넣으면 연결되지 않습니다.
+    PC는 <code>localhost</code>, 휴대폰은 <code>ipconfig</code>에 나온 숫자(예: 192.168.0.15)를 쓰세요.
+  </p>
+  <p>아래 버튼을 누르면 <strong>새 PowerShell 창</strong>에서 서버가 실행됩니다.</p>
+
+  <div class="card">
+    <p><strong>터미널 1</strong> — 3D 브리핑 (포트 3000)</p>
+    <a class="btn t1" href="scripts/터미널1-시작.bat">터미널 1 시작</a>
+    <p class="note">PC: <code>http://localhost:3000</code> — <strong>Ready</strong> 나올 때까지 이 창을 닫지 마세요.</p>
+  </div>
+
+  <div class="card">
+    <p><strong>터미널 2</strong> — 사주 앱 Streamlit (포트 8501)</p>
+    <a class="btn t2" href="scripts/터미널2-시작.bat">터미널 2 시작</a>
+    <p class="note">PC: <code>http://localhost:8501</code> · 터미널1이 먼저 켜져 있어야 브리핑 연동됩니다.</p>
+  </div>
+
+  <div class="card">
+    <a class="btn both" href="scripts/터미널-모두-시작.bat">터미널 1 + 2 모두 시작</a>
+  </div>
+
+  <div class="card">
+    <a class="btn both" href="scripts/서버-상태확인.bat">서버 켜짐 여부 확인</a>
+    <a class="btn both" href="scripts/접속주소-열기.bat">PC 브라우저에 localhost 열기</a>
+    <p class="note">터미널1·2 실행 후 누르세요. 모바일 IP는 PowerShell <code>.\scripts\모바일-접속주소.ps1</code></p>
+  </div>
+  <p class="note">
+    바탕화면에 바로가기를 두려면 PowerShell에서
+    <code>.\scripts\바탕화면-시작링크-만들기.ps1</code> 을 실행하세요.
+  </p>
+</body>
+</html>

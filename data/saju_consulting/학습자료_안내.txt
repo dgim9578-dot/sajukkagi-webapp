@@ -1,0 +1,18 @@
+사주까기 AI 챗봇 — 학습 자료가 들어 있는 위치
+==========================================
+
+채팅(Cursor)으로 보내 주신 JSON·마스터 지침·스토리텔링 문장은
+이미 아래 **프로그램 코드**에 저장되어 있습니다.
+
+  saju/ui/step_11.py
+    - SAJU_PRO_MASTER_RULES      (연애·재물·직장·건강·시험 등 분야별 지침)
+    - SAJU_STORYTELLING_DATABASE (질문 1개에 맞는 족집게 상담 문장)
+
+공통으로 쓰는 축약본:
+  saju_app/ui/consulting_knowledge.py
+
+추가로 넣을 txt·md 파일은 이 폴더(data/saju_consulting/)에 두면
+OpenAI API 키가 있을 때 답변에 더 반영됩니다.
+
+※ Cursor 챗봇에 붙여 넣은 것만으로는 실행 중인 앱이 자동 학습되지 않습니다.
+  반드시 위 파일 경로에 저장되거나, 이 폴더에 문서를 넣어야 합니다.

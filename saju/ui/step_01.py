@@ -86,7 +86,8 @@ def _hero_html() -> str:
     return f"""
 <div class="saju-landing-hero">
   <div class="saju-landing-illu-wrap" aria-hidden="true">{_illus_svg}</div>
-  <div class="saju-landing-hero-inner">
+    <div class="saju-landing-hero-inner">
+    <p class="saju-landing-free-badge">무료 사주풀이</p>
     <div class="saju-landing-logo-row">
       <div class="saju-landing-seal-wrap">{_seal_svg}</div>
       <div class="saju-landing-brand-block">

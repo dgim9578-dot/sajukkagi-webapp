@@ -700,6 +700,19 @@ def configure_application() -> None:
     html.saju-dark-tone .saju-landing-illu-wrap {
         opacity: 0.32;
     }
+    .saju-landing-free-badge {
+        display: inline-block;
+        margin: 0 auto 0.85rem;
+        padding: 0.45rem 1.15rem;
+        border-radius: 999px;
+        font-size: clamp(0.95rem, 2.2vw, 1.15rem);
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        color: #1a1208;
+        background: linear-gradient(135deg, #e8c547 0%, #d4af37 48%, #c9a227 100%);
+        border: 1px solid rgba(138, 109, 26, 0.55);
+        box-shadow: 0 4px 18px rgba(212, 175, 55, 0.28);
+    }
     .saju-landing-logo-row {
         display: flex;
         flex-direction: column;

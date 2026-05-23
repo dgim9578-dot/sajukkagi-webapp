@@ -25,7 +25,7 @@ def inject_link_share_meta(*, description: str | None = None) -> None:
     title = "사주까기"
     desc = (
         description
-        or "사주·궁합·대운·타로·주역·AI 상담 — 당신의 운명을 정밀하게 읽습니다."
+        or "무료 사주풀이 — 사주·궁합·대운·타로·주역·AI 상담"
     ).strip()
     if base:
         image = f"{base}/app/static/og-share.png"

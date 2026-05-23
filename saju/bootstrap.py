@@ -32,6 +32,12 @@ def configure_application() -> None:
         initial_sidebar_state="collapsed",
     )
     init_session_state()
+    try:
+        from saju_app.ui import share_meta as _share_meta
+
+        _share_meta.inject_link_share_meta()
+    except Exception:
+        pass
 
     st.markdown(
         """
@@ -582,13 +588,17 @@ def configure_application() -> None:
     }
     .saju-landing-hero {
         position: relative;
-        min-height: min(76dvh, 600px);
-        width: 100vw;
-        max-width: 100vw;
-        margin-left: calc(50% - 50vw);
-        margin-right: calc(50% - 50vw);
+        /* SNS·Streamlit Cloud 스크린샷: 1200×630 비율에 맞춰 잘리지 않게 */
+        width: 100%;
+        max-width: min(1200px, 100%);
+        margin-left: auto;
+        margin-right: auto;
+        aspect-ratio: 1200 / 630;
+        min-height: 0;
+        height: auto;
+        max-height: min(52.5vw, 520px);
         box-sizing: border-box;
-        padding: clamp(1.75rem, 5vw, 3.75rem) clamp(1rem, 4vw, 2rem) 1.75rem;
+        padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2rem);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -627,8 +637,8 @@ def configure_application() -> None:
         opacity: 0.38;
     }
     .saju-landing-illus-svg {
-        width: min(118%, 52rem);
-        max-height: min(72%, 26rem);
+        width: min(95%, 36rem);
+        max-height: min(55%, 18rem);
         height: auto;
         flex-shrink: 0;
         filter: drop-shadow(0 0 28px rgba(212, 175, 55, 0.12));

@@ -96,6 +96,21 @@ def import_smoke() -> None:
     ok("핵심 모듈 import")
 
 
+def check_og_share_asset() -> None:
+    png = ROOT / "static" / "og-share.png"
+    svg = ROOT / "static" / "og-share.svg"
+    if png.is_file():
+        ok(f"공유 배너: {png.name} ({png.stat().st_size // 1024} KB)")
+    else:
+        fail(
+            "static/og-share.png 없음 — `python scripts/generate_og_share.py` 실행 후 Git에 추가"
+        )
+    if svg.is_file():
+        ok(f"공유 배너 SVG: {svg.name}")
+    else:
+        warn("static/og-share.svg 없음")
+
+
 def check_local_db_ignored() -> None:
     gitignore = ROOT / ".gitignore"
     text = gitignore.read_text(encoding="utf-8", errors="replace")
@@ -118,6 +133,7 @@ def main() -> int:
         check_runtime()
         compile_python()
         import_smoke()
+        check_og_share_asset()
         check_local_db_ignored()
         print()
         if FAIL:

@@ -26,7 +26,7 @@ def init_session_state() -> None:
 
 def configure_application() -> None:
     st.set_page_config(
-        page_title="사주까기",
+        page_title="사주까기 · 무료 사주풀이",
         page_icon="🔮",
         layout="wide",
         initial_sidebar_state="collapsed",
@@ -577,21 +577,13 @@ def configure_application() -> None:
     }
     .step1-menu-wrap { margin-bottom: 5rem; }
 
-    /* ===== STEP1 랜딩: 한지·먹·금박 톤 히어로 + 24절기 카드 ===== */
+    /* ===== STEP1 랜딩: 한지·먹·금박 톤 히어로 ===== */
     .st-key-saju_landing_stack {
-        margin-top: -1.25rem;
-        margin-bottom: 0.15rem;
+        margin-top: -2rem;
+        margin-bottom: 0.1rem;
     }
-    .st-key-saju_landing_hero_mobile {
-        display: none;
-    }
-    .st-key-saju_landing_hero_mobile [data-testid="stImage"] {
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    .st-key-saju_landing_hero_mobile img {
-        border-radius: 16px !important;
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+    .st-key-saju_landing_stack [data-testid="stVerticalBlock"] > div {
+        gap: 0.35rem !important;
     }
     .st-key-saju_landing_hero,
     .st-key-saju_landing_hero [data-testid="stMarkdownContainer"],
@@ -611,8 +603,8 @@ def configure_application() -> None:
         margin-left: auto;
         margin-right: auto;
         box-sizing: border-box;
-        padding: clamp(1.65rem, 4.5vw, 2.75rem) clamp(1rem, 4vw, 2rem)
-            clamp(1.35rem, 3vw, 2rem);
+        padding: clamp(1.15rem, 3.5vw, 2.25rem) clamp(1rem, 4vw, 2rem)
+            clamp(1rem, 2.5vw, 1.65rem);
         min-height: 0;
         height: auto;
         overflow: visible;
@@ -663,21 +655,23 @@ def configure_application() -> None:
     }
     @media (max-width: 768px) {
         .st-key-saju_landing_stack {
-            margin-top: -1.65rem !important;
+            margin-top: -2.35rem !important;
         }
         .main .block-container {
             padding-top: 0 !important;
+            padding-left: 0.55rem !important;
+            padding-right: 0.55rem !important;
         }
-        .st-key-saju_landing_hero_mobile {
-            display: block !important;
+        [data-testid="stAppViewContainer"] > .main {
+            padding-top: 0 !important;
         }
-        .st-key-saju_landing_hero {
-            display: none !important;
+        header[data-testid="stHeader"] {
+            background: transparent !important;
         }
-    }
-    @media (min-width: 769px) {
-        .st-key-saju_landing_hero_mobile {
-            display: none !important;
+        .saju-landing-hero {
+            padding-top: clamp(0.95rem, 3vw, 1.35rem) !important;
+            padding-bottom: clamp(0.85rem, 2.5vw, 1.15rem) !important;
+            border-radius: 0 0 18px 18px;
         }
         .st-key-saju_landing_hero {
             display: block !important;
@@ -842,8 +836,11 @@ def configure_application() -> None:
         border: 1px solid light-dark(rgba(212, 175, 55, 0.28), rgba(212, 175, 55, 0.18));
     }
     .st-key-step1_solar24 {
-        margin-bottom: 0.25rem;
-        isolation: isolate;
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
     }
     .saju-step1-deck-outline {
         margin: 0.65rem 0 0.5rem;
@@ -869,8 +866,7 @@ def configure_application() -> None:
     .st-key-step1_revisit_auth {
         width: 100%;
         max-width: min(100%, 520px);
-        margin-left: auto;
-        margin-right: auto;
+        margin: 0.2rem auto 0;
         box-sizing: border-box;
         overflow: hidden;
     }
@@ -1294,7 +1290,7 @@ def configure_application() -> None:
     /* 모바일에서는 좌우 여백만 축소(레이아웃은 동일 유지) */
     @media (max-width: 768px) {
         .stApp .main .block-container {
-            padding: 1rem 0.8rem !important;
+            padding: 0.35rem 0.55rem 0.85rem !important;
             max-width: 100% !important;
         }
         .stApp .main [data-testid="stForm"] .stTextInput > div > div,

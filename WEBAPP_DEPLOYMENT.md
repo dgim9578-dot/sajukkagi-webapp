@@ -101,7 +101,26 @@ PC에서 앱을 켠 뒤 **임시 공개 URL**을 만들려면:
 - 실행할 때마다 URL이 바뀝니다 (임시용).
 - OpenAI·관리자 비밀번호 등은 `.streamlit/secrets.toml` 에 두고, 공개 링크는 지인 테스트용으로만 쓰세요.
 
-## 7. 다음 확장 순서
+## 7. 카카오톡·SNS 링크 미리보기 (무료 사주풀이 배너)
+
+1. 배너 PNG 생성 (최초 1회):
+
+   ```powershell
+   pip install Pillow
+   python scripts/generate_og_share.py
+   ```
+
+2. GitHub에 `static/og-share.png` 포함해 push
+
+3. Streamlit Secrets: `SAJU_PUBLIC_APP_URL` = 배포된 앱 URL (끝에 `/` 없이)
+
+4. (선택) GitHub 저장소 → Settings → Social preview → `static/og-share.png` 업로드
+
+5. 카카오 [공유 디버거](https://developers.kakao.com/tool/debugger/sharing)에서 앱 URL 입력 → **캐시 초기화** → 다시 스크랩  
+   미리보기 이미지가 안 바뀌면 최대 24시간(Cloud 스크린샷 갱신) 기다리거나,  
+   `https://<앱주소>/app/static/share-preview.html` 링크로 공유해 보세요.
+
+## 8. 다음 확장 순서
 
 1. Streamlit Cloud 무료 배포
 2. 지인/카카오톡/유튜브 링크로 테스트

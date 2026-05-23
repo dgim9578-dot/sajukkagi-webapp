@@ -1,19 +1,11 @@
-"""STEP 1 — 랜딩 / 메인 화면 (히어로·24절기·CTA). 하단 이동은 라우터 전역 바를 사용합니다."""
+"""STEP 1 — 랜딩 / 메인 화면 (히어로·CTA). 하단 이동은 라우터 전역 바를 사용합니다."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import streamlit as st
-import streamlit.components.v1 as components
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_OG_SHARE_PNG = _PROJECT_ROOT / "static" / "og-share.png"
 
 from saju_app.ui import components as M
-from saju_app.ui import extras_integration as X
 from saju_app.ui import revisit_auth as Revisit
-from saju_app.ui import solar_terms_24 as ST24
 from saju_app.ui import webapp_launch as W
 
 
@@ -92,7 +84,6 @@ def _hero_html() -> str:
 <div class="saju-landing-hero">
   <div class="saju-landing-illu-wrap" aria-hidden="true">{_illus_svg}</div>
   <div class="saju-landing-hero-inner">
-    <p class="saju-landing-free-badge">무료 사주풀이</p>
     <div class="saju-landing-logo-row">
       <div class="saju-landing-seal-wrap">{_seal_svg}</div>
       <div class="saju-landing-brand-block">
@@ -112,21 +103,8 @@ def render() -> None:
         M.navigate_to_step(2)
 
     with st.container(key="saju_landing_stack"):
-        if _OG_SHARE_PNG.is_file():
-            with st.container(key="saju_landing_hero_mobile"):
-                st.image(
-                    str(_OG_SHARE_PNG),
-                    use_container_width=True,
-                )
         with st.container(key="saju_landing_hero"):
             st.markdown(_hero_html(), unsafe_allow_html=True)
-
-        with st.container(key="step1_solar24"):
-            components.html(
-                ST24.solar_term_frame_html(),
-                height=700,
-                scrolling=True,
-            )
 
         Revisit.render_revisit_home_header()
 

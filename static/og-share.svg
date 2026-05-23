@@ -13,11 +13,9 @@
     </linearGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
-  <rect x="72" y="52" width="280" height="72" rx="36" fill="#d4af37" stroke="#8a6d1a" stroke-width="2"/>
-  <text x="212" y="98" text-anchor="middle" font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif" font-size="36" font-weight="700" fill="#1a1208">&#47924;&#47308; &#49324;&#51452;&#54408;&#51060;</text>
-  <circle cx="300" cy="340" r="80" fill="none" stroke="url(#gold)" stroke-width="7"/>
-  <circle cx="300" cy="340" r="64" fill="#1a1510"/>
-  <text x="300" y="355" text-anchor="middle" font-family="Noto Serif KR, serif" font-size="52" font-weight="800" fill="#e8d5a0">&#21629;</text>
+  <circle cx="300" cy="315" r="80" fill="none" stroke="url(#gold)" stroke-width="7"/>
+  <circle cx="300" cy="315" r="64" fill="#1a1510"/>
+  <text x="300" y="330" text-anchor="middle" font-family="Noto Serif KR, serif" font-size="52" font-weight="800" fill="#e8d5a0">&#21629;</text>
   <text x="620" y="285" font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif" font-size="88" font-weight="800" fill="#1a1a2e">&#49324;&#51452;&#44620;&#44592;</text>
   <text x="620" y="355" font-family="Georgia, serif" font-size="32" font-weight="600" fill="#8a6d1a" letter-spacing="2">LUXURY SAJU INSIGHT</text>
   <text x="620" y="415" font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif" font-size="34" fill="#3d3528">&#45817;&#49888;&#51032; &#50868;&#47749;&#51012; &#51221;&#48128;&#54616;&#44172; &#51025;&#45796;</text>

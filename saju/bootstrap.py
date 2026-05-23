@@ -836,11 +836,8 @@ def configure_application() -> None:
         border: 1px solid light-dark(rgba(212, 175, 55, 0.28), rgba(212, 175, 55, 0.18));
     }
     .st-key-step1_solar24 {
-        display: none !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
+        margin-bottom: 0.25rem;
+        isolation: isolate;
     }
     .saju-step1-deck-outline {
         margin: 0.65rem 0 0.5rem;

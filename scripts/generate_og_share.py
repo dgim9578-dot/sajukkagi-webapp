@@ -44,18 +44,7 @@ def main() -> int:
         b = int(228 * (1 - t) + 194 * t)
         draw.line([(0, y), (w, y)], fill=(r, g, b))
 
-    # 상단 뱃지: 무료 사주풀이
-    font_badge = _load_font(36)
-    badge_text = "무료 사주풀이"
-    bbox = draw.textbbox((0, 0), badge_text, font=font_badge)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    pad_x, pad_y = 36, 18
-    bx1, by1 = 72, 52
-    bx2, by2 = bx1 + tw + pad_x * 2, by1 + th + pad_y * 2
-    draw.rounded_rectangle((bx1, by1, bx2, by2), radius=32, fill="#d4af37", outline="#8a6d1a", width=2)
-    draw.text((bx1 + pad_x, by1 + pad_y - 2), badge_text, fill="#1a1208", font=font_badge)
-
-    cx, cy = 300, 340
+    cx, cy = 300, 315
     draw.ellipse((cx - 80, cy - 80, cx + 80, cy + 80), outline="#d4af37", width=7)
     draw.ellipse((cx - 64, cy - 64, cx + 64, cy + 64), fill="#1a1510")
     font_seal = _load_font(52)

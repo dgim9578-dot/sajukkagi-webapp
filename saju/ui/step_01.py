@@ -1,11 +1,13 @@
-"""STEP 1 — 랜딩 / 메인 화면 (히어로·CTA). 하단 이동은 라우터 전역 바를 사용합니다."""
+"""STEP 1 — 랜딩 / 메인 화면 (히어로·24절기·CTA). 하단 이동은 라우터 전역 바를 사용합니다."""
 
 from __future__ import annotations
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from saju_app.ui import components as M
 from saju_app.ui import revisit_auth as Revisit
+from saju_app.ui import solar_terms_24 as ST24
 from saju_app.ui import webapp_launch as W
 
 
@@ -105,6 +107,13 @@ def render() -> None:
     with st.container(key="saju_landing_stack"):
         with st.container(key="saju_landing_hero"):
             st.markdown(_hero_html(), unsafe_allow_html=True)
+
+        with st.container(key="step1_solar24"):
+            components.html(
+                ST24.solar_term_frame_html(),
+                height=700,
+                scrolling=True,
+            )
 
         Revisit.render_revisit_home_header()
 

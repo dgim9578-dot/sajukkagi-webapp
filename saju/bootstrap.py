@@ -486,9 +486,9 @@ def configure_application() -> None:
     }
 
     /* ✅ 모바일에서는 첫 화면이 내려가 보이므로 더 타이트하게 */
-    @media (max-width: 520px){
+    @media (max-width: 768px){
         .main .block-container {
-            padding-top: 0rem !important;
+            padding-top: 0.15rem !important;
             padding-bottom: 0.85rem !important;
         }
         h1, h2, h3 {
@@ -582,30 +582,48 @@ def configure_application() -> None:
         margin-top: -0.35rem;
         margin-bottom: 0.25rem;
     }
+    .st-key-saju_landing_hero,
+    .st-key-saju_landing_hero [data-testid="stMarkdownContainer"],
+    .st-key-saju_landing_hero [data-testid="stMarkdownContainer"] > div {
+        overflow: visible !important;
+        max-height: none !important;
+        height: auto !important;
+    }
     .st-key-saju_landing_hero [data-testid="stMarkdownContainer"],
     .st-key-saju_fortune_strip [data-testid="stMarkdownContainer"] {
         margin-bottom: 0 !important;
     }
+    .saju-landing-hero-mobile-img {
+        display: none;
+        width: 100%;
+        height: auto;
+        max-width: 100%;
+        border-radius: 16px;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.12);
+        vertical-align: top;
+    }
+    .saju-landing-hero-rich {
+        display: block;
+        width: 100%;
+    }
     .saju-landing-hero {
         position: relative;
-        /* SNS·Streamlit Cloud 스크린샷: 1200×630 비율에 맞춰 잘리지 않게 */
         width: 100%;
         max-width: min(1200px, 100%);
         margin-left: auto;
         margin-right: auto;
-        aspect-ratio: 1200 / 630;
-        min-height: 0;
-        height: auto;
-        max-height: min(52.5vw, 520px);
         box-sizing: border-box;
         padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2rem);
+        /* 내용 높이에 맞춤 — 고정 비율+hidden 이면 모바일에서 잘림 */
+        min-height: clamp(320px, 48vw, 420px);
+        height: auto;
+        overflow: visible;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         text-align: center;
         border-radius: 0 0 22px 22px;
-        overflow: hidden;
         background-color: #e8dfd4;
         background-image:
             radial-gradient(ellipse 130% 85% at 50% -25%, rgba(22, 18, 14, 0.22) 0%, transparent 58%),
@@ -635,6 +653,8 @@ def configure_application() -> None:
         align-items: center;
         justify-content: center;
         opacity: 0.38;
+        overflow: hidden;
+        border-radius: inherit;
     }
     .saju-landing-illus-svg {
         width: min(95%, 36rem);
@@ -642,6 +662,46 @@ def configure_application() -> None:
         height: auto;
         flex-shrink: 0;
         filter: drop-shadow(0 0 28px rgba(212, 175, 55, 0.12));
+    }
+    @media (max-width: 768px) {
+        .st-key-saju_landing_stack {
+            margin-top: -1.1rem !important;
+        }
+        .main .block-container {
+            padding-top: 0.15rem !important;
+        }
+    }
+    @media (max-width: 640px) {
+        .saju-landing-hero {
+            width: 100%;
+            max-width: 100%;
+            margin-left: 0;
+            margin-right: 0;
+            min-height: 0;
+            height: auto;
+            padding: 0;
+            border-radius: 16px;
+            background: transparent !important;
+            box-shadow: none !important;
+            border-bottom: none !important;
+            overflow: visible;
+        }
+        .saju-landing-hero-mobile-img {
+            display: block;
+        }
+        .saju-landing-hero-rich {
+            display: none !important;
+        }
+        .saju-landing-hero::before,
+        .saju-landing-hero::after {
+            display: none !important;
+        }
+    }
+    @media (min-width: 900px) {
+        .saju-landing-hero {
+            min-height: 380px;
+            max-height: none;
+        }
     }
     .saju-landing-hero::before {
         content: "";

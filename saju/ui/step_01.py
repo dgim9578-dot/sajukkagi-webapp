@@ -85,8 +85,10 @@ def _hero_html() -> str:
 """.strip()
     return f"""
 <div class="saju-landing-hero">
+  <img class="saju-landing-hero-mobile-img" src="/app/static/og-share.png" alt="사주까기 — 무료 사주풀이" width="1200" height="630" loading="eager" decoding="async" />
+  <div class="saju-landing-hero-rich">
   <div class="saju-landing-illu-wrap" aria-hidden="true">{_illus_svg}</div>
-    <div class="saju-landing-hero-inner">
+  <div class="saju-landing-hero-inner">
     <p class="saju-landing-free-badge">무료 사주풀이</p>
     <div class="saju-landing-logo-row">
       <div class="saju-landing-seal-wrap">{_seal_svg}</div>
@@ -96,6 +98,7 @@ def _hero_html() -> str:
       </div>
     </div>
     <p class="saju-landing-tagline">당신의 운명을 정밀하게 읽다</p>
+  </div>
   </div>
 </div>
 """.strip()

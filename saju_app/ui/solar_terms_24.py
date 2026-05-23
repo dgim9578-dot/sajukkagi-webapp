@@ -642,7 +642,9 @@ def solar_term_frame_html(
   flex-direction: column;
   width: 100%;
   max-width: 520px;
-  margin: 0 auto 0.75rem;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 0.75rem;
   min-height: 480px;
   height: auto;
   border-radius: 18px;

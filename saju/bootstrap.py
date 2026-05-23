@@ -603,6 +603,8 @@ def configure_application() -> None:
     .st-key-saju_landing_stack {
         margin-top: -2rem;
         margin-bottom: 0.1rem;
+        width: 100% !important;
+        max-width: 100% !important;
     }
     .st-key-saju_landing_stack [data-testid="stVerticalBlock"] > div {
         gap: 0.35rem !important;
@@ -725,26 +727,41 @@ def configure_application() -> None:
     }
     @media (max-width: 768px) {
         .st-key-saju_landing_stack {
-            margin-top: -2.35rem !important;
+            margin-top: -3.75rem !important;
+        }
+        .stApp [data-testid="stAppViewContainer"],
+        .stApp [data-testid="stAppViewContainer"] > .main,
+        .stApp section.main {
+            padding-top: 0 !important;
         }
         .main .block-container {
             padding-top: 0 !important;
-            padding-left: 0.55rem !important;
-            padding-right: 0.55rem !important;
-        }
-        [data-testid="stAppViewContainer"] > .main {
-            padding-top: 0 !important;
-        }
-        header[data-testid="stHeader"] {
-            background: transparent !important;
-        }
-        .saju-landing-hero {
-            padding-top: clamp(0.95rem, 3vw, 1.35rem) !important;
-            padding-bottom: clamp(0.85rem, 2.5vw, 1.15rem) !important;
-            border-radius: 0 0 18px 18px;
+            padding-left: 0.45rem !important;
+            padding-right: 0.45rem !important;
         }
         .st-key-saju_landing_hero {
             display: block !important;
+            margin-top: 0 !important;
+        }
+        .saju-landing-hero {
+            padding-top: clamp(0.65rem, 2.5vw, 0.95rem) !important;
+            padding-bottom: clamp(0.7rem, 2vw, 1rem) !important;
+            border-radius: 0 0 16px 16px;
+        }
+        .saju-landing-logo-row {
+            flex-direction: row !important;
+            justify-content: center !important;
+            gap: 0.75rem !important;
+        }
+        .saju-landing-seal-wrap svg,
+        .saju-landing-seal-svg {
+            width: clamp(3.5rem, 18vw, 4.5rem) !important;
+            height: auto !important;
+        }
+        .st-key-step1_solar24 {
+            max-width: min(100%, 480px) !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
         }
     }
     .saju-landing-hero::before {
@@ -906,19 +923,36 @@ def configure_application() -> None:
         border: 1px solid light-dark(rgba(212, 175, 55, 0.28), rgba(212, 175, 55, 0.18));
     }
     .saju-step1-solar24-heading {
-        margin: 0.35rem 0 0.45rem !important;
+        margin: 0.2rem auto 0.35rem !important;
         padding: 0 0.25rem;
         font-size: clamp(1.05rem, 2.8vw, 1.2rem) !important;
         font-weight: 800 !important;
         color: light-dark(#7a5e12, #e8c547) !important;
         letter-spacing: 0.02em;
         text-align: center;
+        width: 100%;
+        max-width: 520px;
     }
     .st-key-step1_solar24 {
-        margin: 0 0 0.35rem !important;
+        margin: 0.15rem auto 0.35rem !important;
         isolation: isolate;
-        display: block !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        max-width: min(100%, 520px) !important;
         min-height: 200px !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+    }
+    .st-key-step1_solar24 [data-testid="stVerticalBlock"],
+    .st-key-step1_solar24 [data-testid="stElementContainer"] {
+        width: 100% !important;
+        max-width: 520px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        align-items: center !important;
     }
     .saju-step1-deck-outline {
         margin: 0.65rem 0 0.5rem;
@@ -1099,8 +1133,9 @@ def configure_application() -> None:
     /* STEP1: 3열 메뉴는 접이식(expander) 안에서만 사용 */
     .st-key-step1_solar24 {
         max-width: min(100vw, 520px);
-        margin: 0.35rem auto 0.15rem auto;
-        padding: 0 clamp(0.45rem, 2.5vw, 1rem);
+        margin-left: auto !important;
+        margin-right: auto !important;
+        padding: 0 clamp(0.35rem, 2vw, 1rem) !important;
         box-sizing: border-box;
     }
     .st-key-step1_solar24 [data-testid="stCustomComponentV1"],
@@ -1108,8 +1143,9 @@ def configure_application() -> None:
     .st-key-step1_solar24 iframe {
         width: 100% !important;
         max-width: 520px !important;
-        margin: 0 auto !important;
-        min-height: 640px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        min-height: 600px !important;
         display: block !important;
         overflow: visible !important;
     }
@@ -1368,7 +1404,7 @@ def configure_application() -> None:
     /* 모바일에서는 좌우 여백만 축소(레이아웃은 동일 유지) */
     @media (max-width: 768px) {
         .stApp .main .block-container {
-            padding: 0.35rem 0.55rem 0.85rem !important;
+            padding: 0 0.45rem 0.85rem !important;
             max-width: 100% !important;
         }
         .stApp .main [data-testid="stForm"] .stTextInput > div > div,

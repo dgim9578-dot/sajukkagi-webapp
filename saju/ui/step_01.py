@@ -116,14 +116,14 @@ def render() -> None:
         with st.container(key="saju_landing_hero"):
             st.markdown(_hero_html(), unsafe_allow_html=True)
 
-        st.markdown(
-            '<p class="saju-step1-solar24-heading">☀️ 오늘의 24절기</p>',
-            unsafe_allow_html=True,
-        )
         with st.container(key="step1_solar24"):
+            st.markdown(
+                '<p class="saju-step1-solar24-heading">☀️ 오늘의 24절기</p>',
+                unsafe_allow_html=True,
+            )
             components.html(
                 ST24.solar_term_frame_html(),
-                height=620,
+                height=580,
                 scrolling=True,
             )
 

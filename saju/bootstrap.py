@@ -634,6 +634,54 @@ def configure_application() -> None:
             0 14px 48px rgba(0, 0, 0, 0.14);
         border-bottom: 1px solid rgba(201, 162, 39, 0.4);
     }
+    .saju-landing-hero-glow {
+        position: absolute;
+        inset: 8% 12%;
+        pointer-events: none;
+        z-index: 0;
+        border-radius: 50%;
+        background: radial-gradient(
+            ellipse 70% 55% at 50% 45%,
+            rgba(212, 175, 55, 0.22) 0%,
+            rgba(212, 175, 55, 0.06) 42%,
+            transparent 72%
+        );
+        filter: blur(8px);
+    }
+    .saju-landing-corner {
+        position: absolute;
+        width: clamp(2.2rem, 8vw, 3.4rem);
+        height: clamp(2.2rem, 8vw, 3.4rem);
+        pointer-events: none;
+        z-index: 2;
+        opacity: 0.72;
+        border-color: rgba(212, 175, 55, 0.75);
+        border-style: solid;
+    }
+    .saju-landing-corner-tl {
+        top: 0.65rem;
+        left: 0.65rem;
+        border-width: 2px 0 0 2px;
+        border-radius: 12px 0 0 0;
+    }
+    .saju-landing-corner-tr {
+        top: 0.65rem;
+        right: 0.65rem;
+        border-width: 2px 2px 0 0;
+        border-radius: 0 12px 0 0;
+    }
+    .saju-landing-corner-bl {
+        bottom: 0.65rem;
+        left: 0.65rem;
+        border-width: 0 0 2px 2px;
+        border-radius: 0 0 0 12px;
+    }
+    .saju-landing-corner-br {
+        bottom: 0.65rem;
+        right: 0.65rem;
+        border-width: 0 2px 2px 0;
+        border-radius: 0 0 12px 0;
+    }
     .saju-landing-illu-wrap {
         position: absolute;
         inset: 0;
@@ -642,7 +690,7 @@ def configure_application() -> None:
         display: flex;
         align-items: center;
         justify-content: center;
-        opacity: 0.38;
+        opacity: 0.52;
         overflow: hidden;
         border-radius: inherit;
     }
@@ -835,9 +883,20 @@ def configure_application() -> None:
         border-radius: 14px;
         border: 1px solid light-dark(rgba(212, 175, 55, 0.28), rgba(212, 175, 55, 0.18));
     }
+    .saju-step1-solar24-heading {
+        margin: 0.35rem 0 0.45rem !important;
+        padding: 0 0.25rem;
+        font-size: clamp(1.05rem, 2.8vw, 1.2rem) !important;
+        font-weight: 800 !important;
+        color: light-dark(#7a5e12, #e8c547) !important;
+        letter-spacing: 0.02em;
+        text-align: center;
+    }
     .st-key-step1_solar24 {
-        margin-bottom: 0.25rem;
+        margin: 0 0 0.35rem !important;
         isolation: isolate;
+        display: block !important;
+        min-height: 200px !important;
     }
     .saju-step1-deck-outline {
         margin: 0.65rem 0 0.5rem;

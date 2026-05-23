@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f4eee4"/>
-      <stop offset="45%" stop-color="#ebe2d4"/>
+      <stop offset="0%" stop-color="#f8f4ec"/>
+      <stop offset="50%" stop-color="#ebe2d4"/>
       <stop offset="100%" stop-color="#dfd2c2"/>
     </linearGradient>
     <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -11,13 +11,25 @@
       <stop offset="60%" stop-color="#f5e6a8"/>
       <stop offset="100%" stop-color="#c9a227"/>
     </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#d4af37" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#d4af37" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
-  <circle cx="300" cy="315" r="80" fill="none" stroke="url(#gold)" stroke-width="7"/>
-  <circle cx="300" cy="315" r="64" fill="#1a1510"/>
-  <text x="300" y="330" text-anchor="middle" font-family="Noto Serif KR, serif" font-size="52" font-weight="800" fill="#e8d5a0">&#21629;</text>
-  <text x="620" y="285" font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif" font-size="88" font-weight="800" fill="#1a1a2e">&#49324;&#51452;&#44620;&#44592;</text>
-  <text x="620" y="355" font-family="Georgia, serif" font-size="32" font-weight="600" fill="#8a6d1a" letter-spacing="2">LUXURY SAJU INSIGHT</text>
-  <text x="620" y="415" font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif" font-size="34" fill="#3d3528">&#45817;&#49888;&#51032; &#50868;&#47749;&#51012; &#51221;&#48128;&#54616;&#44172; &#51025;&#45796;</text>
-  <rect x="620" y="465" width="360" height="4" fill="#d4af37" rx="2"/>
+  <ellipse cx="600" cy="280" rx="520" ry="220" fill="url(#glow)"/>
+  <path d="M80 200 Q200 120 340 200" fill="none" stroke="#d4af37" stroke-width="1.5" opacity="0.35"/>
+  <path d="M900 180 Q1020 100 1120 200" fill="none" stroke="#d4af37" stroke-width="1.5" opacity="0.35"/>
+  <path d="M48 42 H120 M48 42 V114" stroke="#c9a227" stroke-width="3" fill="none" opacity="0.8"/>
+  <path d="M1152 42 H1080 M1152 42 V114" stroke="#c9a227" stroke-width="3" fill="none" opacity="0.8"/>
+  <path d="M48 588 H120 M48 588 V516" stroke="#c9a227" stroke-width="3" fill="none" opacity="0.8"/>
+  <path d="M1152 588 H1080 M1152 588 V516" stroke="#c9a227" stroke-width="3" fill="none" opacity="0.8"/>
+  <circle cx="300" cy="315" r="82" fill="none" stroke="url(#gold)" stroke-width="8"/>
+  <circle cx="300" cy="315" r="66" fill="#1a1510"/>
+  <text x="300" y="330" text-anchor="middle" font-family="Noto Serif KR, serif" font-size="54" font-weight="800" fill="#e8d5a0">&#21629;</text>
+  <text x="620" y="278" font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif" font-size="92" font-weight="800" fill="#1a1a2e">&#49324;&#51452;&#44620;&#44592;</text>
+  <text x="620" y="352" font-family="Georgia, serif" font-size="34" font-weight="600" fill="#8a6d1a" letter-spacing="2">LUXURY SAJU INSIGHT</text>
+  <text x="620" y="412" font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif" font-size="36" fill="#3d3528">&#45817;&#49888;&#51032; &#50868;&#47749;&#51012; &#51221;&#48128;&#54616;&#44172; &#51025;&#45796;</text>
+  <rect x="620" y="462" width="380" height="6" fill="#d4af37" rx="2"/>
+  <rect x="622" y="464" width="376" height="2" fill="#f5e6a8" rx="1"/>
 </svg>

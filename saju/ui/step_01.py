@@ -82,9 +82,17 @@ def _hero_html() -> str:
   </g>
 </svg>
 """.strip()
+    _corners = """
+<span class="saju-landing-corner saju-landing-corner-tl" aria-hidden="true"></span>
+<span class="saju-landing-corner saju-landing-corner-tr" aria-hidden="true"></span>
+<span class="saju-landing-corner saju-landing-corner-bl" aria-hidden="true"></span>
+<span class="saju-landing-corner saju-landing-corner-br" aria-hidden="true"></span>
+""".strip()
     return f"""
 <div class="saju-landing-hero">
+  {_corners}
   <div class="saju-landing-illu-wrap" aria-hidden="true">{_illus_svg}</div>
+  <div class="saju-landing-hero-glow" aria-hidden="true"></div>
   <div class="saju-landing-hero-inner">
     <div class="saju-landing-logo-row">
       <div class="saju-landing-seal-wrap">{_seal_svg}</div>
@@ -108,10 +116,14 @@ def render() -> None:
         with st.container(key="saju_landing_hero"):
             st.markdown(_hero_html(), unsafe_allow_html=True)
 
+        st.markdown(
+            '<p class="saju-step1-solar24-heading">☀️ 오늘의 24절기</p>',
+            unsafe_allow_html=True,
+        )
         with st.container(key="step1_solar24"):
             components.html(
                 ST24.solar_term_frame_html(),
-                height=700,
+                height=620,
                 scrolling=True,
             )
 

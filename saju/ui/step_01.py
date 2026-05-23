@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 import streamlit.components.v1 as components
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_OG_SHARE_PNG = _PROJECT_ROOT / "static" / "og-share.png"
 
 from saju_app.ui import components as M
 from saju_app.ui import extras_integration as X
@@ -85,8 +90,6 @@ def _hero_html() -> str:
 """.strip()
     return f"""
 <div class="saju-landing-hero">
-  <img class="saju-landing-hero-mobile-img" src="/app/static/og-share.png" alt="사주까기 — 무료 사주풀이" width="1200" height="630" loading="eager" decoding="async" />
-  <div class="saju-landing-hero-rich">
   <div class="saju-landing-illu-wrap" aria-hidden="true">{_illus_svg}</div>
   <div class="saju-landing-hero-inner">
     <p class="saju-landing-free-badge">무료 사주풀이</p>
@@ -99,7 +102,6 @@ def _hero_html() -> str:
     </div>
     <p class="saju-landing-tagline">당신의 운명을 정밀하게 읽다</p>
   </div>
-  </div>
 </div>
 """.strip()
 
@@ -110,6 +112,12 @@ def render() -> None:
         M.navigate_to_step(2)
 
     with st.container(key="saju_landing_stack"):
+        if _OG_SHARE_PNG.is_file():
+            with st.container(key="saju_landing_hero_mobile"):
+                st.image(
+                    str(_OG_SHARE_PNG),
+                    use_container_width=True,
+                )
         with st.container(key="saju_landing_hero"):
             st.markdown(_hero_html(), unsafe_allow_html=True)
 

@@ -86,7 +86,7 @@ def configure_application() -> None:
         line-height: 1.62;
         position: relative;
         /* minimal & luxurious: 읽기 폭 캡 + 과감한 여백 */
-        padding-top: clamp(1.25rem, 3.2vw, 2.85rem) !important;
+        padding-top: clamp(0.45rem, 1.4vw, 1.65rem) !important;
         padding-bottom: clamp(1.35rem, 3vw, 2.5rem) !important;
         padding-left: clamp(1.1rem, 3.5vw, 2.6rem) !important;
         padding-right: clamp(1.1rem, 3.5vw, 2.6rem) !important;
@@ -485,10 +485,10 @@ def configure_application() -> None:
         }
     }
 
-    /* ✅ 모바일에서는 첫 화면이 내려가 보이므로 더 타이트하게 */
+    /* ✅ 모바일·STEP1: 상단 여백 최소화 */
     @media (max-width: 768px){
         .main .block-container {
-            padding-top: 0.15rem !important;
+            padding-top: 0 !important;
             padding-bottom: 0.85rem !important;
         }
         h1, h2, h3 {
@@ -579,8 +579,19 @@ def configure_application() -> None:
 
     /* ===== STEP1 랜딩: 한지·먹·금박 톤 히어로 + 24절기 카드 ===== */
     .st-key-saju_landing_stack {
-        margin-top: -0.35rem;
-        margin-bottom: 0.25rem;
+        margin-top: -1.25rem;
+        margin-bottom: 0.15rem;
+    }
+    .st-key-saju_landing_hero_mobile {
+        display: none;
+    }
+    .st-key-saju_landing_hero_mobile [data-testid="stImage"] {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-saju_landing_hero_mobile img {
+        border-radius: 16px !important;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
     }
     .st-key-saju_landing_hero,
     .st-key-saju_landing_hero [data-testid="stMarkdownContainer"],
@@ -593,19 +604,6 @@ def configure_application() -> None:
     .st-key-saju_fortune_strip [data-testid="stMarkdownContainer"] {
         margin-bottom: 0 !important;
     }
-    .saju-landing-hero-mobile-img {
-        display: none;
-        width: 100%;
-        height: auto;
-        max-width: 100%;
-        border-radius: 16px;
-        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.12);
-        vertical-align: top;
-    }
-    .saju-landing-hero-rich {
-        display: block;
-        width: 100%;
-    }
     .saju-landing-hero {
         position: relative;
         width: 100%;
@@ -613,15 +611,15 @@ def configure_application() -> None:
         margin-left: auto;
         margin-right: auto;
         box-sizing: border-box;
-        padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2rem);
-        /* 내용 높이에 맞춤 — 고정 비율+hidden 이면 모바일에서 잘림 */
-        min-height: clamp(320px, 48vw, 420px);
+        padding: clamp(1.65rem, 4.5vw, 2.75rem) clamp(1rem, 4vw, 2rem)
+            clamp(1.35rem, 3vw, 2rem);
+        min-height: 0;
         height: auto;
         overflow: visible;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         text-align: center;
         border-radius: 0 0 22px 22px;
         background-color: #e8dfd4;
@@ -665,42 +663,24 @@ def configure_application() -> None:
     }
     @media (max-width: 768px) {
         .st-key-saju_landing_stack {
-            margin-top: -1.1rem !important;
+            margin-top: -1.65rem !important;
         }
         .main .block-container {
-            padding-top: 0.15rem !important;
+            padding-top: 0 !important;
         }
-    }
-    @media (max-width: 640px) {
-        .saju-landing-hero {
-            width: 100%;
-            max-width: 100%;
-            margin-left: 0;
-            margin-right: 0;
-            min-height: 0;
-            height: auto;
-            padding: 0;
-            border-radius: 16px;
-            background: transparent !important;
-            box-shadow: none !important;
-            border-bottom: none !important;
-            overflow: visible;
+        .st-key-saju_landing_hero_mobile {
+            display: block !important;
         }
-        .saju-landing-hero-mobile-img {
-            display: block;
-        }
-        .saju-landing-hero-rich {
-            display: none !important;
-        }
-        .saju-landing-hero::before,
-        .saju-landing-hero::after {
+        .st-key-saju_landing_hero {
             display: none !important;
         }
     }
-    @media (min-width: 900px) {
-        .saju-landing-hero {
-            min-height: 380px;
-            max-height: none;
+    @media (min-width: 769px) {
+        .st-key-saju_landing_hero_mobile {
+            display: none !important;
+        }
+        .st-key-saju_landing_hero {
+            display: block !important;
         }
     }
     .saju-landing-hero::before {
@@ -724,6 +704,7 @@ def configure_application() -> None:
         z-index: 1;
         max-width: 40rem;
         width: 100%;
+        padding-top: 0.15rem;
     }
     html.saju-dark-tone .saju-landing-hero {
         background-color: #0c0c14;

@@ -81,6 +81,28 @@ def configure_application() -> None:
         /* 테마 배경과 맞춤: 다크 #0F0F1A / 라이트 크림 (config.toml 과 동조) */
         background-color: light-dark(var(--saju-bg-paper), var(--saju-bg-mid)) !important;
     }
+    /* Streamlit Cloud 플랫폼 UI — 사주 앱 기능과 무관 (Fork·관리·Made with Streamlit 등) */
+    header[data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    [data-testid="stStatusWidget"],
+    .stDeployButton,
+    #MainMenu,
+    footer {
+        visibility: hidden !important;
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+    /* Cloud 하단 고정 버튼(빨간 왕관·관리) — 소유자 미리보기용 */
+    iframe[title="streamlit"],
+    a[href*="share.streamlit.io/manage"],
+    a[href*="streamlit.app/manage"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
     .main .block-container {
         font-size: 1rem;
         line-height: 1.62;

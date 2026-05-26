@@ -6,12 +6,19 @@ import html
 import math
 import re
 import secrets
-from dataclasses import dataclass
 from typing import Any
 
 import streamlit as st
 
-from saju_app.ui import components as M
+from saju_app.ui.interpretation_types import StructuredInterpretation
+
+__all__ = [
+    "StructuredInterpretation",
+    "build_step3_interpretation",
+    "build_step6_today_interpretation",
+    "format_structured_interpretation_for_pdf",
+    "render_structured_interpretation_block",
+]
 
 _EL_KO = {"木": "목", "火": "화", "土": "토", "金": "금", "水": "수"}
 
@@ -74,22 +81,14 @@ stroke-linecap="round" stroke-dasharray="{dash:.2f} {gap:.2f}" transform="rotate
 </svg>"""
 
 
-@dataclass(frozen=True)
-class StructuredInterpretation:
-    one_liner: str
-    tags: list[str]
-    detail_paragraphs: list[str]
-    advice: list[tuple[str, str]]
-    harmony_pct: int
-    harmony_caption: str
-
-
 def build_step3_interpretation(
     *,
     u_gapja: list[str],
     engine: dict[str, Any],
     core: dict[str, Any] | None,
 ) -> StructuredInterpretation:
+    from saju_app.ui import components as M
+
     strength = str(engine.get("strength", "중화"))
     yongshin = str(engine.get("yongshin", "판단 필요"))
     max_el = str(engine.get("max_el", "木"))
@@ -238,6 +237,8 @@ def render_structured_interpretation_block(
     container_key: str = "saju_ix",
 ) -> None:
     """한 줄(골드) · 태그 · 원형 지수 · 상세 · 번호 실천 조언."""
+    from saju_app.ui import components as M
+
     uid = secrets.token_hex(4)
     with st.container(key=container_key):
         donut = _donut_svg(data.harmony_pct, uid=uid)

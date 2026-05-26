@@ -216,9 +216,8 @@ def render() -> None:
             "이미 바꿨다면 `secrets.toml` 에 적어 둔 문자열을 그대로 입력하세요."
         )
         with st.form("step12_admin_login", clear_on_submit=False):
-            admin_pwd_input = st.text_input(
+            admin_pwd_input = M.password_input_no_autofill(
                 "🔑 관리자 비밀번호",
-                type="password",
                 help="관리자 비밀번호는 `.streamlit/secrets.toml` 또는 환경변수에서 읽습니다.",
             )
             submitted = st.form_submit_button("로그인", type="primary", use_container_width=True)
@@ -343,10 +342,8 @@ def render() -> None:
         with col_o1:
             if st.button("STEP11로 이 방 열기", use_container_width=True, key="admin_open_step11_room"):
                 st.session_state.step11_chat_room_key = selected
-                st.session_state["_explicit_feature_step"] = 11
                 st.session_state["_navigated_to_chat_this_run"] = True
-                st.session_state.step = 11
-                M.rerun_full_app()
+                M.assign_step_and_rerun(11)
         with col_o2:
             if st.button(
                 "이 방 기록 삭제",

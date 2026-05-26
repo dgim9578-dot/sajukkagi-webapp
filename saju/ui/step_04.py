@@ -183,11 +183,14 @@ def _render_match_sections_batch(sections: list[tuple[str, str, str]]) -> None:
 
 def render() -> None:
     M._resync_user_gapja_from_u_data()
-    M.sync_partner_gapja_for_match_analysis()
+    if not M.partner_is_registered():
+        M.clear_partner_analysis_state()
+    else:
+        M.sync_partner_gapja_for_match_analysis()
 
     u_name = M.session_user_display_name() or "사주까기님"
     u_gapja = list(st.session_state.get("u_gapja") or [])
-    p_gapja = list(st.session_state.get("p_gapja") or [])
+    p_gapja = list(st.session_state.get("p_gapja") or []) if M.partner_is_registered() else []
     u_gender = st.session_state.get("u_gender", "남자")
     p_gender = st.session_state.get("p_gender", "여자")
 
@@ -212,10 +215,10 @@ def render() -> None:
                     rerun_full_app()
         st.stop()
 
-    if not p_gapja or len(p_gapja) < 3:
+    if not M.partner_is_registered() or not p_gapja or len(p_gapja) < 3:
         st.info(
             "궁합을 보려면 **상대방 생년월일·시간**이 필요합니다. "
-            "STEP2 **상대방정보** 탭에서 이름·생년월일을 입력한 뒤 "
+            "STEP2 **상대방정보**에서 이름·생년월일을 입력한 뒤 "
             "**저장하고 사주 분석 시작**을 눌러 주세요."
         )
         if st.button("← 정보 입력(상대방)으로", use_container_width=True, key="step4_gate_partner_birth"):
@@ -231,6 +234,7 @@ def render() -> None:
         or ""
     ).strip()
     if not _pn_raw:
+        M.clear_partner_analysis_state()
         st.warning("상대방 정보가 없습니다. 먼저 정보 입력에서 상대방 이름·생년월일을 등록해 주세요.")
         if st.button("← 정보 입력으로", use_container_width=True, key="step4_gate_partner_name"):
             M.prepare_step_change_ui()
@@ -244,7 +248,7 @@ def render() -> None:
     if M.partner_gapja_same_as_user():
         st.error(
             "상대방 사주가 **본인과 동일한 간지**로 잡혀 있습니다. "
-            "STEP2 **상대방정보** 탭에서 상대 **생년월일·시간**을 본인과 다르게 입력한 뒤 "
+            "STEP2 **상대방정보**에서 상대 **생년월일·시간**을 본인과 다르게 입력한 뒤 "
             "**저장하고 사주 분석 시작**을 다시 눌러 주세요."
         )
         if st.button("← 정보 입력(상대방)으로", use_container_width=True, key="step4_gate_same_gapja"):

@@ -19,15 +19,10 @@ def render_revisit_home_header() -> None:
         )
 
 
-def render_revisit_home_header_and_pin() -> None:
-    """하위 호환."""
-    render_revisit_home_header()
-
-
 def process_revisit_login(pin: str) -> None:
     """「내 기록 불러오기」 클릭 시 비밀번호 검증·프로필 복원."""
     pin_norm = saju_storage.normalize_revisit_pin(pin)
-    err = saju_storage.validate_revisit_pin(pin_norm)
+    err = saju_storage.validate_revisit_pin_lookup(pin_norm)
     if err:
         st.error(err)
         return
@@ -44,8 +39,3 @@ def process_revisit_login(pin: str) -> None:
             "비밀번호는 맞지만 프로필을 불러오지 못했습니다. "
             "STEP2에서 생년월일·시간을 다시 저장한 뒤 재시도해 주세요."
         )
-
-
-def render_revisit_home_block() -> None:
-    """하위 호환."""
-    render_revisit_home_header()

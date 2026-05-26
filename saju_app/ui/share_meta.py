@@ -55,6 +55,7 @@ def inject_link_share_meta(*, description: str | None = None) -> None:
         og_url_line = f'<meta property="og:url" content="{html.escape(page_url, quote=True)}" />'
 
     block = f"""
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="description" content="{html.escape(desc, quote=True)}" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="사주까기" />

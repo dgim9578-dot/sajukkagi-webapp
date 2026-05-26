@@ -7,9 +7,9 @@ from datetime import datetime
 import streamlit as st
 
 from saju_app.ui import analysis_favorite_memo as AFM
+from saju_app.ui import components as M
 from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import aptitude_mbti as APT
-from saju_app.ui import components as M
 from saju_app.ui.briefing_life_sync import health_tip_from_engine
 from saju_app.ui import element_theme as ElTheme
 from saju_app.ui import gapja_master_chart as GapjaChart
@@ -251,7 +251,7 @@ def render() -> None:
         with st.container(key="step3_gapja_chart"):
             st.markdown("#### 📍 사주 원국")
             st.caption("기둥을 탭(클릭)하면 아래에 설명이 표시됩니다.")
-            GapjaChart.render_gapja_master_chart(list(u_gapja), height=420)
+            GapjaChart.render_gapja_master_chart(list(u_gapja), height=620)
 
         _step3_life_core_grid(
             engine if isinstance(engine, dict) else {},

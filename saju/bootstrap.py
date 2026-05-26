@@ -31,6 +31,10 @@ def configure_application() -> None:
         layout="wide",
         initial_sidebar_state="collapsed",
     )
+    try:
+        st.set_option("client.toolbarMode", "minimal")
+    except Exception:
+        pass
     init_session_state()
     try:
         from saju_app.ui import share_meta as _share_meta
@@ -38,7 +42,6 @@ def configure_application() -> None:
         _share_meta.inject_link_share_meta()
     except Exception:
         pass
-
     st.markdown(
         """
 <style>
@@ -52,12 +55,21 @@ def configure_application() -> None:
         --saju-bg-elevated: #16213e;
         --saju-bg-card-a: #1a1a2e;
         --saju-bg-card-b: #16213e;
-        --saju-bg-paper: #faf6ef;
+        --saju-bg-paper: #fffdf8;
+        --saju-bg-paper-soft: #fff8ee;
+        /* 정보입력(년·월·일) 칩과 동일 — 이동·안내 버튼 배경 */
+        --saju-soft-fill: #fff5ee;
+        --saju-soft-fill-hover: #fff0e6;
+        --saju-soft-fill-active: #ffede2;
+        --saju-soft-fill-dark: rgba(40, 36, 32, 0.88);
+        --saju-soft-fill-dark-hover: rgba(50, 44, 38, 0.94);
+        --saju-soft-radius: 16px;
         --saju-gold: #d4af37;
         --saju-gold-bright: #e8b923;
         --saju-gold-soft: #c9a227;
         --saju-gold-deep: #7a5e12;
-        --saju-ink: #120e0a;
+        --saju-ink: #1a1208;
+        --saju-text-readable: #1c1510;
         --saju-text-body: #e5e5e5;
         --saju-text-accent: #a5b4fc;
         --saju-glow: rgba(212, 175, 55, 0.38);
@@ -74,34 +86,132 @@ def configure_application() -> None:
         font-size: 16px;
         -webkit-text-size-adjust: 100%;
     }
+    /* 브라우저 자동 번역이 JS·입력란을 깨뜨리는 것 방지 */
+    .stApp,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"] {
+        translate: no !important;
+    }
     .stApp {
         font-size: 1rem;
         font-family: "Playfair Display", "Noto Serif KR", "Apple SD Gothic Neo", "Malgun Gothic",
             Georgia, "Times New Roman", "Noto Color Emoji", serif !important;
         /* 테마 배경과 맞춤: 다크 #0F0F1A / 라이트 크림 (config.toml 과 동조) */
         background-color: light-dark(var(--saju-bg-paper), var(--saju-bg-mid)) !important;
+        background-image: light-dark(
+            linear-gradient(180deg, #fffffe 0%, #fff9f0 38%, #fff3e4 100%),
+            linear-gradient(180deg, #0c0c16 0%, #0a0a14 100%)
+        ) !important;
     }
-    /* Streamlit Cloud 플랫폼 UI — 사주 앱 기능과 무관 (Fork·관리·Made with Streamlit 등) */
+    /* Streamlit 플랫폼 UI — 사주 앱 기능과 무관 (Fork·Deploy·왕관·관리 등) */
     header[data-testid="stHeader"],
     [data-testid="stToolbar"],
     [data-testid="stDecoration"],
     [data-testid="stStatusWidget"],
+    [data-testid="stAppDeployButton"],
+    [data-testid="stHeaderActionElements"],
+    [data-testid="stToolbarActions"],
     .stDeployButton,
     #MainMenu,
-    footer {
+    footer,
+    a[href*="streamlit.app/manage"],
+    a[href*="share.streamlit.io/manage"],
+    a[href*="/manage/"],
+    a[title*="Manage"],
+    a[title*="manage"],
+    a[aria-label*="Manage"],
+    a[aria-label*="manage"],
+    iframe[title="streamlit"],
+    iframe[title*="Manage"],
+    iframe[title*="manage"],
+    [class*="viewerBadge"],
+    [class*="ViewerBadge"],
+    [class*="ManageApp"],
+    [class*="manageApp"] {
         visibility: hidden !important;
         display: none !important;
         height: 0 !important;
         min-height: 0 !important;
+        max-height: 0 !important;
+        width: 0 !important;
         overflow: hidden !important;
         pointer-events: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        left: -99999px !important;
+        top: auto !important;
+        z-index: -9999 !important;
     }
-    /* Cloud 하단 고정 버튼(빨간 왕관·관리) — 소유자 미리보기용 */
-    iframe[title="streamlit"],
-    a[href*="share.streamlit.io/manage"],
-    a[href*="streamlit.app/manage"] {
+    .stApp > header {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+    }
+    [data-testid="stAppViewContainer"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: auto;
+        scroll-behavior: auto !important;
+        touch-action: pan-y !important;
+    }
+    @media (max-width: 768px) {
+        html,
+        body,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        section.main {
+            touch-action: pan-y !important;
+            -webkit-overflow-scrolling: touch !important;
+            overscroll-behavior-y: contain !important;
+        }
+        [data-testid="stAppViewContainer"] {
+            scroll-behavior: auto !important;
+        }
+        .stApp [data-testid="stVerticalBlock"],
+        .stApp [data-testid="stHorizontalBlock"] {
+            touch-action: pan-y !important;
+        }
+    }
+    [data-testid="stMainBlockContainer"],
+    section.main,
+    [data-testid="stMain"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        overflow: visible !important;
+    }
+    /* STEP 스크롤 펄스 iframe — 레이아웃·스크롤 간섭 제거 */
+    [class*="st-key-saju_scroll_fire_"],
+    [class*="st-key-saju_scroll_pulse_"],
+    [class*="st-key-saju_scroll_top_js_"],
+    [class*="st-key-saju_home_viewport_"],
+    .st-key-saju_home_solar_fit,
+    .st-key-saju_step_html_sync,
+    [class*="st-key-saju_step_html_sync_"],
+    .st-key-saju_browser_nav_check,
+    .st-key-saju_browser_privacy_client_v2 {
+        display: none !important;
+        height: 0 !important;
+        max-height: 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+    }
+    /* Cloud 하단 고정 왕관·관리 링크(모바일 포함) */
+    .stApp a[href*="streamlit.app/manage"],
+    .stApp a[href*="share.streamlit.io/manage"],
+    body a[href*="streamlit.app/manage"],
+    body a[href*="share.streamlit.io/manage"] {
         display: none !important;
         visibility: hidden !important;
+        pointer-events: none !important;
     }
     .main .block-container {
         font-size: 1rem;
@@ -159,6 +269,9 @@ def configure_application() -> None:
     .stTextArea textarea {
         font-size: max(16px, 1rem) !important;
         line-height: 1.45 !important;
+        color: light-dark(var(--saju-text-readable), #f0ece4) !important;
+        background: light-dark(#fffefb, rgba(26, 26, 46, 0.92)) !important;
+        border: 1px solid light-dark(rgba(212, 175, 55, 0.32), rgba(212, 175, 55, 0.22)) !important;
     }
     [data-testid="stAlert"] {
         font-size: max(15px, 0.95rem) !important;
@@ -390,10 +503,10 @@ def configure_application() -> None:
             background: light-dark(rgba(250, 248, 243, 0.97), rgba(15, 15, 26, 0.94)) !important;
             -webkit-backdrop-filter: blur(10px);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(26, 26, 46, 0.15);
-            border: 1px solid light-dark(rgba(26, 26, 46, 0.12), rgba(212, 175, 55, 0.22));
-            border-radius: 12px;
-            box-shadow: light-dark(0 4px 18px rgba(26, 26, 46, 0.08), 0 4px 22px rgba(0, 0, 0, 0.45));
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            background: transparent !important;
         }
         .st-key-saju_global_bottom_chrome [data-testid="stExpander"] {
             margin-top: 0.35rem !important;
@@ -425,10 +538,10 @@ def configure_application() -> None:
         box-sizing: border-box !important;
         margin-top: 0.08rem !important;
         padding: 0.38rem 0.2rem 0.42rem !important;
-        border-radius: 14px !important;
-        background: light-dark(rgba(250, 248, 243, 0.99), rgba(14, 14, 24, 0.96)) !important;
-        border: 1px solid light-dark(rgba(26, 26, 46, 0.12), rgba(212, 175, 55, 0.22)) !important;
-        box-shadow: light-dark(0 4px 18px rgba(15, 23, 42, 0.08), 0 6px 22px rgba(0, 0, 0, 0.42)) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
     }
     .saju-step-dock-html .saju-dock-row {
         display: grid !important;
@@ -599,15 +712,139 @@ def configure_application() -> None:
     }
     .step1-menu-wrap { margin-bottom: 5rem; }
 
-    /* ===== STEP1 랜딩: 한지·먹·금박 톤 히어로 ===== */
-    .st-key-saju_landing_stack {
-        margin-top: -2rem;
-        margin-bottom: 0.1rem;
+    /* STEP 전환 스크롤 앵커 */
+    #saju-step-top-anchor {
+        scroll-margin-top: 0 !important;
+    }
+
+    /* STEP 라우터 — 단일 마운트(이전 STEP DOM 겹침 방지) */
+    .st-key-saju_router_step_mount {
         width: 100% !important;
         max-width: 100% !important;
     }
+    /* 레거시 step별 마운트(누적 DOM) — 전부 숨김 */
+    [class*="st-key-saju_step_mount_"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        max-height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        left: -99999px !important;
+        top: 0 !important;
+        z-index: -9999 !important;
+    }
+    /* STEP2~12: STEP1 홈 배너·24절기 DOM 잔존 시 겹침 차단 */
+    html.saju-not-step1 .st-key-saju_landing_stack,
+    html.saju-not-step1 .st-key-saju_landing_hero,
+    html.saju-not-step1 .st-key-saju_landing_cta,
+    html.saju-not-step1 .st-key-step1_solar24,
+    html.saju-not-step1 .st-key-step1_cta_row_main,
+    html.saju-not-step1 .st-key-step1_cta_row_free,
+    html.saju-not-step1 .saju-landing-hero,
+    html[data-saju-step]:not([data-saju-step="1"]) .st-key-saju_landing_stack,
+    html[data-saju-step]:not([data-saju-step="1"]) .st-key-saju_landing_hero,
+    html[data-saju-step]:not([data-saju-step="1"]) .st-key-step1_solar24,
+    html[data-saju-step]:not([data-saju-step="1"]) .saju-landing-hero {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        max-height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        left: -99999px !important;
+        top: 0 !important;
+        z-index: -9999 !important;
+    }
+
+    /* ===== STEP1 랜딩: 한지·먹·금박 톤 히어로 ===== */
+    html.saju-home-step1 .main .block-container,
+    html[data-saju-step="1"] .main .block-container {
+        padding-top: 0 !important;
+        scroll-padding-top: 0 !important;
+    }
+    html.saju-home-step1 .st-key-saju_landing_stack,
+    html[data-saju-step="1"] .st-key-saju_landing_stack,
+    html.saju-home-step1 .st-key-saju_landing_hero,
+    html[data-saju-step="1"] .st-key-saju_landing_hero,
+    html.saju-home-step1 .st-key-saju_landing_hero [data-testid="stElementContainer"],
+    html[data-saju-step="1"] .st-key-saju_landing_hero [data-testid="stElementContainer"],
+    html.saju-home-step1 .st-key-saju_landing_hero [data-testid="stVerticalBlock"],
+    html[data-saju-step="1"] .st-key-saju_landing_hero [data-testid="stVerticalBlock"] {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    html.saju-home-step1 .st-key-saju_router_step_mount_01,
+    html[data-saju-step="1"] .st-key-saju_router_step_mount_01 {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+    html.saju-home-step1 .st-key-saju_landing_stack,
+    html[data-saju-step="1"] .st-key-saju_landing_stack {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+    html.saju-home-step1 .st-key-saju_landing_hero,
+    html[data-saju-step="1"] .st-key-saju_landing_hero {
+        margin-top: -0.25rem !important;
+        margin-bottom: 0 !important;
+    }
+    html.saju-home-step1 .st-key-saju_landing_hero [data-testid="stMarkdownContainer"],
+    html[data-saju-step="1"] .st-key-saju_landing_hero [data-testid="stMarkdownContainer"] {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+    html.saju-home-step1 .saju-landing-hero,
+    html[data-saju-step="1"] .saju-landing-hero {
+        padding-top: clamp(0.55rem, 2.2vw, 1.1rem) !important;
+        padding-bottom: clamp(0.65rem, 2vw, 1rem) !important;
+        scroll-margin-top: 0 !important;
+        min-height: auto !important;
+    }
+    html.saju-home-step1 .saju-landing-hero--face.saju-landing-hero--intense,
+    html[data-saju-step="1"] .saju-landing-hero--face.saju-landing-hero--intense {
+        padding-top: clamp(0.5rem, 2vw, 0.85rem) !important;
+        padding-bottom: clamp(0.6rem, 1.8vw, 0.9rem) !important;
+        min-height: auto !important;
+        justify-content: flex-start !important;
+    }
+    html.saju-home-step1 .st-key-step1_solar24,
+    html[data-saju-step="1"] .st-key-step1_solar24 {
+        margin-top: -0.2rem !important;
+    }
+    .st-key-saju_landing_stack {
+        margin-top: 0;
+        margin-bottom: 0.05rem;
+        padding-top: 0;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: visible !important;
+    }
+    .saju-home-scroll-mark {
+        display: none !important;
+        height: 0 !important;
+        width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+    }
     .st-key-saju_landing_stack [data-testid="stVerticalBlock"] > div {
-        gap: 0.35rem !important;
+        gap: 0.2rem !important;
+    }
+    html.saju-home-step1 .st-key-saju_landing_stack [data-testid="stVerticalBlock"] > div,
+    html[data-saju-step="1"] .st-key-saju_landing_stack [data-testid="stVerticalBlock"] > div {
+        gap: 0.06rem !important;
     }
     .st-key-saju_landing_hero,
     .st-key-saju_landing_hero [data-testid="stMarkdownContainer"],
@@ -627,36 +864,617 @@ def configure_application() -> None:
         margin-left: auto;
         margin-right: auto;
         box-sizing: border-box;
-        padding: clamp(1.15rem, 3.5vw, 2.25rem) clamp(1rem, 4vw, 2rem)
-            clamp(1rem, 2.5vw, 1.65rem);
-        min-height: 0;
+        padding: clamp(1.75rem, 5vw, 3rem) clamp(1.15rem, 4.5vw, 2.35rem)
+            clamp(1.15rem, 3vw, 2rem);
+        min-height: clamp(12rem, 34vw, 16rem);
         height: auto;
         overflow: visible;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: flex-start;
+        justify-content: center;
         text-align: center;
-        border-radius: 0 0 22px 22px;
-        background-color: #e8dfd4;
+        border-radius: 0 0 clamp(20px, 4vw, 28px) clamp(20px, 4vw, 28px);
+        background-color: #ebe3d6;
         background-image:
-            radial-gradient(ellipse 130% 85% at 50% -25%, rgba(22, 18, 14, 0.22) 0%, transparent 58%),
-            radial-gradient(ellipse 90% 70% at 110% 35%, rgba(15, 15, 26, 0.09) 0%, transparent 48%),
-            radial-gradient(ellipse 70% 55% at -10% 75%, rgba(15, 15, 26, 0.07) 0%, transparent 42%),
+            radial-gradient(ellipse 120% 90% at 50% -15%, rgba(212, 175, 55, 0.18) 0%, transparent 52%),
+            radial-gradient(ellipse 90% 70% at 110% 35%, rgba(15, 15, 26, 0.06) 0%, transparent 48%),
+            radial-gradient(ellipse 70% 55% at -10% 75%, rgba(15, 15, 26, 0.05) 0%, transparent 42%),
             repeating-linear-gradient(
-                92deg,
-                rgba(212, 175, 55, 0.04) 0px,
-                rgba(212, 175, 55, 0.04) 1px,
+                90deg,
+                rgba(212, 175, 55, 0.035) 0px,
+                rgba(212, 175, 55, 0.035) 1px,
                 transparent 1px,
-                transparent 7px
+                transparent 9px
             ),
-            linear-gradient(168deg, #f4eee4 0%, #ebe2d4 38%, #dfd2c2 100%),
-            radial-gradient(ellipse 85% 70% at 0% 100%, rgba(62, 48, 32, 0.1), transparent 52%),
-            radial-gradient(ellipse 80% 65% at 100% 0%, rgba(15, 15, 26, 0.06), transparent 48%);
+            linear-gradient(165deg, #faf6ef 0%, #f0e8da 42%, #e4d6c4 100%),
+            radial-gradient(ellipse 85% 70% at 0% 100%, rgba(62, 48, 32, 0.08), transparent 52%);
         box-shadow:
-            inset 0 0 100px rgba(15, 15, 26, 0.05),
-            0 14px 48px rgba(0, 0, 0, 0.14);
-        border-bottom: 1px solid rgba(201, 162, 39, 0.4);
+            inset 0 1px 0 rgba(255, 255, 255, 0.65),
+            inset 0 -1px 0 rgba(201, 162, 39, 0.25),
+            inset 0 0 80px rgba(212, 175, 55, 0.06),
+            0 18px 56px rgba(42, 32, 18, 0.12),
+            0 6px 22px rgba(212, 175, 55, 0.14);
+        border: 1px solid rgba(201, 162, 39, 0.32);
+        border-top: none;
+    }
+    .saju-landing-hero--premium .saju-landing-hero-topline,
+    .saju-landing-hero--intense .saju-landing-hero-topline {
+        position: absolute;
+        top: 0;
+        left: 6%;
+        right: 6%;
+        height: 4px;
+        border-radius: 0 0 6px 6px;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            #8b6914 8%,
+            #f5e6a8 32%,
+            #fffdf5 50%,
+            #f5e6a8 68%,
+            #8b6914 92%,
+            transparent 100%
+        );
+        box-shadow:
+            0 2px 14px rgba(212, 175, 55, 0.65),
+            0 0 24px rgba(245, 230, 168, 0.35);
+        z-index: 4;
+        pointer-events: none;
+    }
+    /* 홈 히어로 — 강렬한 시선 집중(비네트 + 스포트라이트) */
+    .saju-landing-hero--intense {
+        background-color: #1c1610;
+        background-image:
+            radial-gradient(ellipse 95% 75% at 50% 38%, rgba(255, 248, 232, 0.92) 0%, rgba(245, 232, 200, 0.55) 28%, transparent 62%),
+            radial-gradient(ellipse 120% 100% at 50% -8%, rgba(212, 175, 55, 0.42) 0%, transparent 48%),
+            radial-gradient(ellipse 80% 90% at 0% 50%, rgba(12, 10, 8, 0.55) 0%, transparent 55%),
+            radial-gradient(ellipse 80% 90% at 100% 50%, rgba(12, 10, 8, 0.55) 0%, transparent 55%),
+            linear-gradient(168deg, #2a2218 0%, #f7f0e4 38%, #efe4d2 52%, #2a2218 100%);
+        border: 2px solid rgba(212, 175, 55, 0.72);
+        border-top: none;
+        box-shadow:
+            inset 0 0 100px rgba(212, 175, 55, 0.14),
+            inset 0 2px 0 rgba(255, 255, 255, 0.35),
+            0 28px 72px rgba(18, 12, 6, 0.28),
+            0 8px 28px rgba(212, 175, 55, 0.32),
+            0 0 0 1px rgba(138, 109, 26, 0.25);
+    }
+    @keyframes saju-hero-shimmer {
+        0% { transform: translateX(-130%) skewX(-14deg); opacity: 0; }
+        12% { opacity: 0.85; }
+        45% { transform: translateX(130%) skewX(-14deg); opacity: 0; }
+        100% { transform: translateX(130%) skewX(-14deg); opacity: 0; }
+    }
+    @keyframes saju-hero-glow-pulse {
+        0%, 100% { opacity: 0.72; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.04); }
+    }
+    @keyframes saju-hero-seal-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+    }
+    .saju-landing-hero--face.saju-landing-hero--intense,
+    .saju-landing-hero--luxe.saju-landing-hero--intense {
+        --saju-hero-stack-gap: clamp(0.65rem, 2.2vw, 1rem);
+        min-height: auto;
+        padding: clamp(0.65rem, 2.5vw, 1.35rem) clamp(0.85rem, 3.5vw, 1.5rem)
+            clamp(0.75rem, 2vw, 1.1rem);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        border-width: 2px;
+        border-color: rgba(212, 175, 55, 0.55);
+        border-top: none;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.75),
+            0 16px 48px rgba(180, 140, 50, 0.18),
+            0 4px 20px rgba(212, 175, 55, 0.22);
+    }
+    .saju-landing-hero--face .saju-landing-hero-inner,
+    .saju-landing-hero--luxe .saju-landing-hero-inner {
+        flex: 0 1 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100%;
+        max-width: min(100%, 26rem);
+        padding: 0;
+        margin: 0 auto;
+    }
+    .saju-landing-hero-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        gap: var(--saju-hero-stack-gap);
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .saju-landing-hero--face .saju-landing-eyebrow {
+        margin: 0;
+        flex-shrink: 0;
+    }
+    .saju-landing-hero--face .saju-landing-logo-row--stacked,
+    .saju-landing-hero--face .saju-landing-logo-row {
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: clamp(0.5rem, 1.8vw, 0.75rem) !important;
+        margin: 0 !important;
+        width: min(100%, 21.5rem);
+        padding: clamp(0.95rem, 3vw, 1.3rem) clamp(1rem, 3.5vw, 1.35rem) !important;
+        position: relative;
+        z-index: 2;
+        isolation: isolate;
+    }
+    .saju-landing-hero--face .saju-landing-logo-row::before {
+        content: "";
+        position: absolute;
+        inset: -8% -6%;
+        z-index: -1;
+        border-radius: 22px;
+        pointer-events: none;
+        background: radial-gradient(
+            ellipse 88% 95% at 50% 48%,
+            rgba(255, 248, 228, 0.38) 0%,
+            rgba(212, 175, 55, 0.14) 42%,
+            transparent 72%
+        );
+        filter: blur(2px);
+    }
+    .saju-landing-hero--face .saju-landing-brand-block {
+        width: 100%;
+        text-align: center;
+    }
+    .saju-landing-hero--face .saju-landing-seal-wrap {
+        margin: 0 auto;
+    }
+    .saju-landing-hero--face .saju-landing-seal-svg {
+        width: clamp(4.5rem, 18vw, 6.5rem);
+        height: auto;
+    }
+    .saju-landing-hero--face .saju-landing-tagline {
+        margin: 0;
+        flex-shrink: 0;
+        width: 100%;
+        max-width: 20rem;
+        text-align: center;
+        line-height: 1.5;
+    }
+    .saju-landing-hero--face .saju-landing-hero-shimmer {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        overflow: hidden;
+        border-radius: inherit;
+    }
+    .saju-landing-hero--face .saju-landing-hero-shimmer::after {
+        content: "";
+        position: absolute;
+        top: -20%;
+        left: 0;
+        width: 42%;
+        height: 140%;
+        background: linear-gradient(
+            105deg,
+            transparent 0%,
+            rgba(255, 252, 244, 0.08) 35%,
+            rgba(255, 248, 220, 0.55) 50%,
+            rgba(255, 252, 244, 0.08) 65%,
+            transparent 100%
+        );
+        animation: saju-hero-shimmer 5.5s ease-in-out infinite;
+    }
+    .saju-landing-hero--face .saju-landing-hero-glow {
+        animation: saju-hero-glow-pulse 4s ease-in-out infinite;
+    }
+    .saju-landing-hero--face .saju-landing-seal-wrap {
+        animation: saju-hero-seal-float 5s ease-in-out infinite;
+    }
+    .saju-landing-hero--face .saju-landing-hero-topline {
+        height: 5px;
+        box-shadow:
+            0 2px 18px rgba(212, 175, 55, 0.85),
+            0 0 36px rgba(245, 230, 168, 0.5);
+    }
+    .saju-landing-hero--intense .saju-landing-hero-beam {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        background: conic-gradient(
+            from 200deg at 50% 50%,
+            transparent 0deg,
+            rgba(245, 230, 168, 0.22) 40deg,
+            rgba(212, 175, 55, 0.38) 90deg,
+            rgba(245, 230, 168, 0.22) 140deg,
+            transparent 200deg
+        );
+        opacity: 0.85;
+        mix-blend-mode: soft-light;
+    }
+    .saju-landing-hero--intense .saju-landing-hero-glow {
+        inset: 6% 10%;
+        background: radial-gradient(
+            ellipse 72% 68% at 50% 50%,
+            rgba(255, 248, 220, 0.55) 0%,
+            rgba(212, 175, 55, 0.28) 35%,
+            rgba(212, 175, 55, 0.08) 55%,
+            transparent 72%
+        );
+        filter: blur(4px);
+    }
+    .saju-landing-hero--face.saju-landing-hero--intense:not(.saju-landing-hero--nova),
+    .saju-landing-hero--luxe.saju-landing-hero--intense:not(.saju-landing-hero--nova) {
+        background-color: #fff9f0;
+        background-image:
+            radial-gradient(ellipse 110% 85% at 50% -5%, rgba(255, 252, 244, 1) 0%, rgba(250, 238, 210, 0.75) 42%, transparent 70%),
+            radial-gradient(ellipse 90% 55% at 50% 105%, rgba(232, 201, 113, 0.28) 0%, transparent 58%),
+            linear-gradient(175deg, #fffdf8 0%, #f8edd4 38%, #f0e0c0 100%);
+    }
+    .saju-landing-hero--face .saju-landing-illu-wrap,
+    .saju-landing-hero--luxe .saju-landing-illu-wrap {
+        opacity: 0.28;
+    }
+    .saju-landing-hero--intense .saju-landing-illu-wrap {
+        opacity: 0.62;
+    }
+    .saju-landing-hero--intense .saju-landing-corner {
+        opacity: 1;
+        border-color: rgba(232, 201, 113, 0.95);
+        border-width: 3px;
+        box-shadow: 0 0 18px rgba(212, 175, 55, 0.35);
+    }
+    .saju-landing-eyebrow {
+        margin: 0;
+        padding: 0.28rem 0.85rem;
+        display: inline-block;
+        border-radius: 999px;
+        font-size: clamp(0.62rem, 1.8vw, 0.74rem);
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        color: #f8f0dc;
+        background: linear-gradient(135deg, #3d3020 0%, #1a1410 100%);
+        border: 1px solid rgba(232, 201, 113, 0.55);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+    }
+    .saju-landing-hero--intense .saju-landing-logo-row {
+        background: linear-gradient(
+            145deg,
+            rgba(22, 18, 14, 0.82) 0%,
+            rgba(48, 38, 26, 0.62) 48%,
+            rgba(22, 18, 14, 0.78) 100%
+        );
+        border: 1.5px solid rgba(232, 201, 113, 0.62);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            0 16px 44px rgba(0, 0, 0, 0.28),
+            0 0 32px rgba(212, 175, 55, 0.18);
+        backdrop-filter: blur(6px);
+    }
+    .saju-landing-hero--luxe.saju-landing-hero--intense:not(.saju-landing-hero--nova) .saju-landing-logo-row {
+        background: linear-gradient(
+            165deg,
+            rgba(255, 255, 252, 0.94) 0%,
+            rgba(255, 246, 228, 0.9) 45%,
+            rgba(255, 238, 210, 0.88) 100%
+        );
+        border: 1.5px solid rgba(212, 175, 55, 0.42);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            0 14px 36px rgba(212, 175, 55, 0.22),
+            0 0 28px rgba(255, 248, 220, 0.35);
+        backdrop-filter: blur(8px);
+    }
+    .saju-landing-hero--intense .saju-landing-kicker {
+        color: rgba(248, 236, 200, 0.88);
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+    }
+    .saju-landing-hero--luxe.saju-landing-hero--intense:not(.saju-landing-hero--nova) .saju-landing-kicker {
+        color: #6b5420;
+        text-shadow: none;
+    }
+    .saju-landing-hero--luxe.saju-landing-hero--intense:not(.saju-landing-hero--nova) .saju-landing-eyebrow {
+        color: #5c4210;
+        background: linear-gradient(135deg, #fffef9 0%, #f5e6b8 48%, #e8d49a 100%);
+        border: 1px solid rgba(201, 162, 39, 0.45);
+        box-shadow: 0 4px 14px rgba(212, 175, 55, 0.2);
+    }
+    .saju-landing-hero--luxe.saju-landing-hero--intense:not(.saju-landing-hero--nova) .saju-landing-tagline {
+        color: #3d3020;
+    }
+
+    /* ===== 홈 히어로 NOVA — 현대적·고대비·시선 집중 ===== */
+    @keyframes saju-nova-bg-shift {
+        0%, 100% { background-position: 0% 40%; }
+        50% { background-position: 100% 60%; }
+    }
+    @keyframes saju-nova-aurora {
+        0%, 100% { opacity: 0.55; transform: scale(1) rotate(0deg); }
+        50% { opacity: 0.95; transform: scale(1.06) rotate(2deg); }
+    }
+    @keyframes saju-nova-rays {
+        0% { transform: rotate(0deg); opacity: 0.35; }
+        100% { transform: rotate(360deg); opacity: 0.55; }
+    }
+    @keyframes saju-nova-spark {
+        0%, 100% { opacity: 0; transform: scale(0.4); }
+        45% { opacity: 1; transform: scale(1); }
+        70% { opacity: 0; transform: scale(0.2); }
+    }
+    @keyframes saju-nova-brand-glow {
+        0%, 100% { filter: drop-shadow(0 0 18px rgba(255, 220, 120, 0.45)); }
+        50% { filter: drop-shadow(0 0 32px rgba(255, 248, 200, 0.85)); }
+    }
+    .saju-landing-hero--nova {
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+    }
+    .saju-landing-hero--luxe.saju-landing-hero--intense.saju-landing-hero--nova {
+        background-color: #08060f !important;
+        background-image:
+            radial-gradient(ellipse 130% 90% at 50% -25%, rgba(255, 214, 110, 0.55) 0%, transparent 58%),
+            radial-gradient(ellipse 70% 55% at 92% 88%, rgba(124, 92, 255, 0.42) 0%, transparent 52%),
+            radial-gradient(ellipse 65% 50% at 8% 92%, rgba(212, 175, 55, 0.35) 0%, transparent 48%),
+            linear-gradient(155deg, #0c0a14 0%, #1a1230 38%, #0f0c18 72%, #050408 100%) !important;
+        background-size: 220% 220%;
+        animation: saju-nova-bg-shift 14s ease-in-out infinite;
+        border: 1px solid rgba(255, 220, 140, 0.42) !important;
+        box-shadow:
+            0 28px 72px rgba(0, 0, 0, 0.55),
+            0 0 0 1px rgba(255, 230, 160, 0.12),
+            0 0 64px rgba(212, 175, 55, 0.28),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    }
+    .saju-landing-hero--nova .saju-landing-hero-aurora {
+        position: absolute;
+        inset: -15% -10%;
+        z-index: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(ellipse 55% 45% at 20% 30%, rgba(255, 200, 80, 0.35) 0%, transparent 70%),
+            radial-gradient(ellipse 50% 40% at 80% 25%, rgba(160, 120, 255, 0.28) 0%, transparent 68%),
+            radial-gradient(ellipse 60% 50% at 50% 80%, rgba(255, 240, 180, 0.2) 0%, transparent 72%);
+        filter: blur(18px);
+        animation: saju-nova-aurora 8s ease-in-out infinite;
+        mix-blend-mode: screen;
+    }
+    .saju-landing-hero--nova .saju-landing-hero-mesh {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.22;
+        background-image:
+            linear-gradient(rgba(255, 220, 140, 0.14) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 220, 140, 0.1) 1px, transparent 1px);
+        background-size: 28px 28px;
+        mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 20%, transparent 72%);
+    }
+    .saju-landing-hero--nova .saju-landing-hero-rays {
+        position: absolute;
+        inset: -40%;
+        z-index: 0;
+        pointer-events: none;
+        background: conic-gradient(
+            from 0deg at 50% 50%,
+            transparent 0deg,
+            rgba(255, 230, 160, 0.12) 25deg,
+            transparent 50deg,
+            rgba(212, 175, 55, 0.18) 90deg,
+            transparent 130deg,
+            rgba(255, 248, 220, 0.1) 200deg,
+            transparent 280deg
+        );
+        animation: saju-nova-rays 28s linear infinite;
+        mix-blend-mode: screen;
+    }
+    .saju-landing-hero--nova .saju-landing-illu-wrap {
+        opacity: 0.55 !important;
+        mix-blend-mode: screen;
+    }
+    .saju-landing-hero--nova .saju-landing-sparks {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        overflow: hidden;
+    }
+    .saju-landing-hero--nova .saju-landing-spark {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #fff8dc;
+        box-shadow: 0 0 10px 2px rgba(255, 230, 150, 0.9);
+        animation: saju-nova-spark 3.2s ease-in-out infinite;
+    }
+    .saju-landing-hero--nova .saju-landing-spark:nth-child(1) { top: 18%; left: 12%; animation-delay: 0s; }
+    .saju-landing-hero--nova .saju-landing-spark:nth-child(2) { top: 28%; right: 14%; animation-delay: 0.6s; }
+    .saju-landing-hero--nova .saju-landing-spark:nth-child(3) { top: 62%; left: 8%; animation-delay: 1.1s; }
+    .saju-landing-hero--nova .saju-landing-spark:nth-child(4) { top: 72%; right: 10%; animation-delay: 1.8s; }
+    .saju-landing-hero--nova .saju-landing-spark:nth-child(5) { top: 42%; left: 48%; animation-delay: 0.3s; }
+    .saju-landing-hero--nova .saju-landing-spark:nth-child(6) { top: 12%; left: 55%; animation-delay: 2.2s; }
+    .saju-landing-hero--nova .saju-landing-hero-beam {
+        opacity: 1 !important;
+        mix-blend-mode: screen;
+    }
+    .saju-landing-hero--nova .saju-landing-hero-shimmer::after {
+        animation-duration: 3.8s;
+        background: linear-gradient(
+            105deg,
+            transparent 0%,
+            rgba(255, 252, 244, 0.05) 30%,
+            rgba(255, 248, 220, 0.75) 50%,
+            rgba(255, 252, 244, 0.05) 70%,
+            transparent 100%
+        );
+    }
+    .saju-landing-hero--nova .saju-landing-hero-topline {
+        height: 4px;
+        box-shadow:
+            0 0 24px rgba(255, 220, 120, 0.95),
+            0 0 48px rgba(212, 175, 55, 0.55);
+    }
+    .saju-landing-hero--nova .saju-landing-corner {
+        border-color: rgba(255, 230, 160, 0.9);
+        box-shadow: 0 0 22px rgba(255, 215, 120, 0.45);
+    }
+    .saju-landing-hero--nova .saju-landing-eyebrow {
+        color: #1a1008 !important;
+        background: linear-gradient(90deg, #ffd86a 0%, #fff8e8 45%, #ffd86a 100%) !important;
+        border: 1px solid rgba(255, 240, 200, 0.65) !important;
+        box-shadow: 0 4px 20px rgba(255, 200, 80, 0.45) !important;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+    }
+    .saju-landing-hero--nova .saju-landing-logo-row {
+        background: linear-gradient(
+            160deg,
+            rgba(12, 8, 22, 0.88) 0%,
+            rgba(32, 22, 48, 0.72) 50%,
+            rgba(10, 8, 18, 0.9) 100%
+        ) !important;
+        border: 1px solid rgba(255, 220, 140, 0.38) !important;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.1),
+            0 20px 48px rgba(0, 0, 0, 0.45),
+            0 0 48px rgba(212, 175, 55, 0.32) !important;
+        backdrop-filter: blur(12px);
+    }
+    .saju-landing-hero--nova .saju-landing-logo-row::before {
+        background: radial-gradient(
+            ellipse 90% 95% at 50% 50%,
+            rgba(255, 220, 120, 0.28) 0%,
+            rgba(124, 92, 255, 0.12) 45%,
+            transparent 72%
+        ) !important;
+    }
+    .saju-landing-hero--nova .saju-landing-brand {
+        background: linear-gradient(
+            118deg,
+            #fffef8 0%,
+            #ffe566 18%,
+            #ffffff 38%,
+            #ffd24a 58%,
+            #fff9e6 78%,
+            #d4af37 100%
+        );
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: saju-nova-brand-glow 4s ease-in-out infinite;
+        filter: none;
+    }
+    .saju-landing-hero--nova .saju-landing-kicker {
+        color: rgba(255, 236, 200, 0.92) !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.22em !important;
+        font-size: clamp(0.62rem, 1.9vw, 0.76rem) !important;
+        text-shadow: 0 0 18px rgba(255, 200, 80, 0.55);
+    }
+    .saju-landing-hero--nova .saju-landing-tagline {
+        color: rgba(255, 248, 235, 0.95) !important;
+        font-weight: 800 !important;
+        text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+    }
+    .saju-landing-hero--nova .saju-landing-tagline-accent {
+        background: linear-gradient(105deg, #fff8e8 0%, #ffe566 35%, #ffffff 50%, #ffd24a 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 0 12px rgba(255, 220, 100, 0.65));
+    }
+    .saju-landing-hero--nova .saju-landing-seal-wrap {
+        filter: drop-shadow(0 0 28px rgba(255, 215, 100, 0.65))
+            drop-shadow(0 12px 28px rgba(0, 0, 0, 0.5));
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .saju-landing-hero--luxe.saju-landing-hero--intense.saju-landing-hero--nova,
+        .saju-landing-hero--nova .saju-landing-hero-aurora,
+        .saju-landing-hero--nova .saju-landing-hero-rays,
+        .saju-landing-hero--nova .saju-landing-spark,
+        .saju-landing-hero--nova .saju-landing-brand,
+        .saju-landing-hero--nova .saju-landing-hero-shimmer::after {
+            animation: none !important;
+        }
+    }
+  /* PC 홈: 모바일과 동일 NOVA 다크 배너(크림 라이트 덮어쓰기 방지) */
+    @media (min-width: 769px) {
+        html.saju-home-step1 .main .block-container,
+        html[data-saju-step="1"] .main .block-container {
+            padding-left: 0.45rem !important;
+            padding-right: 0.45rem !important;
+            padding-top: 0 !important;
+        }
+        html.saju-home-step1 .st-key-saju_landing_hero,
+        html[data-saju-step="1"] .st-key-saju_landing_hero {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        .saju-landing-hero--face.saju-landing-hero--intense.saju-landing-hero--nova,
+        .saju-landing-hero--luxe.saju-landing-hero--intense.saju-landing-hero--nova {
+            min-height: auto !important;
+            padding: max(0.65rem, env(safe-area-inset-top, 0px)) 0.85rem 0.75rem !important;
+            border-radius: 0 0 clamp(18px, 2vw, 22px) clamp(18px, 2vw, 22px) !important;
+        }
+        .saju-landing-hero--nova .saju-landing-hero-beam,
+        .saju-landing-hero--nova .saju-landing-hero-shimmer {
+            opacity: 0.7 !important;
+        }
+        .saju-landing-hero--nova .saju-landing-illu-wrap {
+            opacity: 0.55 !important;
+        }
+    }
+
+    .saju-landing-hero--intense .saju-landing-brand {
+        font-size: clamp(2.85rem, 9vw, 5.1rem);
+        letter-spacing: 0.08em;
+        filter:
+            drop-shadow(0 2px 0 rgba(0, 0, 0, 0.25))
+            drop-shadow(0 6px 20px rgba(212, 175, 55, 0.55))
+            drop-shadow(0 0 40px rgba(245, 230, 168, 0.35));
+    }
+    .saju-landing-hero--face .saju-landing-brand {
+        font-size: clamp(2.15rem, 7.2vw, 3.35rem);
+        line-height: 1.1;
+        margin: 0;
+        filter:
+            drop-shadow(0 3px 0 rgba(0, 0, 0, 0.32))
+            drop-shadow(0 8px 28px rgba(212, 175, 55, 0.72))
+            drop-shadow(0 0 56px rgba(255, 248, 220, 0.45));
+    }
+    .saju-landing-hero--intense .saju-landing-seal-wrap {
+        filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.45))
+            drop-shadow(0 0 28px rgba(212, 175, 55, 0.55));
+    }
+    .saju-landing-tagline-accent {
+        font-weight: 900;
+        background: linear-gradient(105deg, #6d4f0f 0%, #d4af37 40%, #fff8e8 55%, #c9a227 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+    }
+    .saju-landing-hero--intense .saju-landing-tagline {
+        font-size: clamp(1.22rem, 4.2vw, 1.72rem);
+        font-weight: 800;
+        color: #1a1410;
+        margin: 0;
+        text-shadow:
+            0 1px 0 rgba(255, 255, 255, 0.65),
+            0 2px 12px rgba(212, 175, 55, 0.25);
+    }
+    .saju-landing-hero--face .saju-landing-tagline {
+        font-size: clamp(0.98rem, 3.2vw, 1.28rem);
     }
     .saju-landing-hero-glow {
         position: absolute;
@@ -674,37 +1492,61 @@ def configure_application() -> None:
     }
     .saju-landing-corner {
         position: absolute;
-        width: clamp(2.2rem, 8vw, 3.4rem);
-        height: clamp(2.2rem, 8vw, 3.4rem);
+        width: clamp(2.6rem, 9vw, 4rem);
+        height: clamp(2.6rem, 9vw, 4rem);
         pointer-events: none;
         z-index: 2;
-        opacity: 0.72;
-        border-color: rgba(212, 175, 55, 0.75);
+        opacity: 0.88;
+        border-color: rgba(212, 175, 55, 0.82);
         border-style: solid;
+        box-shadow: 0 0 12px rgba(212, 175, 55, 0.12);
     }
     .saju-landing-corner-tl {
-        top: 0.65rem;
-        left: 0.65rem;
-        border-width: 2px 0 0 2px;
-        border-radius: 12px 0 0 0;
+        top: clamp(1rem, 3.2vw, 1.45rem);
+        left: clamp(0.75rem, 2.5vw, 1.1rem);
+        border-width: 2.5px 0 0 2.5px;
+        border-radius: 14px 0 0 0;
     }
     .saju-landing-corner-tr {
-        top: 0.65rem;
-        right: 0.65rem;
-        border-width: 2px 2px 0 0;
-        border-radius: 0 12px 0 0;
+        top: clamp(1rem, 3.2vw, 1.45rem);
+        right: clamp(0.75rem, 2.5vw, 1.1rem);
+        border-width: 2.5px 2.5px 0 0;
+        border-radius: 0 14px 0 0;
     }
     .saju-landing-corner-bl {
-        bottom: 0.65rem;
-        left: 0.65rem;
-        border-width: 0 0 2px 2px;
-        border-radius: 0 0 0 12px;
+        bottom: clamp(1rem, 3.2vw, 1.45rem);
+        left: clamp(0.75rem, 2.5vw, 1.1rem);
+        border-width: 0 0 2.5px 2.5px;
+        border-radius: 0 0 0 14px;
     }
     .saju-landing-corner-br {
-        bottom: 0.65rem;
-        right: 0.65rem;
-        border-width: 0 2px 2px 0;
-        border-radius: 0 0 12px 0;
+        bottom: clamp(1rem, 3.2vw, 1.45rem);
+        right: clamp(0.75rem, 2.5vw, 1.1rem);
+        border-width: 0 2.5px 2.5px 0;
+        border-radius: 0 0 14px 0;
+    }
+    .saju-landing-hero--face .saju-landing-corner-tl,
+    .saju-landing-hero--face .saju-landing-corner-tr,
+    .saju-landing-hero--face .saju-landing-corner-bl,
+    .saju-landing-hero--face .saju-landing-corner-br {
+        top: auto;
+        bottom: auto;
+    }
+    .saju-landing-hero--face .saju-landing-corner-tl {
+        top: clamp(0.85rem, 2.8vw, 1.25rem);
+        left: clamp(0.75rem, 2.5vw, 1.1rem);
+    }
+    .saju-landing-hero--face .saju-landing-corner-tr {
+        top: clamp(0.85rem, 2.8vw, 1.25rem);
+        right: clamp(0.75rem, 2.5vw, 1.1rem);
+    }
+    .saju-landing-hero--face .saju-landing-corner-bl {
+        bottom: clamp(0.85rem, 2.8vw, 1.25rem);
+        left: clamp(0.75rem, 2.5vw, 1.1rem);
+    }
+    .saju-landing-hero--face .saju-landing-corner-br {
+        bottom: clamp(0.85rem, 2.8vw, 1.25rem);
+        right: clamp(0.75rem, 2.5vw, 1.1rem);
     }
     .saju-landing-illu-wrap {
         position: absolute;
@@ -714,20 +1556,48 @@ def configure_application() -> None:
         display: flex;
         align-items: center;
         justify-content: center;
-        opacity: 0.52;
+        opacity: 0.42;
         overflow: hidden;
         border-radius: inherit;
     }
-    .saju-landing-illus-svg {
-        width: min(95%, 36rem);
-        max-height: min(55%, 18rem);
+    .saju-landing-illus-svg,
+    .saju-landing-pattern-svg {
+        width: min(98%, 42rem);
+        max-height: min(70%, 22rem);
         height: auto;
         flex-shrink: 0;
-        filter: drop-shadow(0 0 28px rgba(212, 175, 55, 0.12));
+        filter: drop-shadow(0 0 32px rgba(212, 175, 55, 0.14));
     }
     @media (max-width: 768px) {
         .st-key-saju_landing_stack {
-            margin-top: -3.75rem !important;
+            margin-top: 0 !important;
+        }
+        .main .block-container:has(.st-key-saju_landing_stack) {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+            min-height: 0 !important;
+        }
+        [data-testid="stAppViewContainer"]:has(.st-key-saju_landing_stack),
+        .stApp [data-testid="stAppViewContainer"]:has(.st-key-saju_landing_stack),
+        .stApp [data-testid="stAppViewContainer"]:has(.st-key-saju_landing_stack) > .main,
+        .stApp section.main:has(.st-key-saju_landing_stack),
+        [data-testid="stMain"]:has(.st-key-saju_landing_stack) {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+            align-items: flex-start !important;
+            justify-content: flex-start !important;
+        }
+        .st-key-saju_router_step_mount_01:has(.st-key-saju_landing_stack),
+        .st-key-saju_router_step_mount_01:has(.st-key-saju_landing_stack) [data-testid="stVerticalBlock"],
+        .st-key-saju_router_step_mount_01:has(.st-key-saju_landing_stack) [data-testid="stElementContainer"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            gap: 0 !important;
+            row-gap: 0 !important;
+        }
+        .st-key-saju_landing_stack:has(.st-key-saju_landing_hero) {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
         }
         .stApp [data-testid="stAppViewContainer"],
         .stApp [data-testid="stAppViewContainer"] > .main,
@@ -742,26 +1612,140 @@ def configure_application() -> None:
         .st-key-saju_landing_hero {
             display: block !important;
             margin-top: 0 !important;
+            overflow: visible !important;
+        }
+        html.saju-home-step1 .st-key-saju_router_step_mount_01,
+        html[data-saju-step="1"] .st-key-saju_router_step_mount_01,
+        html.saju-home-step1 .st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"],
+        html[data-saju-step="1"] .st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"] {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            gap: 0 !important;
+        }
+        #saju-step-top-anchor {
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        html.saju-home-step1 [data-testid="stAppViewContainer"],
+        html[data-saju-step="1"] [data-testid="stAppViewContainer"],
+        html.saju-home-step1 [data-testid="stMain"],
+        html[data-saju-step="1"] [data-testid="stMain"],
+        html.saju-home-step1 section.main,
+        html[data-saju-step="1"] section.main {
+            align-items: flex-start !important;
+            justify-content: flex-start !important;
+        }
+        html.saju-home-step1 .main .block-container,
+        html[data-saju-step="1"] .main .block-container {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+            min-height: 0 !important;
+        }
+        html.saju-home-step1 .st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"],
+        html[data-saju-step="1"] .st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"] {
+            min-height: 0 !important;
+            justify-content: flex-start !important;
+            align-items: stretch !important;
+        }
+        html.saju-home-step1 .st-key-saju_landing_stack,
+        html[data-saju-step="1"] .st-key-saju_landing_stack {
+            margin-top: calc(-0.65rem - env(safe-area-inset-top, 0px)) !important;
+        }
+        html.saju-home-step1 .st-key-saju_landing_hero,
+        html[data-saju-step="1"] .st-key-saju_landing_hero {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        html.saju-home-step1 .saju-landing-hero,
+        html[data-saju-step="1"] .saju-landing-hero {
+            padding-top: max(0.2rem, env(safe-area-inset-top, 0px)) !important;
+            padding-bottom: 0.55rem !important;
+            min-height: auto !important;
+            justify-content: flex-start !important;
         }
         .saju-landing-hero {
-            padding-top: clamp(0.65rem, 2.5vw, 0.95rem) !important;
-            padding-bottom: clamp(0.7rem, 2vw, 1rem) !important;
-            border-radius: 0 0 16px 16px;
+            border-radius: 0 0 18px 18px;
         }
-        .saju-landing-logo-row {
-            flex-direction: row !important;
-            justify-content: center !important;
-            gap: 0.75rem !important;
+        html.saju-home-step1 .saju-landing-hero--face.saju-landing-hero--intense,
+        html[data-saju-step="1"] .saju-landing-hero--face.saju-landing-hero--intense,
+        html.saju-home-step1 .saju-landing-hero--luxe.saju-landing-hero--intense,
+        html[data-saju-step="1"] .saju-landing-hero--luxe.saju-landing-hero--intense,
+        .st-key-saju_landing_hero .saju-landing-hero--luxe.saju-landing-hero--intense {
+            --saju-hero-stack-gap: clamp(0.45rem, 1.8vw, 0.7rem);
+            min-height: auto !important;
+            padding: max(0.12rem, env(safe-area-inset-top, 0px)) 0.55rem 0.55rem !important;
+            overflow: hidden !important;
+            justify-content: flex-start !important;
+            border-radius: 0 0 clamp(16px, 4.5vw, 20px) clamp(16px, 4.5vw, 20px) !important;
         }
-        .saju-landing-seal-wrap svg,
-        .saju-landing-seal-svg {
-            width: clamp(3.5rem, 18vw, 4.5rem) !important;
-            height: auto !important;
+        html.saju-home-step1 .st-key-step1_solar24,
+        html[data-saju-step="1"] .st-key-step1_solar24 {
+            margin-top: -0.25rem !important;
+        }
+        .saju-landing-hero--intense .saju-landing-hero-shimmer,
+        .saju-landing-hero--intense .saju-landing-hero-beam {
+            opacity: 0.22 !important;
+        }
+        .saju-landing-hero--luxe .saju-landing-hero-beam {
+            opacity: 0.35 !important;
+        }
+        .saju-landing-hero--nova .saju-landing-hero-beam,
+        .saju-landing-hero--nova .saju-landing-hero-shimmer {
+            opacity: 0.7 !important;
+        }
+        .saju-landing-hero--nova .saju-landing-hero-mesh {
+            opacity: 0.16 !important;
+        }
+        .saju-landing-hero--face .saju-landing-hero-inner {
+            max-width: 100% !important;
+            padding-left: 0.35rem !important;
+            padding-right: 0.35rem !important;
+        }
+        .saju-landing-hero--face .saju-landing-logo-row {
+            width: min(100%, 19.5rem) !important;
+            padding: 0.85rem 0.9rem !important;
+        }
+        .saju-landing-hero--face .saju-landing-eyebrow {
+            font-size: clamp(0.58rem, 2.4vw, 0.68rem) !important;
+            letter-spacing: 0.06em !important;
+            padding: 0.24rem 0.7rem !important;
+        }
+        .saju-landing-hero--face .saju-landing-brand {
+            font-size: clamp(1.9rem, 7vw, 2.45rem) !important;
+        }
+        .saju-landing-hero--face .saju-landing-kicker {
+            font-size: clamp(0.68rem, 2.6vw, 0.8rem) !important;
+            letter-spacing: 0.06em !important;
+            max-width: 16rem !important;
+        }
+        .saju-landing-hero--face .saju-landing-tagline {
+            font-size: clamp(0.9rem, 3.4vw, 1.02rem) !important;
+            max-width: 17rem !important;
+        }
+        .saju-landing-hero--face .saju-landing-seal-svg {
+            width: clamp(3.75rem, 15vw, 4.65rem) !important;
+        }
+        .saju-landing-hero--intense .saju-landing-corner {
+            width: clamp(1.65rem, 5.5vw, 2.1rem) !important;
+            height: clamp(1.65rem, 5.5vw, 2.1rem) !important;
+            opacity: 0.62 !important;
         }
         .st-key-step1_solar24 {
             max-width: min(100%, 480px) !important;
             margin-left: auto !important;
             margin-right: auto !important;
+            margin-top: 0.15rem !important;
+        }
+        .saju-step1-solar24-heading {
+            margin-bottom: 0.25rem !important;
+        }
+        .st-key-step1_solar24 [data-testid="stHtml"],
+        .st-key-step1_solar24 iframe {
+            height: auto !important;
+            max-height: none !important;
+            min-height: 500px !important;
+            overflow: visible !important;
         }
     }
     .saju-landing-hero::before {
@@ -780,12 +1764,17 @@ def configure_application() -> None:
         pointer-events: none;
         background: radial-gradient(circle at 50% 88%, rgba(212, 175, 55, 0.12) 0%, transparent 45%);
     }
+    .saju-landing-hero--face::after {
+        background:
+            radial-gradient(ellipse 80% 50% at 50% 100%, rgba(212, 175, 55, 0.14) 0%, transparent 55%),
+            radial-gradient(ellipse 80% 50% at 50% 0%, rgba(212, 175, 55, 0.1) 0%, transparent 55%);
+    }
     .saju-landing-hero-inner {
         position: relative;
         z-index: 1;
-        max-width: 40rem;
+        max-width: 46rem;
         width: 100%;
-        padding-top: 0.15rem;
+        padding-top: clamp(0.35rem, 1.5vw, 0.75rem);
     }
     html.saju-dark-tone .saju-landing-hero {
         background-color: #0c0c14;
@@ -820,7 +1809,51 @@ def configure_application() -> None:
         color: rgba(200, 198, 210, 0.78);
     }
     html.saju-dark-tone .saju-landing-illu-wrap {
-        opacity: 0.32;
+        opacity: 0.28;
+    }
+    html.saju-dark-tone .saju-landing-logo-row {
+        background: rgba(18, 16, 28, 0.55);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    html.saju-dark-tone .saju-landing-kicker {
+        color: rgba(212, 175, 55, 0.62);
+        letter-spacing: 0.1em;
+    }
+    html.saju-dark-tone .saju-landing-hero--premium .saju-landing-hero-topline,
+    html.saju-dark-tone .saju-landing-hero--intense .saju-landing-hero-topline {
+        opacity: 0.95;
+    }
+    html.saju-dark-tone .saju-landing-hero--intense {
+        background-color: #050508;
+        background-image:
+            radial-gradient(ellipse 90% 70% at 50% 40%, rgba(212, 175, 55, 0.22) 0%, rgba(18, 16, 28, 0.85) 45%, transparent 68%),
+            radial-gradient(ellipse 120% 90% at 50% -12%, rgba(232, 185, 35, 0.35) 0%, transparent 52%),
+            radial-gradient(ellipse 70% 80% at 0% 55%, rgba(0, 0, 0, 0.75) 0%, transparent 58%),
+            radial-gradient(ellipse 70% 80% at 100% 55%, rgba(0, 0, 0, 0.75) 0%, transparent 58%),
+            linear-gradient(168deg, #0a0a12 0%, #1a1828 38%, #12121c 100%);
+        border-color: rgba(212, 175, 55, 0.55);
+        box-shadow:
+            inset 0 0 120px rgba(212, 175, 55, 0.1),
+            0 24px 64px rgba(0, 0, 0, 0.55),
+            0 0 48px rgba(212, 175, 55, 0.12);
+    }
+    html.saju-dark-tone .saju-landing-hero--intense .saju-landing-logo-row {
+        background: linear-gradient(
+            145deg,
+            rgba(8, 8, 16, 0.92) 0%,
+            rgba(28, 24, 40, 0.78) 50%,
+            rgba(8, 8, 16, 0.9) 100%
+        );
+        border-color: rgba(212, 175, 55, 0.48);
+    }
+    html.saju-dark-tone .saju-landing-hero--intense .saju-landing-tagline {
+        color: rgba(252, 248, 240, 0.96);
+        text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+    }
+    html.saju-dark-tone .saju-landing-eyebrow {
+        color: #f5e6a8;
+        background: linear-gradient(135deg, #1a1828 0%, #0a0a12 100%);
+        border-color: rgba(212, 175, 55, 0.45);
     }
     .saju-landing-free-badge {
         display: inline-block;
@@ -839,23 +1872,51 @@ def configure_application() -> None:
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.55rem;
-        margin-bottom: 0.5rem;
+        gap: 0.75rem;
+        margin-bottom: 0.65rem;
+        padding: clamp(0.5rem, 2vw, 0.85rem) clamp(0.65rem, 3vw, 1.25rem);
+        border-radius: 18px;
+        background: rgba(255, 252, 245, 0.35);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
     }
     @media (min-width: 520px) {
-        .saju-landing-logo-row {
+        .saju-landing-logo-row:not(.saju-landing-logo-row--stacked) {
             flex-direction: row;
             justify-content: center;
             align-items: center;
-            gap: 1.15rem;
+            gap: 1.5rem;
+        }
+    }
+    @media (min-width: 769px) {
+        .saju-landing-hero--face.saju-landing-hero--intense:not(.saju-landing-hero--nova) {
+            --saju-hero-stack-gap: clamp(0.9rem, 2vw, 1.2rem);
+            min-height: clamp(15.5rem, 28vw, 18.5rem);
+            padding: clamp(1.85rem, 3.5vw, 2.45rem) clamp(1.25rem, 3vw, 2rem);
+        }
+        .saju-landing-hero--face.saju-landing-hero--intense:not(.saju-landing-hero--nova) .saju-landing-logo-row {
+            width: min(100%, 23rem);
+            padding: clamp(1.05rem, 2.2vw, 1.4rem) clamp(1.15rem, 2.5vw, 1.5rem) !important;
+        }
+        .saju-landing-hero--face.saju-landing-hero--intense:not(.saju-landing-hero--nova) .saju-landing-brand {
+            font-size: clamp(2.35rem, 4.8vw, 3.15rem);
+        }
+        .saju-landing-hero--face.saju-landing-hero--intense:not(.saju-landing-hero--nova) .saju-landing-seal-svg {
+            width: clamp(5rem, 9vw, 6.25rem);
+        }
+        .saju-landing-hero--face.saju-landing-hero--intense.saju-landing-hero--nova .saju-landing-logo-row {
+            width: min(100%, 21.5rem);
+        }
+        .saju-landing-hero--nova .saju-landing-brand {
+            font-size: clamp(2.15rem, 5vw, 3.35rem);
         }
     }
     .saju-landing-seal-wrap {
         flex-shrink: 0;
-        filter: drop-shadow(0 8px 26px rgba(138, 109, 26, 0.5));
+        filter: drop-shadow(0 10px 28px rgba(138, 109, 26, 0.45))
+            drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
     }
     .saju-landing-seal-svg {
-        width: clamp(5.25rem, 17vw, 7.5rem);
+        width: clamp(6.25rem, 20vw, 9.25rem);
         height: auto;
         display: block;
     }
@@ -864,42 +1925,44 @@ def configure_application() -> None:
     }
     .saju-landing-brand {
         font-family: "Playfair Display", "Noto Serif KR", "Apple SD Gothic Neo", "Malgun Gothic", Georgia, serif;
-        font-size: clamp(2.2rem, 6.8vw, 3.95rem);
+        font-size: clamp(2.65rem, 8.2vw, 4.65rem);
         font-weight: 800;
-        letter-spacing: 0.1em;
-        margin: 0 0 0.25rem 0;
-        line-height: 1.1;
+        letter-spacing: 0.06em;
+        margin: 0 0 0.35rem 0;
+        line-height: 1.08;
         background: linear-gradient(
-            102deg,
-            var(--saju-gold-deep) 0%,
-            #b8892b 22%,
-            #e8c547 38%,
-            var(--saju-gold-soft) 48%,
-            var(--saju-gold) 58%,
-            #8a6d1a 100%
+            108deg,
+            #6d4f0f 0%,
+            #b8892b 18%,
+            #f0d878 36%,
+            #e8c547 48%,
+            #d4af37 58%,
+            #c9a227 72%,
+            #7a6020 100%
         );
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        filter: drop-shadow(0 2px 16px rgba(138, 109, 26, 0.48));
+        filter: drop-shadow(0 3px 18px rgba(138, 109, 26, 0.35));
     }
     .saju-landing-kicker {
-        font-family: "Playfair Display", Georgia, serif;
-        font-size: clamp(0.58rem, 1.85vw, 0.72rem);
+        font-family: "Noto Serif KR", "Apple SD Gothic Neo", "Malgun Gothic", Georgia, serif;
+        font-size: clamp(0.72rem, 2.2vw, 0.92rem);
         font-weight: 600;
-        letter-spacing: 0.38em;
-        text-indent: 0.38em;
+        letter-spacing: 0.12em;
+        text-indent: 0;
         margin: 0;
-        color: rgba(90, 72, 40, 0.72);
-        text-transform: uppercase;
+        color: rgba(72, 58, 36, 0.78);
+        text-transform: none;
     }
     .saju-landing-tagline {
-        font-size: clamp(1.05rem, 3.4vw, 1.28rem);
+        font-size: clamp(1.12rem, 3.8vw, 1.42rem);
         font-weight: 700;
-        color: rgba(35, 30, 24, 0.88);
-        margin: 0.85rem 0 0.35rem 0;
-        line-height: 1.45;
-        letter-spacing: -0.03em;
+        color: rgba(32, 28, 22, 0.9);
+        margin: 1rem 0 0.25rem 0;
+        line-height: 1.5;
+        letter-spacing: -0.02em;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
     }
     .saju-landing-sub {
         font-size: clamp(0.86rem, 2.6vw, 0.98rem);
@@ -923,7 +1986,7 @@ def configure_application() -> None:
         border: 1px solid light-dark(rgba(212, 175, 55, 0.28), rgba(212, 175, 55, 0.18));
     }
     .saju-step1-solar24-heading {
-        margin: 0.2rem auto 0.35rem !important;
+        margin: 0.05rem auto 0.35rem !important;
         padding: 0 0.25rem;
         font-size: clamp(1.05rem, 2.8vw, 1.2rem) !important;
         font-weight: 800 !important;
@@ -933,8 +1996,41 @@ def configure_application() -> None:
         width: 100%;
         max-width: 520px;
     }
+    .saju-step1-solar24-heading--intense {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        margin: 0.2rem auto 0.5rem !important;
+        padding: 0.55rem 1.1rem !important;
+        max-width: min(100%, 520px);
+        border-radius: 14px;
+        font-size: clamp(1.12rem, 3.2vw, 1.32rem) !important;
+        color: light-dark(#4a3710, #fce9a8) !important;
+        background: light-dark(
+            linear-gradient(135deg, rgba(212, 175, 55, 0.28) 0%, rgba(255, 252, 244, 0.95) 100%),
+            linear-gradient(135deg, rgba(212, 175, 55, 0.22) 0%, rgba(22, 20, 36, 0.92) 100%)
+        );
+        border: 1.5px solid light-dark(rgba(201, 162, 39, 0.55), rgba(212, 175, 55, 0.4));
+        box-shadow:
+            0 8px 24px light-dark(rgba(98, 79, 39, 0.18), rgba(0, 0, 0, 0.35)),
+            inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.08));
+    }
+    .saju-step1-solar24-heading-icon {
+        font-size: 1.15em;
+        line-height: 1;
+        filter: drop-shadow(0 0 8px rgba(255, 180, 60, 0.65));
+    }
+    .saju-step1-solar24-heading,
+    .saju-step1-solar24-heading--intense {
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+    }
     .st-key-step1_solar24 {
-        margin: 0.15rem auto 0.35rem !important;
+        margin: 0.35rem auto 0.35rem !important;
         isolation: isolate;
         display: flex !important;
         flex-direction: column !important;
@@ -1042,16 +2138,17 @@ def configure_application() -> None:
     }
     .st-key-step1_cta_row_briefing .stButton > button,
     .st-key-step1_cta_row_briefing .stLinkButton > a {
-        background: light-dark(#ffffff, rgba(38, 38, 56, 0.95)) !important;
-        color: light-dark(#334155, #e8e8f0) !important;
-        border: 1px solid light-dark(#e5e7eb, rgba(212, 175, 55, 0.22)) !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        color: light-dark(rgba(45, 38, 28, 0.9), rgba(235, 228, 210, 0.94)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
     }
     .st-key-step1_cta_row_main .stButton > button:disabled,
     .st-key-step1_cta_row_main [data-testid="stFormSubmitButton"] > button:disabled {
-        background: rgba(184, 134, 11, 0.14) !important;
-        color: #8a6d1a !important;
-        border: 1px dashed rgba(184, 134, 11, 0.45) !important;
+        background: transparent !important;
+        color: rgba(138, 109, 26, 0.55) !important;
+        border: none !important;
         box-shadow: none !important;
     }
     .st-key-step1_cta_row_main .stButton > button,
@@ -1069,15 +2166,29 @@ def configure_application() -> None:
         white-space: normal !important;
         word-break: keep-all !important;
         overflow-wrap: anywhere !important;
-        border-radius: 12px !important;
+        border-radius: var(--saju-soft-radius) !important;
         box-sizing: border-box !important;
-        border: 1px solid rgba(138, 109, 26, 0.55) !important;
-        background: linear-gradient(180deg, #f0dc82 0%, #d4af37 38%, #b8892b 100%) !important;
-        color: #0f0f1a !important;
-        box-shadow: 0 3px 0 rgba(107, 84, 32, 0.32), 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+        box-shadow: none !important;
     }
     .st-key-step1_revisit_pin_row .stTextInput label {
         font-size: clamp(11px, 3vw, 13px) !important;
+    }
+    .saju-revisit-pin-rule {
+        margin: 0 0 0.35rem 0 !important;
+        padding: 0 !important;
+        font-size: clamp(10px, 2.8vw, 12px) !important;
+        line-height: 1.35 !important;
+        color: rgba(61, 47, 31, 0.78) !important;
+        text-align: left !important;
+    }
+    .saju-revisit-pin-rule--compact {
+        margin-bottom: 0.45rem !important;
+    }
+    .st-key-step1_cta_row_main .saju-revisit-pin-rule {
+        margin-bottom: 0.28rem !important;
     }
     .st-key-step1_revisit_pin_row .stTextInput > div > div > input,
     .st-key-step1_cta_row_main .stTextInput > div > div > input {
@@ -1097,16 +2208,18 @@ def configure_application() -> None:
         font-size: clamp(11px, 3vw, 14px) !important;
         font-weight: 800 !important;
         white-space: nowrap !important;
-        border-radius: 12px !important;
-        border: 1px solid rgba(138, 109, 26, 0.55) !important;
-        background: linear-gradient(180deg, #f0dc82 0%, #d4af37 38%, #b8892b 100%) !important;
-        color: #0f0f1a !important;
-        box-shadow: 0 3px 0 rgba(107, 84, 32, 0.32), 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+        border-radius: var(--saju-soft-radius) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+        box-shadow: none !important;
     }
     .st-key-step1_revisit_pin_row .stButton > button {
-        border: 1px solid rgba(138, 109, 26, 0.55) !important;
-        background: linear-gradient(180deg, #f0dc82 0%, #d4af37 38%, #b8892b 100%) !important;
-        color: #0f0f1a !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
     }
     @media (max-width: 400px) {
         .st-key-step1_cta_row_briefing .stButton > button,
@@ -1119,16 +2232,78 @@ def configure_application() -> None:
             min-height: 2.35rem !important;
         }
     }
-    /* STEP2 태어난 시간 아코디언: 긴 시간 범위가 모바일에서 겹치지 않도록 */
-    .st-key-step2_navertone_self .stExpander .stButton > button,
-    .st-key-step2_navertone_opp .stExpander .stButton > button {
-        min-height: 2.6rem !important;
+    /* STEP2 태어난 시간: 텍스트만 나열(배경·액자 없음) */
+    /* STEP2 태어난 시간 아코디언: 액자·배경 제거, 글씨만 */
+    .st-key-s2_self_time_acc [data-testid="stExpander"] details,
+    .st-key-s2_opp_time_acc [data-testid="stExpander"] details {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+    .st-key-s2_self_time_acc [data-testid="stExpander"] summary,
+    .st-key-s2_opp_time_acc [data-testid="stExpander"] summary {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0.1rem 0 !important;
+        font-weight: 600 !important;
+        font-size: clamp(11px, 2.6vw, 13px) !important;
+        list-style: none !important;
+    }
+    .st-key-s2_self_time_acc [data-testid="stExpander"] summary:hover,
+    .st-key-s2_opp_time_acc [data-testid="stExpander"] summary:hover {
+        color: light-dark(#8b6914, #f5e6a8) !important;
+    }
+    .st-key-s2_self_time_list .stButton > button,
+    .st-key-s2_opp_time_list .stButton > button {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        min-height: auto !important;
+        height: auto !important;
+        padding: 0.06rem 0 !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+        line-height: 1.28 !important;
+        font-size: clamp(10px, 2.4vw, 12px) !important;
+        letter-spacing: -0.04em !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        color: light-dark(rgba(45, 38, 28, 0.88), rgba(235, 228, 210, 0.92)) !important;
+    }
+    .st-key-s2_self_time_list .stButton > button[kind="primary"],
+    .st-key-s2_self_time_list .stButton > button[data-testid="baseButton-primary"],
+    .st-key-s2_opp_time_list .stButton > button[kind="primary"],
+    .st-key-s2_opp_time_list .stButton > button[data-testid="baseButton-primary"] {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        font-weight: 700 !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+    }
+    .st-key-s2_self_time_list .stButton > button:hover,
+    .st-key-s2_opp_time_list .stButton > button:hover {
+        background: light-dark(rgba(212, 175, 55, 0.12), rgba(212, 175, 55, 0.08)) !important;
+    }
+    .st-key-s2_self_time_list .stButton,
+    .st-key-s2_opp_time_list .stButton {
+        margin-bottom: 0 !important;
+    }
+    /* STEP2 접이식(태어난 시간·성별·양력 등): 연한 피치 칩 */
+    .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button,
+    .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        min-height: auto !important;
         height: auto !important;
         white-space: nowrap !important;
-        line-height: 1.16 !important;
+        line-height: 1.28 !important;
         font-size: clamp(12px, 2.85vw, 14px) !important;
-        padding: 0.34rem 0.18rem !important;
-        letter-spacing: -0.045em !important;
+        padding: 0.38rem 0.5rem !important;
+        letter-spacing: -0.04em !important;
+        border-radius: var(--saju-soft-radius) !important;
     }
     /* STEP1: 3열 메뉴는 접이식(expander) 안에서만 사용 */
     .st-key-step1_solar24 {
@@ -1145,7 +2320,7 @@ def configure_application() -> None:
         max-width: 520px !important;
         margin-left: auto !important;
         margin-right: auto !important;
-        min-height: 600px !important;
+        min-height: 500px !important;
         display: block !important;
         overflow: visible !important;
     }
@@ -1155,7 +2330,76 @@ def configure_application() -> None:
     @media (max-width: 520px) {
         .st-key-step1_solar24 [data-testid="stCustomComponentV1"] iframe,
         .st-key-step1_solar24 iframe {
-            min-height: 660px !important;
+            min-height: 500px !important;
+            max-height: none !important;
+            height: auto !important;
+        }
+        html.saju-home-step1 .saju-landing-hero--face.saju-landing-hero--intense,
+        html[data-saju-step="1"] .saju-landing-hero--face.saju-landing-hero--intense,
+        html.saju-home-step1 .saju-landing-hero--luxe.saju-landing-hero--intense,
+        html[data-saju-step="1"] .saju-landing-hero--luxe.saju-landing-hero--intense {
+            padding: max(0.22rem, env(safe-area-inset-top, 0px)) 0.5rem 0.5rem !important;
+            min-height: auto !important;
+        }
+        html.saju-home-step1 .st-key-saju_landing_stack,
+        html[data-saju-step="1"] .st-key-saju_landing_stack {
+            margin-top: calc(-0.5rem - env(safe-area-inset-top, 0px)) !important;
+        }
+    }
+    /* 갤럭시·안드로이드(삼성 인터넷·Chrome) — 홈 배너 상단 빈 여백 제거 */
+    @media (max-width: 768px) {
+        html.saju-platform-android.saju-home-step1 .stApp [data-testid="stAppViewContainer"],
+        html.saju-platform-android[data-saju-step="1"] .stApp [data-testid="stAppViewContainer"] {
+            padding-top: 0 !important;
+        }
+        html.saju-platform-android.saju-home-step1 .main .block-container,
+        html.saju-platform-android[data-saju-step="1"] .main .block-container {
+            padding-top: 0 !important;
+            padding-left: 0.35rem !important;
+            padding-right: 0.35rem !important;
+        }
+        html.saju-platform-android.saju-home-step1 .st-key-saju_landing_stack,
+        html.saju-platform-android[data-saju-step="1"] .st-key-saju_landing_stack {
+            margin-top: -0.85rem !important;
+            padding-top: 0 !important;
+        }
+        html.saju-platform-android.saju-home-step1 .st-key-saju_landing_stack [data-testid="stVerticalBlock"],
+        html.saju-platform-android[data-saju-step="1"] .st-key-saju_landing_stack [data-testid="stVerticalBlock"] {
+            gap: 0 !important;
+            row-gap: 0 !important;
+        }
+        html.saju-platform-android.saju-home-step1 .st-key-saju_landing_stack [data-testid="stVerticalBlock"] > div,
+        html.saju-platform-android[data-saju-step="1"] .st-key-saju_landing_stack [data-testid="stVerticalBlock"] > div {
+            gap: 0 !important;
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        html.saju-platform-android.saju-home-step1 .st-key-saju_landing_hero [data-testid="stElementContainer"],
+        html.saju-platform-android[data-saju-step="1"] .st-key-saju_landing_hero [data-testid="stElementContainer"],
+        html.saju-platform-android.saju-home-step1 .st-key-saju_landing_stack [data-testid="stElementContainer"],
+        html.saju-platform-android[data-saju-step="1"] .st-key-saju_landing_stack [data-testid="stElementContainer"] {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+        }
+        html.saju-platform-android.saju-home-step1 .saju-landing-hero--luxe.saju-landing-hero--intense,
+        html.saju-platform-android[data-saju-step="1"] .saju-landing-hero--luxe.saju-landing-hero--intense {
+            padding-top: 0 !important;
+            padding-bottom: 0.5rem !important;
+            min-height: auto !important;
+            justify-content: flex-start !important;
+        }
+        html.saju-platform-galaxy.saju-home-step1 .st-key-saju_landing_stack,
+        html.saju-platform-galaxy[data-saju-step="1"] .st-key-saju_landing_stack {
+            margin-top: -1.15rem !important;
+        }
+        html.saju-platform-galaxy.saju-home-step1 .saju-landing-hero--luxe.saju-landing-hero--intense,
+        html.saju-platform-galaxy[data-saju-step="1"] .saju-landing-hero--luxe.saju-landing-hero--intense {
+            padding-top: 0 !important;
+            border-radius: 0 0 16px 16px !important;
+        }
+        html.saju-platform-galaxy.saju-home-step1 .st-key-step1_solar24,
+        html.saju-platform-galaxy[data-saju-step="1"] .st-key-step1_solar24 {
+            margin-top: -0.15rem !important;
         }
     }
     .saju-fg2-card {
@@ -1172,19 +2416,6 @@ def configure_application() -> None:
             transparent 100%
         );
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
-    }
-    .st-key-step1_footer_ornament {
-        max-width: min(100vw, 440px);
-        margin: 0.1rem auto 1.1rem auto;
-        padding: 0.35rem 0.75rem 0.85rem;
-        box-sizing: border-box;
-        text-align: center;
-    }
-    .saju-step1-footer-ornament svg {
-        display: block;
-        margin: 0 auto;
-        max-width: 100%;
-        height: auto;
     }
     .st-key-step1_menu_grid {
         max-width: min(100vw, 560px);
@@ -1544,61 +2775,59 @@ def configure_application() -> None:
     }
     .st-key-step2_cal_orb_row .stButton > button[kind="primary"],
     .st-key-step2_cal_orb_row .stButton > button[data-testid="baseButton-primary"] {
-        border: 1px solid rgba(138, 109, 26, 0.55) !important;
-        background: linear-gradient(180deg, #f0dc82 0%, #d4af37 42%, #b8892b 100%) !important;
-        color: #0f0f1a !important;
-        box-shadow:
-            0 3px 0 rgba(107, 84, 32, 0.32),
-            0 10px 26px rgba(0, 0, 0, 0.14) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+        box-shadow: none !important;
     }
     .st-key-step2_cal_orb_row .stButton > button[kind="secondary"],
     .st-key-step2_cal_orb_row .stButton > button[data-testid="baseButton-secondary"] {
-        border: 1px solid light-dark(rgba(201, 162, 39, 0.35), rgba(212, 175, 55, 0.25)) !important;
-        background: light-dark(rgba(255, 252, 248, 0.85), rgba(26, 26, 46, 0.65)) !important;
-        color: light-dark(#3a3428, #e8e6f0) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        color: light-dark(rgba(45, 38, 28, 0.88), rgba(235, 228, 210, 0.92)) !important;
+        box-shadow: none !important;
     }
     html.saju-dark-tone .st-key-step2_cal_orb_row .stButton > button[kind="secondary"],
     html.saju-dark-tone .st-key-step2_cal_orb_row .stButton > button[data-testid="baseButton-secondary"] {
-        background: rgba(22, 24, 40, 0.75) !important;
-        color: rgba(232, 230, 245, 0.88) !important;
+        background: var(--saju-soft-fill-dark) !important;
+        color: rgba(235, 228, 210, 0.92) !important;
     }
 
-    /* STEP2: 골드 저장 버튼 */
+    /* STEP2: 저장·분석 시작(안내 클릭) */
     .st-key-step2_save_gold_wrap .stButton > button {
-        min-height: 3.65rem !important;
+        min-height: auto !important;
         font-size: max(17px, 1.06rem) !important;
         font-weight: 800 !important;
         letter-spacing: -0.02em !important;
-        border-radius: 14px !important;
-        border: 1px solid rgba(138, 109, 26, 0.55) !important;
-        background: linear-gradient(180deg, #f0dc82 0%, #d4af37 38%, #b8892b 100%) !important;
-        color: #0f0f1a !important;
-        box-shadow:
-            0 4px 0 rgba(107, 84, 32, 0.35),
-            0 10px 28px rgba(0, 0, 0, 0.18) !important;
+        border-radius: var(--saju-soft-radius) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+        box-shadow: none !important;
     }
     .st-key-step2_save_gold_wrap .stButton > button:hover {
-        filter: brightness(1.04) !important;
+        background: light-dark(var(--saju-soft-fill-active), var(--saju-soft-fill-dark-hover)) !important;
+        filter: none !important;
     }
     .st-key-step2_save_gold_wrap .stButton > button:active {
-        transform: translateY(1px);
-        box-shadow: 0 2px 0 rgba(107, 84, 32, 0.35), 0 6px 18px rgba(0, 0, 0, 0.16) !important;
+        transform: none !important;
+        box-shadow: none !important;
     }
     html.saju-dark-tone .st-key-step2_save_gold_wrap .stButton > button {
-        color: #0f0f1a !important;
+        color: #f5e6a8 !important;
     }
 
     /* ===== 분석 카드 `.card` 스킨 (STEP3~10 — 채팅창은 별도 규칙) ===== */
     div[class*="st-key-saju_analysis_card"] {
         position: relative;
-        overflow: hidden;
+        overflow: visible;
         border-radius: 22px;
         padding: clamp(1.55rem, 3vw, 2.35rem);
         margin-bottom: 1.35rem;
         box-sizing: border-box;
         border: 1px solid light-dark(rgba(92, 62, 36, 0.2), rgba(212, 175, 55, 0.22));
         background: light-dark(
-            linear-gradient(150deg, #fdf9f4 0%, #f1e9dc 48%, #e7dcc9 100%),
+            linear-gradient(150deg, #fffffe 0%, #fff7eb 42%, #ffefd8 100%),
             linear-gradient(135deg, #1a1a2e 0%, #16213e 52%, #141b2a 100%)
         );
         box-shadow: light-dark(
@@ -1633,7 +2862,7 @@ def configure_application() -> None:
         inset: 0;
         pointer-events: none;
         z-index: 0;
-        opacity: light-dark(0.07, 0.055);
+        opacity: light-dark(0.02, 0.04);
         mix-blend-mode: multiply;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
@@ -1647,7 +2876,147 @@ def configure_application() -> None:
     div[class*="st-key-saju_analysis_card"] h4,
     div[class*="st-key-saju_analysis_card"] h5,
     div[class*="st-key-saju_analysis_card"] h6 {
-        color: inherit;
+        color: light-dark(var(--saju-text-readable), #f2ece2) !important;
+    }
+    div[class*="st-key-saju_analysis_card"] [data-testid="stMarkdownContainer"] p,
+    div[class*="st-key-saju_analysis_card"] [data-testid="stMarkdownContainer"] li,
+    div[class*="st-key-saju_analysis_card"] [data-testid="stCaptionContainer"],
+    div[class*="st-key-saju_analysis_card"] label {
+        color: light-dark(var(--saju-text-readable), #ece8e0) !important;
+        opacity: 1 !important;
+    }
+
+    .saju-section-title-badge {
+        display: inline-block;
+        padding: 0.48rem 0.9rem;
+        margin: 0.15rem 0 0.7rem;
+        border-radius: 12px;
+        font-size: clamp(1rem, 3.8vw, 1.12rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.35;
+        background: light-dark(rgba(212, 175, 55, 0.24), rgba(212, 175, 55, 0.16));
+        border: 1px solid light-dark(rgba(139, 90, 43, 0.38), rgba(212, 175, 55, 0.38));
+        color: light-dark(#2a2218, #f5e6a8);
+        box-shadow: light-dark(
+            0 2px 10px rgba(35, 26, 18, 0.06),
+            0 2px 12px rgba(0, 0, 0, 0.22)
+        );
+    }
+    .saju-section-title-badge--center {
+        display: block;
+        width: fit-content;
+        max-width: 100%;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+    }
+
+    .saju-roadmap-decades-frame,
+    .st-key-step9_roadmap_decades,
+    .st-key-step9_roadmap_current {
+        border-radius: 16px !important;
+        padding: 0.85rem 1rem !important;
+        margin: 0.55rem 0 0.75rem !important;
+        box-sizing: border-box !important;
+        line-height: 1.55;
+        font-size: max(14px, 0.92rem);
+    }
+    .saju-roadmap-decades-frame,
+    .st-key-step9_roadmap_decades {
+        border: 1px solid light-dark(rgba(139, 105, 20, 0.32), rgba(212, 175, 55, 0.28)) !important;
+        background: light-dark(rgba(255, 252, 245, 0.96), rgba(26, 26, 46, 0.78)) !important;
+    }
+    .saju-roadmap-current-frame,
+    .st-key-step9_roadmap_current {
+        border: 1px solid light-dark(rgba(59, 130, 246, 0.28), rgba(96, 165, 250, 0.32)) !important;
+        background: light-dark(rgba(239, 246, 255, 0.92), rgba(22, 32, 56, 0.82)) !important;
+    }
+
+    div[class*="st-key-saju_analysis_card_step9"],
+    div[class*="st-key-saju_analysis_card_step9"] > div {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    /* 레거시 대운 선택 UI(핵심 요약·라디오·칩·십성 카드) — 완전 숨김 */
+    .st-key-step9_core_summary,
+    .st-key-step9_daewoon_timeline,
+    .st-key-step9_daewoon_timeline_pick,
+    .st-key-step9_core_summary *,
+    .st-key-step9_daewoon_timeline *,
+    .st-key-step9_daewoon_timeline_pick *,
+    div[class*="st-key-saju_premium_step9"] .saju-dw-timeline,
+    div[class*="st-key-saju_premium_step9"] .saju-dw-detail-card {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        max-height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+    .st-key-step9_life_roadmap {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    .saju-dw-detail-card {
+        box-sizing: border-box;
+        padding: 0.72rem 0.82rem;
+        border-radius: 14px;
+        border: 1px solid light-dark(rgba(139, 105, 20, 0.28), rgba(212, 175, 55, 0.24));
+        background: light-dark(rgba(255, 252, 245, 0.96), rgba(26, 26, 46, 0.72));
+        box-shadow: light-dark(0 2px 10px rgba(35, 26, 18, 0.06), 0 2px 12px rgba(0, 0, 0, 0.22));
+    }
+    .saju-dw-detail-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: light-dark(rgba(74, 55, 16, 0.72), rgba(220, 210, 180, 0.78));
+        margin-bottom: 0.28rem;
+    }
+    .saju-dw-detail-value {
+        font-size: clamp(1rem, 3.2vw, 1.12rem);
+        font-weight: 850;
+        color: light-dark(#2a2218, #f5e6a8);
+        letter-spacing: 0.04em;
+    }
+    .saju-dw-detail-card--interp {
+        border-color: light-dark(rgba(59, 130, 246, 0.28), rgba(96, 165, 250, 0.32));
+        background: light-dark(rgba(239, 246, 255, 0.94), rgba(22, 32, 56, 0.82));
+    }
+    .saju-dw-detail-card--interp p {
+        margin: 0;
+        line-height: 1.62;
+        font-size: clamp(0.92rem, 3vw, 1rem);
+        color: light-dark(#1e293b, rgba(245, 245, 248, 0.94));
+    }
+    .saju-step9-consult-frame {
+        box-sizing: border-box;
+        margin-top: 0.85rem;
+        padding: 0.95rem 1rem 1.05rem;
+        border-radius: 16px;
+        border: 1.5px solid light-dark(rgba(139, 105, 20, 0.34), rgba(212, 175, 55, 0.3));
+        background: light-dark(
+            linear-gradient(155deg, rgba(255, 251, 240, 0.98), rgba(248, 236, 210, 0.94)),
+            linear-gradient(155deg, rgba(34, 31, 42, 0.97), rgba(24, 28, 44, 0.95))
+        );
+        box-shadow:
+            0 0 0 1px light-dark(rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.06)) inset,
+            0 8px 24px light-dark(rgba(98, 79, 39, 0.12), rgba(0, 0, 0, 0.28));
+    }
+    .saju-step9-consult-title {
+        margin: 0 0 0.62rem;
+        font-size: clamp(0.98rem, 3.1vw, 1.06rem);
+        font-weight: 850;
+        color: light-dark(#4a3710, #f5e6a8);
+        letter-spacing: -0.02em;
+    }
+    .saju-step9-consult-body {
+        line-height: 1.68;
+        font-size: clamp(0.92rem, 3vw, 1rem);
+        color: light-dark(#211c16, rgba(245, 245, 248, 0.94));
+        word-break: keep-all;
+        overflow-wrap: anywhere;
     }
 
     /* ===== STEP11/12 채팅 — 내부 스크롤(React DOM 건드리지 않음) ===== */
@@ -2996,18 +4365,300 @@ def configure_application() -> None:
 
     /*
      * STEP2 네이버 모바일형: 연한 크림 배경의 입력 칸·큰 라운드·은은한 테두리
-     * (본인/상대 탭 각각 `step2_navertone_self` / `step2_navertone_opp` 컨테이너)
+     * (본인/상대 세로 배치 — `step2_navertone_self` / `step2_navertone_opp` 컨테이너)
      */
+    .st-key-step2_section_stack {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.25rem !important;
+        width: 100% !important;
+    }
+    .st-key-s2v3_stack {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.25rem !important;
+        width: 100% !important;
+    }
+    .st-key-in4_stack {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.25rem !important;
+        width: 100% !important;
+    }
+    .st-key-saju_router_step_mount:has(.st-key-in4_stack) [data-testid="stTabs"],
+    .st-key-saju_router_step_mount:has(.st-key-s2v3_stack) [data-testid="stTabs"],
+    .st-key-saju_router_step_mount:has(.st-key-step2_section_stack) [data-testid="stTabs"] {
+        display: none !important;
+    }
+    .st-key-in4_self .stTextInput > div > div,
+    .st-key-in4_self .stNumberInput > div > div,
+    .st-key-in4_self [data-baseweb="select"] > div,
+    .st-key-in4_opp .stTextInput > div > div,
+    .st-key-in4_opp .stNumberInput > div > div,
+    .st-key-in4_opp [data-baseweb="select"] > div,
+    .st-key-s2v3_self .stTextInput > div > div,
+    .st-key-s2v3_self .stNumberInput > div > div,
+    .st-key-s2v3_self [data-baseweb="select"] > div,
+    .st-key-s2v3_opp .stTextInput > div > div,
+    .st-key-s2v3_opp .stNumberInput > div > div,
+    .st-key-s2v3_opp [data-baseweb="select"] > div,
+    /* STEP2: 연한 피치 칩(성함·년·월·일·연락처) — 테두리 없음 */
     .st-key-step2_navertone_self .stTextInput > div > div,
-    .st-key-step2_navertone_self .stNumberInput > div > div,
-    .st-key-step2_navertone_self [data-baseweb="select"] > div,
     .st-key-step2_navertone_opp .stTextInput > div > div,
+    .st-key-step2_save_actions .stTextInput > div > div,
+    .st-key-step2_navertone_self .stNumberInput > div > div,
+    .st-key-step2_navertone_self .stNumberInput [data-testid="stNumberInputContainer"],
     .st-key-step2_navertone_opp .stNumberInput > div > div,
-    .st-key-step2_navertone_opp [data-baseweb="select"] > div {
-        border-radius: 16px !important;
-        background: light-dark(#f4efe6, #2a2620) !important;
-        border: 1px solid light-dark(#e3dcc8, rgba(212, 175, 55, 0.22)) !important;
+    .st-key-step2_navertone_opp .stNumberInput [data-testid="stNumberInputContainer"],
+    .st-key-step2_navertone_self .stTextInput > div > div:focus-within,
+    .st-key-step2_navertone_opp .stTextInput > div > div:focus-within,
+    .st-key-step2_save_actions .stTextInput > div > div:focus-within,
+    .st-key-step2_navertone_self .stNumberInput [data-testid="stNumberInputContainer"].focused,
+    .st-key-step2_navertone_opp .stNumberInput [data-testid="stNumberInputContainer"].focused,
+    .st-key-step2_navertone_self .stNumberInput [data-testid="stNumberInputContainer"]:focus-within,
+    .st-key-step2_navertone_opp .stNumberInput [data-testid="stNumberInputContainer"]:focus-within {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
         box-shadow: none !important;
+        outline: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+    }
+    .st-key-step2_navertone_self .stTextInput > div > div:focus-within,
+    .st-key-step2_navertone_opp .stTextInput > div > div:focus-within,
+    .st-key-step2_save_actions .stTextInput > div > div:focus-within {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+    }
+    .st-key-step2_navertone_self [data-baseweb="select"] > div,
+    .st-key-step2_navertone_opp [data-baseweb="select"] > div {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+    }
+    /* STEP2 정보입력: 3행×2열 — 성함|성별 · 생년월일|달력 · 시간|연락처 */
+    .st-key-step2_self_row1_name_gender [data-testid="stHorizontalBlock"],
+    .st-key-step2_self_row2_bdate_cal [data-testid="stHorizontalBlock"],
+    .st-key-step2_self_row3_time_contact [data-testid="stHorizontalBlock"],
+    .st-key-step2_opp_row1_name_gender [data-testid="stHorizontalBlock"],
+    .st-key-step2_opp_row2_bdate_cal [data-testid="stHorizontalBlock"],
+    .st-key-step2_opp_row3_time_contact [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 10px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    .st-key-step2_self_row1_name_gender [data-testid="stHorizontalBlock"] > div,
+    .st-key-step2_self_row2_bdate_cal [data-testid="stHorizontalBlock"] > div,
+    .st-key-step2_self_row3_time_contact [data-testid="stHorizontalBlock"] > div,
+    .st-key-step2_opp_row1_name_gender [data-testid="stHorizontalBlock"] > div,
+    .st-key-step2_opp_row2_bdate_cal [data-testid="stHorizontalBlock"] > div,
+    .st-key-step2_opp_row3_time_contact [data-testid="stHorizontalBlock"] > div {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        max-width: 50% !important;
+        width: 50% !important;
+        box-sizing: border-box !important;
+    }
+    @media (min-width: 769px) {
+        .st-key-step2_self_row1_name_gender [data-testid="stHorizontalBlock"],
+        .st-key-step2_self_row2_bdate_cal [data-testid="stHorizontalBlock"],
+        .st-key-step2_self_row3_time_contact [data-testid="stHorizontalBlock"],
+        .st-key-step2_opp_row1_name_gender [data-testid="stHorizontalBlock"],
+        .st-key-step2_opp_row2_bdate_cal [data-testid="stHorizontalBlock"],
+        .st-key-step2_opp_row3_time_contact [data-testid="stHorizontalBlock"] {
+            gap: 12px !important;
+        }
+        .st-key-step2_navertone_self,
+        .st-key-step2_navertone_opp {
+            max-width: min(100%, 42rem) !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
+    }
+    .st-key-step2_self_row1_name_gender,
+    .st-key-step2_self_row2_bdate_cal,
+    .st-key-step2_self_row3_time_contact,
+    .st-key-step2_opp_row1_name_gender,
+    .st-key-step2_opp_row2_bdate_cal,
+    .st-key-step2_opp_row3_time_contact {
+        margin-bottom: 0.35rem !important;
+    }
+    .st-key-step2_self_row1_name_gender [data-testid="column"],
+    .st-key-step2_self_row2_bdate_cal [data-testid="column"],
+    .st-key-step2_self_row3_time_contact [data-testid="column"],
+    .st-key-step2_opp_row1_name_gender [data-testid="column"],
+    .st-key-step2_opp_row2_bdate_cal [data-testid="column"],
+    .st-key-step2_opp_row3_time_contact [data-testid="column"] {
+        min-width: 0 !important;
+    }
+    /* STEP2 모바일: 2열 가로 유지 (wrap으로 1열 무너짐 방지) */
+    @media (max-width: 768px) {
+        .st-key-step2_self_row1_name_gender [data-testid="stHorizontalBlock"],
+        .st-key-step2_self_row2_bdate_cal [data-testid="stHorizontalBlock"],
+        .st-key-step2_self_row3_time_contact [data-testid="stHorizontalBlock"],
+        .st-key-step2_opp_row1_name_gender [data-testid="stHorizontalBlock"],
+        .st-key-step2_opp_row2_bdate_cal [data-testid="stHorizontalBlock"],
+        .st-key-step2_opp_row3_time_contact [data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 8px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        .st-key-step2_self_row1_name_gender [data-testid="stHorizontalBlock"] > div,
+        .st-key-step2_self_row2_bdate_cal [data-testid="stHorizontalBlock"] > div,
+        .st-key-step2_self_row3_time_contact [data-testid="stHorizontalBlock"] > div,
+        .st-key-step2_opp_row1_name_gender [data-testid="stHorizontalBlock"] > div,
+        .st-key-step2_opp_row2_bdate_cal [data-testid="stHorizontalBlock"] > div,
+        .st-key-step2_opp_row3_time_contact [data-testid="stHorizontalBlock"] > div {
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            max-width: 50% !important;
+            width: 50% !important;
+            box-sizing: border-box !important;
+        }
+        .st-key-step2_navertone_self .stDateInput,
+        .st-key-step2_navertone_opp .stDateInput {
+            width: 100% !important;
+        }
+        .st-key-step2_navertone_self .stDateInput [data-baseweb="input"] input,
+        .st-key-step2_navertone_opp .stDateInput [data-baseweb="input"] input {
+            font-size: max(14px, 0.9rem) !important;
+            min-height: 2.85rem !important;
+            padding-left: 0.35rem !important;
+            padding-right: 0.35rem !important;
+        }
+        .st-key-step2_navertone_self .st-key-step2_u_time_wrap [data-baseweb="select"] > div,
+        .st-key-step2_navertone_opp .st-key-step2_p_time_wrap [data-baseweb="select"] > div,
+        .st-key-step2_navertone_self .st-key-step2_u_time_wrap .stSelectbox > div > div,
+        .st-key-step2_navertone_opp .st-key-step2_p_time_wrap .stSelectbox > div > div {
+            min-height: 2.85rem !important;
+        }
+    }
+    /* STEP2 생년월일: 달력 없이 텍스트 직접 입력 (YYYY/MM/DD) */
+    .st-key-step2_u_bdate_wrap .stTextInput,
+    .st-key-step2_p_bdate_wrap .stTextInput {
+        width: 100% !important;
+    }
+    .st-key-step2_u_bdate_wrap [data-testid="stWidgetLabel"] label,
+    .st-key-step2_p_bdate_wrap [data-testid="stWidgetLabel"] label {
+        font-weight: 700 !important;
+        font-size: max(15px, 0.95rem) !important;
+    }
+    .st-key-step2_u_bdate_wrap .stTextInput > div > div,
+    .st-key-step2_p_bdate_wrap .stTextInput > div > div,
+    .st-key-step2_navertone_self .st-key-step2_u_bdate_wrap .stTextInput > div > div,
+    .st-key-step2_navertone_opp .st-key-step2_p_bdate_wrap .stTextInput > div > div {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+        min-height: 2.85rem !important;
+        width: 100% !important;
+    }
+    .st-key-step2_u_bdate_wrap .stTextInput input,
+    .st-key-step2_p_bdate_wrap .stTextInput input,
+    .st-key-step2_navertone_self .st-key-step2_u_bdate_wrap .stTextInput input,
+    .st-key-step2_navertone_opp .st-key-step2_p_bdate_wrap .stTextInput input {
+        font-size: max(15px, 0.95rem) !important;
+        font-weight: 650 !important;
+        text-align: left !important;
+        min-height: 2.85rem !important;
+        padding-left: 0.55rem !important;
+        padding-right: 0.55rem !important;
+        letter-spacing: 0.02em !important;
+        font-variant-numeric: tabular-nums !important;
+    }
+    .st-key-step2_u_bdate_wrap [data-baseweb="calendar"],
+    .st-key-step2_p_bdate_wrap [data-baseweb="calendar"],
+    .st-key-step2_u_bdate_wrap .stDateInput,
+    .st-key-step2_p_bdate_wrap .stDateInput {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+    /* 예전 년·월·일 3칸 레이아웃 잔여물 숨김 */
+    .st-key-step2_u_bdate_wrap .stNumberInput,
+    .st-key-step2_p_bdate_wrap .stNumberInput {
+        display: none !important;
+    }
+    /* STEP2 태어난 시간: 생년월일 칩과 동일 연한 피치 */
+    .st-key-step2_u_time_wrap .stSelectbox,
+    .st-key-step2_p_time_wrap .stSelectbox {
+        width: 100% !important;
+    }
+    .st-key-step2_u_time_wrap [data-testid="stWidgetLabel"] label,
+    .st-key-step2_p_time_wrap [data-testid="stWidgetLabel"] label,
+    .st-key-step2_u_time_wrap .stSelectbox label,
+    .st-key-step2_p_time_wrap .stSelectbox label {
+        font-weight: 700 !important;
+        font-size: max(15px, 0.95rem) !important;
+    }
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap .stSelectbox > div > div,
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap .stSelectbox > div > div,
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap [data-baseweb="select"] > div,
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap [data-baseweb="select"] > div,
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap .stSelectbox [data-baseweb="select"],
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap .stSelectbox [data-baseweb="select"] {
+        width: 100% !important;
+        min-height: 2.85rem !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+        padding-left: 0.55rem !important;
+        padding-right: 0.55rem !important;
+        display: flex !important;
+        align-items: center !important;
+        box-sizing: border-box !important;
+    }
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap [data-baseweb="select"] > div > div,
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap [data-baseweb="select"] > div > div,
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap [data-baseweb="select"] span,
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap [data-baseweb="select"] span,
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap [data-baseweb="select"] input,
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap [data-baseweb="select"] input {
+        font-size: max(14px, 0.9rem) !important;
+        font-weight: 650 !important;
+        letter-spacing: -0.02em !important;
+        color: light-dark(var(--saju-text-readable), rgba(235, 228, 210, 0.94)) !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap [data-baseweb="select"] > div > div,
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap [data-baseweb="select"] > div > div {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+    }
+    .st-key-step2_navertone_self .st-key-step2_u_time_wrap [data-baseweb="select"]:focus-within > div,
+    .st-key-step2_navertone_opp .st-key-step2_p_time_wrap [data-baseweb="select"]:focus-within > div {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        outline: none !important;
+        box-shadow: none !important;
+    }
+    .st-key-step2_navertone_self .stTextInput [data-baseweb="input"],
+    .st-key-step2_navertone_opp .stTextInput [data-baseweb="input"],
+    .st-key-step2_navertone_self .stTextInput [data-baseweb="input"] > div,
+    .st-key-step2_navertone_opp .stTextInput [data-baseweb="input"] > div,
+    .st-key-step2_save_actions .stTextInput [data-baseweb="input"],
+    .st-key-step2_save_actions .stTextInput [data-baseweb="input"] > div,
+    .st-key-step2_navertone_self .stTextInput [data-baseweb="base-input"],
+    .st-key-step2_navertone_opp .stTextInput [data-baseweb="base-input"] {
+        border: 0 !important;
+        box-shadow: none !important;
+        outline: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border-radius: var(--saju-soft-radius) !important;
     }
     .saju-privacy-disclosure {
         margin: 0.4rem 0 0.9rem;
@@ -3024,9 +4675,64 @@ def configure_application() -> None:
         font-size: 1.04em;
     }
     .st-key-step2_navertone_self .stTextInput > div > div > input,
+    .st-key-step2_navertone_self .stTextInput input,
     .st-key-step2_navertone_self .stNumberInput input,
     .st-key-step2_navertone_opp .stTextInput > div > div > input,
+    .st-key-step2_navertone_opp .stTextInput input,
+    .st-key-step2_navertone_opp .stNumberInput input,
+    .st-key-step2_save_actions .stTextInput > div > div > input,
+    .st-key-step2_save_actions .stTextInput input {
+        border-radius: var(--saju-soft-radius) !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        font-size: clamp(13px, 3.2vw, 15px) !important;
+        line-height: 1.18 !important;
+        letter-spacing: -0.035em !important;
+        color: light-dark(var(--saju-text-readable), rgba(235, 228, 210, 0.94)) !important;
+        pointer-events: auto !important;
+        position: relative !important;
+        z-index: 2 !important;
+        cursor: text !important;
+    }
+    /* BaseWeb 래퍼가 클릭·캐럿 이동을 가로채지 않도록 */
+    .st-key-step2_navertone_self .stTextInput [data-baseweb="input"],
+    .st-key-step2_navertone_self .stTextInput [data-baseweb="input"] > div,
+    .st-key-step2_navertone_opp .stTextInput [data-baseweb="input"],
+    .st-key-step2_navertone_opp .stTextInput [data-baseweb="input"] > div,
+    .st-key-step2_save_actions .stTextInput [data-baseweb="input"],
+    .st-key-step2_save_actions .stTextInput [data-baseweb="input"] > div {
+        pointer-events: none !important;
+    }
+    .st-key-step2_navertone_self .stNumberInput input,
     .st-key-step2_navertone_opp .stNumberInput input {
+        pointer-events: auto !important;
+        position: relative !important;
+        z-index: 2 !important;
+        cursor: text !important;
+    }
+    .st-key-step2_navertone_self .stTextInput input:-webkit-autofill,
+    .st-key-step2_navertone_self .stTextInput input:-webkit-autofill:hover,
+    .st-key-step2_navertone_self .stTextInput input:-webkit-autofill:focus,
+    .st-key-step2_navertone_opp .stTextInput input:-webkit-autofill,
+    .st-key-step2_navertone_opp .stTextInput input:-webkit-autofill:hover,
+    .st-key-step2_navertone_opp .stTextInput input:-webkit-autofill:focus,
+    .st-key-step2_save_actions .stTextInput input:-webkit-autofill,
+    .st-key-step2_save_actions .stTextInput input:-webkit-autofill:hover,
+    .st-key-step2_save_actions .stTextInput input:-webkit-autofill:focus {
+        -webkit-text-fill-color: light-dark(var(--saju-text-readable), rgba(235, 228, 210, 0.94)) !important;
+        -webkit-box-shadow: 0 0 0 1000px #fff5ee inset !important;
+        box-shadow: 0 0 0 1000px #fff5ee inset !important;
+        transition: background-color 99999s ease-out 0s !important;
+    }
+    .st-key-in4_self .stTextInput > div > div > input,
+    .st-key-in4_self .stNumberInput input,
+    .st-key-in4_opp .stTextInput > div > div > input,
+    .st-key-in4_opp .stNumberInput input,
+    .st-key-s2v3_self .stTextInput > div > div > input,
+    .st-key-s2v3_self .stNumberInput input,
+    .st-key-s2v3_opp .stTextInput > div > div > input,
+    .st-key-s2v3_opp .stNumberInput input {
         border-radius: 14px !important;
         background: transparent !important;
         border: 0 !important;
@@ -3034,13 +4740,42 @@ def configure_application() -> None:
         line-height: 1.18 !important;
         letter-spacing: -0.035em !important;
     }
+    .st-key-step2_navertone_self .stTextInput input:focus,
+    .st-key-step2_navertone_self .stTextInput input:focus-visible,
+    .st-key-step2_navertone_opp .stTextInput input:focus,
+    .st-key-step2_navertone_opp .stTextInput input:focus-visible,
+    .st-key-step2_save_actions .stTextInput input:focus,
+    .st-key-step2_save_actions .stTextInput input:focus-visible,
+    .st-key-step2_navertone_self .stNumberInput input:focus,
+    .st-key-step2_navertone_self .stNumberInput input:focus-visible,
+    .st-key-step2_navertone_opp .stNumberInput input:focus,
+    .st-key-step2_navertone_opp .stNumberInput input:focus-visible {
+        outline: none !important;
+        outline-offset: 0 !important;
+        box-shadow: none !important;
+        border: 0 !important;
+    }
     .st-key-step2_navertone_self .stNumberInput button,
     .st-key-step2_navertone_opp .stNumberInput button {
-        border-radius: 10px !important;
-        background: light-dark(#e8dcc4, #3d3528) !important;
-        border: 1px solid light-dark(#d4c4a8, rgba(212, 175, 55, 0.25)) !important;
+        border-radius: 6px !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: light-dark(#6d5a3a, #c9b896) !important;
         font-size: clamp(13px, 3.2vw, 15px) !important;
-        font-weight: 800 !important;
+        font-weight: 700 !important;
+        min-width: 1.75rem !important;
+    }
+    /* STEP2: Streamlit "Press Enter to apply" → 한글 안내(엔터를 눌러 신청하세요) 숨김 */
+    .st-key-step2_navertone_self [data-testid="InputInstructions"],
+    .st-key-step2_navertone_opp [data-testid="InputInstructions"],
+    .st-key-step2_save_actions [data-testid="InputInstructions"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
     }
     /* STEP2 라디오: 네이버 모바일처럼 세로 나열 (가로로 붙어 버튼처럼 보이는 현상 방지) */
     .st-key-step2_navertone_self .stRadio > div,
@@ -3066,17 +4801,20 @@ def configure_application() -> None:
 
     .st-key-step2_navertone_self [data-testid="stExpander"] details,
     .st-key-step2_navertone_opp [data-testid="stExpander"] details {
-        border-radius: 16px !important;
-        background: light-dark(#f4efe6, #2a2620) !important;
-        border: 1px solid light-dark(#e3dcc8, rgba(212, 175, 55, 0.22)) !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
     }
     .st-key-step2_navertone_self [data-testid="stExpander"] summary,
     .st-key-step2_navertone_opp [data-testid="stExpander"] summary {
-        border-radius: 14px !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
         font-weight: 600 !important;
         white-space: nowrap !important;
-        padding-left: 0.35rem !important;
-        padding-right: 0.35rem !important;
+        padding: 0 !important;
     }
     .st-key-step2_navertone_self [data-testid="stExpander"] summary p,
     .st-key-step2_navertone_opp [data-testid="stExpander"] summary p {
@@ -3086,6 +4824,15 @@ def configure_application() -> None:
         font-size: clamp(13px, 3.2vw, 15px) !important;
         line-height: 1.18 !important;
         letter-spacing: -0.035em !important;
+    }
+    .st-key-step2_navertone_self [data-testid="stExpander"] [data-baseweb="select"] > div,
+    .st-key-step2_navertone_opp [data-testid="stExpander"] [data-baseweb="select"] > div,
+    .st-key-step2_navertone_self [data-testid="stExpander"] .stSelectbox > div > div,
+    .st-key-step2_navertone_opp [data-testid="stExpander"] .stSelectbox > div > div {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
     }
 
     /* ===== STEP3 사주 네 칸 ===== */
@@ -3119,20 +4866,23 @@ def configure_application() -> None:
         border: 1px solid light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.12));
     }
 
-    /* STEP3 메인 사주 차트(iframe): 모바일에서 하단 오행 막대까지 보이도록 */
+    /* STEP3 메인 사주 차트(iframe): 내부 스크롤 없이 전체 높이 표시 */
+    .st-key-step3_gapja_chart,
+    .st-key-step3_gapja_chart [data-testid="stVerticalBlock"],
     .st-key-step3_gapja_chart [data-testid="stCustomComponentV1"],
     .st-key-step3_gapja_chart [data-testid="stCustomComponentV1"] iframe,
     .st-key-step3_gapja_chart iframe {
         width: 100% !important;
         max-width: 100% !important;
-        min-height: 420px !important;
-        max-height: 560px !important;
-        overflow: hidden !important;
+        min-height: 620px !important;
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
     }
     @media (max-width: 520px) {
         .st-key-step3_gapja_chart [data-testid="stCustomComponentV1"] iframe,
         .st-key-step3_gapja_chart iframe {
-            min-height: 440px !important;
+            min-height: 640px !important;
         }
     }
 
@@ -3756,7 +5506,11 @@ def configure_application() -> None:
         min-height: clamp(2.45rem, 11vw, 3rem) !important;
         font-size: clamp(12px, 3.2vw, 14px) !important;
         font-weight: 800 !important;
-        border-radius: 12px !important;
+        border-radius: var(--saju-soft-radius) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        box-shadow: none !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
     }
 
     /* STEP3: 사주 × MBTI 적성(한지·금색 톤, 청록 테마 제거) */
@@ -4032,9 +5786,9 @@ def configure_application() -> None:
         min-width: 0 !important;
     }
     .st-key-step6_today_pick_row .stButton > button{
-        border-radius: 14px !important;
-        border: 1px solid light-dark(rgba(148,163,184,0.25), rgba(212,175,55,0.2)) !important;
-        background: light-dark(#ffffff, rgba(26,26,46,0.75)) !important;
+        border-radius: var(--saju-soft-radius) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
         box-shadow: none !important;
         padding: 0.38rem 0.1rem !important;
         min-height: 2.55rem !important;
@@ -4100,49 +5854,97 @@ def configure_application() -> None:
         pointer-events: none;
     }
 
-    /* STEP11: 상담 버튼 가로 3열 고정(모바일 인앱 세로 스택 방지) + 질문창을 버튼 바로 아래 */
+    /* STEP11: 상담 버튼 가로 3열 고정(모바일 인앱 세로 스택 방지) */
     div[class*="st-key-step11_consult_strip"] {
-        margin-top: 0.5rem !important;
-    }
-    div[class*="st-key-step11_consult_strip"] [data-testid="stVerticalBlock"] {
-        flex-wrap: nowrap !important;
+        margin-top: 0.35rem !important;
+        margin-bottom: 0.25rem !important;
         width: 100% !important;
-        box-sizing: border-box !important;
+        max-width: 100% !important;
     }
+    div[class*="st-key-step11_consult_strip"] [data-testid="stVerticalBlock"],
+    div[class*="st-key-step11_consult_strip"] [data-testid="stVerticalBlockBorderWrapper"] {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    div[class*="st-key-step11_consult_strip"] [data-testid="stHorizontalBlock"],
     div[class*="st-key-step11_consult_strip"] [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
+        align-items: stretch !important;
         gap: 6px !important;
         width: 100% !important;
+        max-width: 100% !important;
         box-sizing: border-box !important;
     }
-    div[class*="st-key-step11_consult_strip"] [data-testid="stHorizontalBlock"] > div {
+    div[class*="st-key-step11_consult_strip"] [data-testid="stHorizontalBlock"] > div,
+    div[class*="st-key-step11_consult_strip"] [data-testid="column"],
+    div[class*="st-key-step11_consult_strip"] div.stColumn {
         flex: 1 1 0 !important;
         min-width: 0 !important;
         width: 33.333% !important;
         max-width: 33.333% !important;
+        padding-left: 2px !important;
+        padding-right: 2px !important;
     }
-    div[class*="st-key-step11_consult_strip"] [data-testid="column"] {
-        flex: 1 1 0 !important;
+    div[class*="st-key-step11_consult_strip"] [data-testid="column"] > div,
+    div[class*="st-key-step11_consult_strip"] div.stColumn > div {
+        width: 100% !important;
         min-width: 0 !important;
     }
+    div[class*="st-key-step11_consult_strip"] .stLinkButton,
     div[class*="st-key-step11_consult_strip"] .stLinkButton > a,
+    div[class*="st-key-step11_consult_strip"] .stButton,
     div[class*="st-key-step11_consult_strip"] .stButton > button {
         width: 100% !important;
-        min-height: 2.75rem !important;
+        max-width: 100% !important;
+        min-height: auto !important;
         height: auto !important;
-        max-height: none !important;
-        padding: 0.4rem 0.2rem !important;
-        font-size: max(12px, 0.8rem) !important;
-        white-space: nowrap !important;
+        padding: 0.28rem 0.1rem !important;
+        font-size: clamp(10px, 2.85vw, 12px) !important;
+        font-weight: 700 !important;
+        white-space: pre-line !important;
         text-align: center !important;
-        line-height: 1.15 !important;
+        line-height: 1.2 !important;
+        border-radius: var(--saju-soft-radius) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        box-shadow: none !important;
+        box-sizing: border-box !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
     }
-    div[class*="st-key-step11_consult_strip"] [data-testid="stChatInput"] {
-        position: relative !important;
-        bottom: auto !important;
-        margin-top: 0.35rem !important;
+    div[class*="st-key-step11_consult_strip"] .stLinkButton > a {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-decoration: none !important;
+    }
+    div[class*="st-key-step11_consult_strip"] .stMarkdown a.step11-consult-tile {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-height: auto !important;
+        padding: 0.28rem 0.1rem !important;
+        font-size: clamp(10px, 2.85vw, 12px) !important;
+        line-height: 1.2 !important;
+        white-space: pre-line !important;
+        text-align: center !important;
+        border-radius: var(--saju-soft-radius) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        box-shadow: none !important;
+        box-sizing: border-box !important;
+    }
+    @media (max-width: 420px) {
+        div[class*="st-key-step11_consult_strip"] [data-testid="stHorizontalBlock"] {
+            gap: 4px !important;
+        }
+        div[class*="st-key-step11_consult_strip"] .stLinkButton > a,
+        div[class*="st-key-step11_consult_strip"] .stButton > button {
+            min-height: 3.1rem !important;
+            font-size: 10px !important;
+            padding: 0.32rem 0.1rem !important;
+        }
     }
 
     /* STEP11: 메모 내려받기 + 새로고침 — 모바일 가로 2열 */
@@ -4160,34 +5962,77 @@ def configure_application() -> None:
         max-width: 50% !important;
     }
     div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button,
+    div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button[kind="primary"],
+    div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button[kind="secondary"],
+    div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button[data-testid="baseButton-primary"],
+    div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button[data-testid="baseButton-secondary"],
     div[class*="st-key-step11_memo_download_panel"] .stButton > button {
         width: 100% !important;
         min-height: 2.75rem !important;
-        font-size: max(11px, 0.78rem) !important;
+        font-size: max(12px, 0.82rem) !important;
+        font-weight: 700 !important;
         white-space: normal !important;
-        line-height: 1.2 !important;
+        line-height: 1.28 !important;
         padding: 0.45rem 0.35rem !important;
+        color: light-dark(#2a2218, #f2ebe0) !important;
+        -webkit-text-fill-color: light-dark(#2a2218, #f2ebe0) !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: 1px solid light-dark(rgba(139, 105, 20, 0.38), rgba(212, 175, 55, 0.32)) !important;
+        box-shadow: light-dark(0 1px 0 rgba(255, 255, 255, 0.65), none) !important;
+    }
+    div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button p,
+    div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button span,
+    div[class*="st-key-step11_memo_download_panel"] .stDownloadButton > button div,
+    div[class*="st-key-step11_memo_download_panel"] .stButton > button p,
+    div[class*="st-key-step11_memo_download_panel"] .stButton > button span,
+    div[class*="st-key-step11_memo_download_panel"] .stButton > button div {
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+        opacity: 1 !important;
     }
 
-    /* ===== Top5: 글로벌 프리미엄 크롬 (버튼·캡션·링크·운세 카드) ===== */
+    /* ===== 글로벌: 이동·안내 클릭 버튼 — 연한 피치 칩(정보입력 년·월·일 톤) ===== */
+    .stApp .stButton > button,
     .stApp .stButton > button[kind="primary"],
-    .stApp div[data-testid="stBaseButton-primary"] {
-        border-radius: 16px !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.02em !important;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(212, 175, 55, 0.22) !important;
-    }
-    .stApp .stButton > button[kind="primary"]:hover,
-    .stApp div[data-testid="stBaseButton-primary"]:hover {
-        filter: brightness(1.05) saturate(1.05);
-        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(232, 185, 35, 0.32) !important;
-    }
-    .stApp .stButton > button[kind="secondary"] {
-        border-radius: 15px !important;
+    .stApp .stButton > button[kind="secondary"],
+    .stApp .stButton > button[data-testid="baseButton-primary"],
+    .stApp .stButton > button[data-testid="baseButton-secondary"],
+    .stApp [data-testid="stFormSubmitButton"] > button,
+    .stApp .stFormSubmitButton > button,
+    .stApp div[data-testid="stBaseButton-primary"],
+    .stApp div[data-testid="stBaseButton-secondary"] {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        filter: none !important;
+        border-radius: var(--saju-soft-radius) !important;
         font-weight: 700 !important;
-        border: 1px solid light-dark(rgba(212, 175, 55, 0.35), rgba(212, 175, 55, 0.25)) !important;
+        letter-spacing: -0.02em !important;
+        color: light-dark(rgba(45, 38, 28, 0.9), rgba(235, 228, 210, 0.94)) !important;
     }
-    /* STEP 하단 독은 HTML 링크(.saju-dock-a)로 렌더 — secondary 버튼 오버라이드 불필요 */
+    .stApp .stButton > button[kind="primary"],
+    .stApp .stButton > button[data-testid="baseButton-primary"],
+    .stApp div[data-testid="stBaseButton-primary"] {
+        font-weight: 800 !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+    }
+    .stApp .stButton > button:hover,
+    .stApp .stButton > button:focus,
+    .stApp .stButton > button:focus-visible,
+    .stApp [data-testid="stFormSubmitButton"] > button:hover,
+    .stApp .stLinkButton > a:hover {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        filter: none !important;
+    }
+    .stApp .stButton > button:active {
+        background: light-dark(var(--saju-soft-fill-active), var(--saju-soft-fill-dark-hover)) !important;
+    }
+    /* STEP 하단 독은 HTML 링크(.saju-dock-a) — 버튼과 동일하게 액자 없음 */
     .stCaption,
     div[data-testid="stCaption"] {
         color: light-dark(rgba(26, 26, 46, 0.72), rgba(229, 229, 235, 0.72)) !important;
@@ -4200,9 +6045,13 @@ def configure_application() -> None:
         color: light-dark(#5c4510, #e8d9a8) !important;
     }
     .stLinkButton > a {
-        border-radius: 12px !important;
-        border: 1px solid light-dark(rgba(212, 175, 55, 0.35), rgba(212, 175, 55, 0.28)) !important;
-        padding: 0.35rem 0.65rem !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+        padding: 0.42rem 0.65rem !important;
+        font-weight: 700 !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
     }
     .saju-fortune-card {
         box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(212, 175, 55, 0.18) !important;
@@ -4217,8 +6066,102 @@ def configure_application() -> None:
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
     }
     [data-testid="stExpander"] details {
-        border-radius: 14px !important;
-        border: 1px solid light-dark(rgba(212, 175, 55, 0.22), rgba(212, 175, 55, 0.18)) !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+    [data-testid="stExpander"] summary {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        border-bottom: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+        padding: 0.42rem 0.55rem !important;
+    }
+    /* STEP2 접이식(태어난 시간·성별·양력): 글로벌 expander/버튼 테두리보다 뒤에서 덮어씀 */
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] details,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] details {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] summary,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] summary {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        border-bottom: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+        padding: 0.42rem 0.55rem !important;
+        list-style: none !important;
+    }
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] summary::marker,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] summary::marker {
+        content: "" !important;
+    }
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button,
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[kind="primary"],
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[kind="secondary"],
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[data-testid="baseButton-primary"],
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[data-testid="baseButton-secondary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[kind="primary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[kind="secondary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[data-testid="baseButton-primary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[data-testid="baseButton-secondary"] {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+        min-height: auto !important;
+        height: auto !important;
+        margin: 0.12rem 0 !important;
+        padding: 0.38rem 0.5rem !important;
+        font-size: clamp(12px, 2.85vw, 14px) !important;
+        line-height: 1.28 !important;
+        letter-spacing: -0.04em !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+    }
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[kind="primary"],
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[data-testid="baseButton-primary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[kind="primary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[data-testid="baseButton-primary"] {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        font-weight: 700 !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+    }
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[kind="secondary"],
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[data-testid="baseButton-secondary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[kind="secondary"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[data-testid="baseButton-secondary"] {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: light-dark(rgba(45, 38, 28, 0.88), rgba(235, 228, 210, 0.92)) !important;
+    }
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button:hover,
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button:focus,
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button:focus-visible,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button:hover,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button:focus,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button:focus-visible {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+    /* 태어난 시간 목록: 왼쪽 정렬·세로 텍스트 목록 */
+    .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button,
+    .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button {
+        width: 100% !important;
+        justify-content: flex-start !important;
+        text-align: left !important;
     }
 
     /*
@@ -4239,6 +6182,11 @@ def configure_application() -> None:
         --saju-glow: rgba(212, 175, 55, 0.34);
         --saju-text-body: #e5e5e5;
         --saju-text-accent: #a5b4fc;
+        --saju-soft-fill: rgba(40, 36, 32, 0.88);
+        --saju-soft-fill-hover: rgba(50, 44, 38, 0.94);
+        --saju-soft-fill-active: rgba(56, 48, 42, 0.96);
+        --saju-soft-fill-dark: rgba(40, 36, 32, 0.88);
+        --saju-soft-fill-dark-hover: rgba(50, 44, 38, 0.94);
     }
     html.saju-dark-tone .main .block-container::before {
         opacity: 0.88 !important;
@@ -4264,18 +6212,55 @@ def configure_application() -> None:
     html.saju-dark-tone .stApp a:hover {
         color: #c7d2fe !important;
     }
+    html.saju-dark-tone .stApp .stButton > button,
+    html.saju-dark-tone .stApp .stButton > button[kind="primary"],
+    html.saju-dark-tone .stApp .stButton > button[kind="secondary"],
+    html.saju-dark-tone .stApp div[data-testid="stBaseButton-primary"],
+    html.saju-dark-tone .stApp div[data-testid="stBaseButton-secondary"],
+    html.saju-dark-tone .stApp [data-testid="stFormSubmitButton"] > button,
+    html.saju-dark-tone .stApp .stLinkButton > a {
+        filter: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: var(--saju-soft-fill-dark) !important;
+    }
     html.saju-dark-tone .stApp .stButton > button[kind="primary"],
     html.saju-dark-tone .stApp div[data-testid="stBaseButton-primary"] {
-        filter: none !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(212, 175, 55, 0.35) !important;
+        color: #f5e6a8 !important;
     }
     html.saju-dark-tone .stApp .stButton > button[kind="primary"]:hover,
-    html.saju-dark-tone .stApp div[data-testid="stBaseButton-primary"]:hover {
-        filter: brightness(1.06) saturate(1.05) !important;
-        box-shadow: 0 6px 26px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(232, 185, 35, 0.42) !important;
+    html.saju-dark-tone .stApp div[data-testid="stBaseButton-primary"]:hover,
+    html.saju-dark-tone .stApp .stButton > button:hover,
+    html.saju-dark-tone .stApp .stLinkButton > a:hover {
+        background: var(--saju-soft-fill-dark-hover) !important;
+    }
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self [data-testid="stExpander"] details,
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] details,
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self [data-testid="stExpander"] summary,
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] summary {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button,
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[kind="primary"],
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[kind="secondary"],
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[data-testid="baseButton-primary"],
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self [data-testid="stExpander"] .stButton > button[data-testid="baseButton-secondary"],
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button,
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[kind="primary"],
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[kind="secondary"],
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[data-testid="baseButton-primary"],
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp [data-testid="stExpander"] .stButton > button[data-testid="baseButton-secondary"] {
+        border: none !important;
+        box-shadow: none !important;
+        background: var(--saju-soft-fill-dark) !important;
+        filter: none !important;
     }
     html.saju-dark-tone .st-key-step6_today_pick_row .stButton > button {
-        border-color: rgba(212, 175, 55, 0.28) !important;
+        border: none !important;
+        background: var(--saju-soft-fill-dark) !important;
+        box-shadow: none !important;
     }
     html.saju-dark-tone .stCaption,
     html.saju-dark-tone div[data-testid="stCaption"] {
@@ -4424,7 +6409,11 @@ def configure_application() -> None:
     }
     .saju-dw-chip small { font-size: 0.65rem; font-weight: 500; opacity: 0.75; }
     .saju-dw-chip--now { border-color: #d4af37; box-shadow: 0 0 0 1px rgba(212,175,55,0.35); }
-    .saju-dw-chip--sel { background: rgba(212,175,55,0.18); color: #f5e6a8; }
+    .saju-dw-chip--sel {
+        background: light-dark(rgba(212, 175, 55, 0.22), rgba(212, 175, 55, 0.18));
+        color: light-dark(#2a2218, #f5e6a8);
+        border-color: light-dark(rgba(139, 90, 43, 0.45), rgba(212, 175, 55, 0.55));
+    }
 
     .saju-landing-mini-slide {
         border-radius: 16px; border: 1px solid rgba(212,175,55,0.35);
@@ -4466,6 +6455,364 @@ def configure_application() -> None:
     }
     .step8-synth-lead { font-size: 1rem; line-height: 1.55; opacity: 0.92; margin: 0.5rem 0; }
 
+    /* ===== 밝은 한지 톤 · 모바일 가독성 (글자색 묻힘 방지) ===== */
+    .main [data-testid="stMarkdownContainer"] p,
+    .main [data-testid="stMarkdownContainer"] li,
+    .main [data-testid="stMarkdownContainer"] span,
+    .main [data-testid="stMarkdownContainer"] label {
+        color: light-dark(var(--saju-text-readable), #ece8e0);
+    }
+    .main [data-testid="stMarkdownContainer"] h1,
+    .main [data-testid="stMarkdownContainer"] h2,
+    .main [data-testid="stMarkdownContainer"] h3,
+    .main [data-testid="stMarkdownContainer"] h4,
+    .main [data-testid="stMarkdownContainer"] h5,
+    .main [data-testid="stMarkdownContainer"] h6 {
+        color: light-dark(#14100c, #f5f0e8) !important;
+        font-weight: 800 !important;
+    }
+    [data-testid="stCaptionContainer"],
+    [data-testid="stCaptionContainer"] p {
+        color: light-dark(#3d3428, #d8d4cc) !important;
+        opacity: 1 !important;
+    }
+    .saju-step7-question-guide {
+        display: block;
+        margin: 0.35rem 0 0.75rem;
+        padding: 0.9rem 1rem;
+        border-radius: 16px;
+        border: 1px solid light-dark(rgba(212, 175, 55, 0.38), rgba(212, 175, 55, 0.28));
+        background: light-dark(
+            linear-gradient(135deg, #fffefb 0%, #fff6e8 55%, #ffefd6 100%),
+            linear-gradient(135deg, rgba(32, 30, 48, 0.96) 0%, rgba(22, 22, 40, 0.94) 100%)
+        );
+        color: light-dark(var(--saju-text-readable), #ece8e0);
+        font-size: max(15px, 0.95rem);
+        line-height: 1.62;
+        box-shadow: light-dark(0 6px 20px rgba(35, 26, 18, 0.06), 0 8px 24px rgba(0, 0, 0, 0.28));
+    }
+    .saju-step7-question-guide .saju-guide-warn {
+        color: light-dark(#b45309, #fbbf24);
+        font-weight: 700;
+    }
+    .saju-privacy-disclosure {
+        background: light-dark(
+            linear-gradient(135deg, rgba(255, 254, 251, 0.98) 0%, rgba(255, 248, 236, 0.96) 100%),
+            rgba(37, 32, 24, 0.82)
+        ) !important;
+        color: light-dark(var(--saju-text-readable), rgba(245, 239, 226, 0.96)) !important;
+    }
+    @media (max-width: 768px) {
+        .stApp {
+            background-image: light-dark(
+                linear-gradient(180deg, #fffffe 0%, #fffaf3 50%, #fff5e6 100%),
+                linear-gradient(180deg, #0c0c16 0%, #0a0a14 100%)
+            ) !important;
+        }
+        div[class*="st-key-saju_analysis_card"]::after {
+            opacity: 0 !important;
+        }
+        div[class*="st-key-saju_analysis_card"] {
+            background: light-dark(
+                linear-gradient(160deg, #fffffe 0%, #fff8ec 100%),
+                linear-gradient(135deg, #1c1c30 0%, #141b2a 100%)
+            ) !important;
+            color: light-dark(var(--saju-text-readable), #ece8e0) !important;
+        }
+        .main [data-testid="stMarkdownContainer"] p,
+        .main [data-testid="stMarkdownContainer"] li,
+        .main [data-testid="stMarkdownContainer"] span {
+            color: light-dark(#1a1208, #f0ece4) !important;
+            text-shadow: light-dark(0 1px 0 rgba(255, 255, 255, 0.35), none);
+        }
+        .stTextArea textarea {
+            background: light-dark(#ffffff, rgba(30, 30, 48, 0.95)) !important;
+        }
+    }
+
+    /* ===== 전역 최종 우선: 이동·안내 버튼 — 연한 피치 칩 ===== */
+    .stApp .stButton > button,
+    .stApp .stButton > button[kind="primary"],
+    .stApp .stButton > button[kind="secondary"],
+    .stApp .stButton > button[data-testid="baseButton-primary"],
+    .stApp .stButton > button[data-testid="baseButton-secondary"],
+    .stApp [data-testid="stFormSubmitButton"] > button,
+    .stApp .stFormSubmitButton > button,
+    .stApp .stLinkButton > a,
+    .stApp .stDownloadButton > button,
+    .stApp .stDownloadButton > button[kind="primary"],
+    .stApp .stDownloadButton > button[kind="secondary"],
+    .stApp .stDownloadButton > button[data-testid="baseButton-primary"],
+    .stApp .stDownloadButton > button[data-testid="baseButton-secondary"],
+    .stApp div[data-testid="stBaseButton-primary"],
+    .stApp div[data-testid="stBaseButton-secondary"],
+    .st-key-saju_bottom_prev_next_row .stButton > button,
+    .st-key-saju_bottom_quick_menu_panel .stButton > button,
+    .st-key-saju_global_bottom_chrome [data-testid="stExpander"] .stButton > button,
+    .st-key-step1_menu_grid .stButton > button,
+    .st-key-step1_menu_more_row .stButton > button,
+    .st-key-step1_cta_row_briefing .stButton > button,
+    .st-key-step1_cta_row_main .stButton > button,
+    .st-key-step1_cta_row_free .stButton > button,
+    .st-key-step1_revisit_pin_row .stButton > button,
+    .st-key-step3_mbti_input_row .stButton > button,
+    .st-key-step7_action_row .stButton > button,
+    .st-key-step6_today_pick_row .stButton > button,
+    .st-key-step2_save_gold_wrap .stButton > button,
+    .st-key-step2_cal_orb_row .stButton > button,
+    div[class*="st-key-step11_consult_strip"] .stButton > button,
+    div[class*="st-key-step11_consult_strip"] .stLinkButton > a {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        filter: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+        color: light-dark(rgba(45, 38, 28, 0.92), rgba(235, 228, 210, 0.94)) !important;
+        -webkit-text-fill-color: light-dark(rgba(45, 38, 28, 0.92), rgba(235, 228, 210, 0.94)) !important;
+    }
+    .stApp .stDownloadButton > button p,
+    .stApp .stDownloadButton > button span,
+    .stApp .stDownloadButton > button div {
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+        opacity: 1 !important;
+    }
+    .stApp .stButton > button[kind="primary"],
+    .stApp .stButton > button[data-testid="baseButton-primary"] {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+    }
+    .stApp .stDownloadButton > button[kind="primary"],
+    .stApp .stDownloadButton > button[data-testid="baseButton-primary"] {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        color: light-dark(#6b520f, #f5e6a8) !important;
+        -webkit-text-fill-color: light-dark(#6b520f, #f5e6a8) !important;
+    }
+    .stApp .stButton > button[kind="primary"]:hover,
+    .stApp .stButton > button[kind="secondary"]:hover,
+    .stApp .stButton > button[data-testid="baseButton-primary"]:hover,
+    .stApp .stButton > button[data-testid="baseButton-secondary"]:hover,
+    .stApp .stLinkButton > a:hover,
+    .stApp .stDownloadButton > button:hover {
+        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        color: light-dark(#2a2218, #f5f0e6) !important;
+        -webkit-text-fill-color: light-dark(#2a2218, #f5f0e6) !important;
+    }
+    html.saju-dark-tone .stApp .stButton > button,
+    html.saju-dark-tone .stApp .stButton > button[kind="primary"],
+    html.saju-dark-tone .stApp .stButton > button[kind="secondary"],
+    html.saju-dark-tone .stApp .stLinkButton > a,
+    html.saju-dark-tone .stApp .stDownloadButton > button {
+        border: none !important;
+        box-shadow: none !important;
+        background: var(--saju-soft-fill-dark) !important;
+        filter: none !important;
+    }
+    [data-testid="stExpander"] summary,
+    .st-key-saju_global_bottom_chrome [data-testid="stExpander"] summary {
+        border: none !important;
+        border-bottom: none !important;
+        box-shadow: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border-radius: var(--saju-soft-radius) !important;
+    }
+    [data-testid="stExpander"] details,
+    .st-key-saju_global_bottom_chrome [data-testid="stExpander"] details {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+    .saju-step-dock-html .saju-dock-a {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+    }
+    .saju-step-dock-html,
+    .st-key-saju_global_prev_next {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+
+    /* STEP2 성함·연락처: 년·월·일과 동일 연한 피치(내부 input·baseweb 포함) */
+    .stApp .st-key-step2_navertone_self .stTextInput > div > div,
+    .stApp .st-key-step2_navertone_opp .stTextInput > div > div,
+    .stApp .st-key-step2_navertone_self .stTextInput [data-baseweb="input"],
+    .stApp .st-key-step2_navertone_opp .stTextInput [data-baseweb="input"],
+    .stApp .st-key-step2_navertone_self .stTextInput [data-baseweb="input"] > div,
+    .stApp .st-key-step2_navertone_opp .stTextInput [data-baseweb="input"] > div,
+    .stApp .st-key-step2_navertone_self .stTextInput [data-baseweb="base-input"],
+    .stApp .st-key-step2_navertone_opp .stTextInput [data-baseweb="base-input"],
+    .stApp .st-key-step2_navertone_self .stTextInput input,
+    .stApp .st-key-step2_navertone_opp .stTextInput input,
+    .stApp .st-key-step2_navertone_self [data-testid="stTextInputRootElement"],
+    .stApp .st-key-step2_navertone_opp [data-testid="stTextInputRootElement"] {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+    }
+    html.saju-dark-tone .stApp .st-key-step2_navertone_self .stTextInput input:-webkit-autofill,
+    html.saju-dark-tone .stApp .st-key-step2_navertone_opp .stTextInput input:-webkit-autofill {
+        -webkit-box-shadow: 0 0 0 1000px rgba(40, 36, 32, 0.88) inset !important;
+        box-shadow: 0 0 0 1000px rgba(40, 36, 32, 0.88) inset !important;
+    }
+    /* 성함·연락처 위젯 키(컨테이너 밖 클래스에도 동일 적용) */
+    .stApp .st-key-step2_self_name_input .stTextInput > div > div,
+    .stApp .st-key-step2_self_name_input .stTextInput [data-baseweb="input"],
+    .stApp .st-key-step2_self_name_input .stTextInput [data-baseweb="input"] > div,
+    .stApp .st-key-step2_self_name_input .stTextInput [data-baseweb="base-input"],
+    .stApp .st-key-step2_self_name_input .stTextInput input,
+    .stApp .st-key-u_contact .stTextInput > div > div,
+    .stApp .st-key-u_contact .stTextInput [data-baseweb="input"],
+    .stApp .st-key-u_contact .stTextInput [data-baseweb="input"] > div,
+    .stApp .st-key-u_contact .stTextInput [data-baseweb="base-input"],
+    .stApp .st-key-u_contact .stTextInput input,
+    .stApp .st-key-p_name .stTextInput > div > div,
+    .stApp .st-key-p_name .stTextInput input {
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: var(--saju-soft-radius) !important;
+    }
+    .stApp .st-key-step2_self_name_input .stTextInput > div > div,
+    .stApp .st-key-u_contact .stTextInput > div > div {
+        min-height: 3.3rem !important;
+        padding-left: 0.55rem !important;
+        padding-right: 0.55rem !important;
+    }
+
+    /* Streamlit date_input 달력: 요일 Su~Sa · 월 1월~12월 (JS + CSS 이중 고정) */
+    [data-baseweb="popover"] [data-baseweb="calendar"],
+    [data-baseweb="datepicker"] [data-baseweb="calendar"],
+    body > div [data-baseweb="calendar"] {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+        letter-spacing: 0 !important;
+        word-spacing: 0 !important;
+    }
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child {
+        display: grid !important;
+        grid-template-columns: repeat(7, minmax(2.1rem, 1fr)) !important;
+        gap: 0 !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"] {
+        position: relative !important;
+        box-sizing: border-box !important;
+        min-width: 2.1rem !important;
+        padding: 0.1rem 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        text-align: center !important;
+        letter-spacing: 0 !important;
+        word-spacing: 0 !important;
+        word-break: normal !important;
+        white-space: nowrap !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        color: transparent !important;
+        text-indent: -9999px !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]::after {
+        content: "" !important;
+        display: block !important;
+        font-size: 0.72rem !important;
+        line-height: 1.25 !important;
+        font-weight: 600 !important;
+        color: light-dark(#334155, #e2e8f0) !important;
+        text-indent: 0 !important;
+        text-align: center !important;
+        letter-spacing: 0 !important;
+        white-space: nowrap !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div:nth-child(1)::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]:nth-child(1)::after {
+        content: "Su" !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div:nth-child(2)::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]:nth-child(2)::after {
+        content: "Mo" !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div:nth-child(3)::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]:nth-child(3)::after {
+        content: "Tu" !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div:nth-child(4)::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]:nth-child(4)::after {
+        content: "We" !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div:nth-child(5)::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]:nth-child(5)::after {
+        content: "Th" !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div:nth-child(6)::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]:nth-child(6)::after {
+        content: "Fr" !important;
+    }
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] > div:nth-child(7)::after,
+    [data-baseweb="calendar"] [role="grid"] [role="row"]:first-child [role="columnheader"]:nth-child(7)::after {
+        content: "Sa" !important;
+    }
+    [data-baseweb="calendar"] [data-saju-weekday]::after {
+        content: attr(data-saju-weekday) !important;
+    }
+    [data-baseweb="popover"] [role="option"][data-saju-month-num],
+    [data-baseweb="select-dropdown"] [role="option"][data-saju-month-num],
+    [data-baseweb="option"][data-saju-month-num],
+    li[data-baseweb="option"][data-saju-month-num] {
+        font-size: 0 !important;
+        line-height: 0 !important;
+        color: transparent !important;
+        position: relative !important;
+        min-height: 1.35rem !important;
+    }
+    [data-baseweb="popover"] [role="option"][data-saju-month-num]::after,
+    [data-baseweb="select-dropdown"] [role="option"][data-saju-month-num]::after,
+    [data-baseweb="option"][data-saju-month-num]::after,
+    li[data-baseweb="option"][data-saju-month-num]::after {
+        display: block !important;
+        font-size: 0.88rem !important;
+        line-height: 1.35 !important;
+        font-weight: 500 !important;
+        color: light-dark(#334155, #e2e8f0) !important;
+        text-align: center !important;
+        text-indent: 0 !important;
+        letter-spacing: 0 !important;
+        white-space: nowrap !important;
+    }
+    [role="option"][data-saju-month-num="1"]::after,
+    [data-baseweb="option"][data-saju-month-num="1"]::after { content: "1월" !important; }
+    [role="option"][data-saju-month-num="2"]::after,
+    [data-baseweb="option"][data-saju-month-num="2"]::after { content: "2월" !important; }
+    [role="option"][data-saju-month-num="3"]::after,
+    [data-baseweb="option"][data-saju-month-num="3"]::after { content: "3월" !important; }
+    [role="option"][data-saju-month-num="4"]::after,
+    [data-baseweb="option"][data-saju-month-num="4"]::after { content: "4월" !important; }
+    [role="option"][data-saju-month-num="5"]::after,
+    [data-baseweb="option"][data-saju-month-num="5"]::after { content: "5월" !important; }
+    [role="option"][data-saju-month-num="6"]::after,
+    [data-baseweb="option"][data-saju-month-num="6"]::after { content: "6월" !important; }
+    [role="option"][data-saju-month-num="7"]::after,
+    [data-baseweb="option"][data-saju-month-num="7"]::after { content: "7월" !important; }
+    [role="option"][data-saju-month-num="8"]::after,
+    [data-baseweb="option"][data-saju-month-num="8"]::after { content: "8월" !important; }
+    [role="option"][data-saju-month-num="9"]::after,
+    [data-baseweb="option"][data-saju-month-num="9"]::after { content: "9월" !important; }
+    [role="option"][data-saju-month-num="10"]::after,
+    [data-baseweb="option"][data-saju-month-num="10"]::after { content: "10월" !important; }
+    [role="option"][data-saju-month-num="11"]::after,
+    [data-baseweb="option"][data-saju-month-num="11"]::after { content: "11월" !important; }
+    [role="option"][data-saju-month-num="12"]::after,
+    [data-baseweb="option"][data-saju-month-num="12"]::after { content: "12월" !important; }
+    [data-baseweb="calendar"] [data-baseweb="day"] {
+        letter-spacing: 0 !important;
+    }
+
 </style>
 """,
         unsafe_allow_html=True,
@@ -4477,32 +6824,26 @@ def configure_application() -> None:
     except Exception:
         pass
     try:
-        from saju_app.ui.premium_motion import inject_premium_motion_styles
-
-        inject_premium_motion_styles()
-    except Exception:
-        pass
-    try:
-        from saju_app.ui.dark_theme_polish import inject_dark_theme_tone_class
-
-        inject_dark_theme_tone_class()
-    except Exception:
-        pass
-    try:
-        from saju_app.ui.pwa_support import inject_pwa_manifest_and_sw
-
-        inject_pwa_manifest_and_sw()
-    except Exception:
-        pass
-    try:
         from saju_app.ui.extras_integration import apply_global_streamlit_extras
 
         apply_global_streamlit_extras()
     except Exception:
         pass
     try:
+        from saju_app.ui.execution import (
+            inject_calendar_weekday_en_once,
+            inject_step2_tab_manager_global_once,
+            inject_step_scroll_manager_once,
+        )
+
+        inject_step_scroll_manager_once()
+        inject_step2_tab_manager_global_once()
+        inject_calendar_weekday_en_once()
+    except Exception:
+        pass
+    try:
         from saju_app.ui import components as _saju_nav
 
-        _saju_nav.try_restore_step2_from_disk_prefill_if_needed()
+        _saju_nav.inject_global_input_autofill_guard()
     except Exception:
         pass

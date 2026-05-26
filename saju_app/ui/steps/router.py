@@ -9,7 +9,11 @@ from __future__ import annotations
 import streamlit as st
 
 from saju_app.ui import components as M
-from saju_app.ui.execution import should_scroll_to_top_after_step_change
+from saju_app.ui.execution import (
+    prime_step_navigation_viewport,
+    should_scroll_to_top_after_step_change,
+    sync_step_dom_now,
+)
 
 # session step 번호 → 구현 모듈(stepNN.py) — 1:1 매핑
 _STEP_RENDER_IMPORTS: dict[int, str] = {
@@ -83,6 +87,12 @@ def render() -> None:
         last_step=last_int,
         navigated=navigated,
     )
+    if need_scroll and not st.session_state.get("_saju_pending_scroll_top"):
+        st.session_state["_saju_pending_scroll_top"] = True
+
+    sync_step_dom_now(step, slot="router")
+    if navigated:
+        prime_step_navigation_viewport(step=step)
 
     r = _load_step_render(step)
 
@@ -90,8 +100,5 @@ def render() -> None:
         r()
 
     M.persist_current_session_draft(step)
-    M.render_global_bottom_chrome(current_step=step)
     st.session_state._router_last_step = step
-
-    if need_scroll:
-        st.session_state["_saju_pending_scroll_top"] = True
+    M.render_global_bottom_chrome(current_step=step)

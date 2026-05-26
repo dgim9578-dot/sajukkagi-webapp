@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-import contextlib
-from collections.abc import Iterator
 from typing import Any
 
 import streamlit as st
@@ -37,36 +35,6 @@ def apply_global_streamlit_extras() -> None:
             style_metric_cards()
         except Exception:
             pass
-
-
-@contextlib.contextmanager
-def fortune_strip_stylable() -> Iterator[None]:
-    """STEP1 운세 스트립: 골드 라인·라운드(미설치 시 일반 컨텍스트)."""
-    try:
-        from streamlit_extras.stylable_container import stylable_container
-    except ImportError:
-        yield
-        return
-    try:
-        with stylable_container(
-            key="saju_extras_fortune_strip",
-            css_styles="""
-[data-testid="stVerticalBlock"] > div {
-    border: 1px solid rgba(212, 175, 55, 0.28);
-    border-radius: 16px;
-    padding: 0.35rem 0.5rem 0.5rem;
-    background: rgba(255, 255, 255, 0.04);
-}
-@media (prefers-color-scheme: light) {
-  [data-testid="stVerticalBlock"] > div {
-    background: rgba(255, 255, 255, 0.45);
-  }
-}
-""",
-        ):
-            yield
-    except Exception:
-        yield
 
 
 _COLOR_NAME_TO_DIVIDER: dict[str, str] = {

@@ -1,9 +1,32 @@
-/* 사주까기 PWA — Streamlit `…/app/static/` 범위 캐시. 앱 HTML·API는 서버가 처리합니다. */
-const CACHE = "saju-pwa-static-v2";
+/* 사주까기 PWA — 정적 아이콘만 캐시. Streamlit HTML/WS는 항상 네트워크 우선. */
+const CACHE = "saju-pwa-static-20260519-accordion-v5";
 
 function scopeBase() {
   const u = new URL(self.registration.scope);
   return u.href.replace(/\/?$/, "/");
+}
+
+function isAppDocumentRequest(req, url) {
+  if (req.mode === "navigate") return true;
+  const dest = req.destination || "";
+  if (dest === "document" || dest === "iframe") return true;
+  const p = url.pathname || "";
+  if (p === "/" || p.endsWith("/")) return true;
+  if (p.includes("_stcore") || p.includes("streamlit")) return true;
+  return false;
+}
+
+function isStaticAsset(url) {
+  const p = url.pathname || "";
+  return (
+    p.includes("/app/static/") &&
+    (p.endsWith(".png") ||
+      p.endsWith(".svg") ||
+      p.endsWith(".webp") ||
+      p.endsWith(".json") ||
+      p.endsWith("manifest.json") ||
+      p.endsWith("sw.js"))
+  );
 }
 
 self.addEventListener("install", (event) => {
@@ -58,6 +81,14 @@ self.addEventListener("fetch", (event) => {
   if (!url.pathname.startsWith(scopePath)) {
     return;
   }
+
+  if (isAppDocumentRequest(req, url) || !isStaticAsset(url)) {
+    event.respondWith(
+      fetch(req).catch(() => caches.match(req))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(req).then((cached) => {
       const net = fetch(req).then((res) => {

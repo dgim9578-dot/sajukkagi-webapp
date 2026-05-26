@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 
 from saju_app.ui import components as M
 from saju_app.ui import consulting_corpus as CC
-from saju_app.ui.interpretation_layout import StructuredInterpretation
 from saju_app.utils import html_br
+
+if TYPE_CHECKING:
+    from saju_app.ui.interpretation_types import StructuredInterpretation
 
 MBTI_CHOICES: tuple[str, ...] = (
     "선택 안 함",
@@ -185,7 +187,10 @@ def render_step3_aptitude_mbti_block(
     if "step3_mbti_text_input" not in st.session_state:
         st.session_state["step3_mbti_text_input"] = seed_mbti
 
-    st.markdown("#### 사주+MBTI 분석", unsafe_allow_html=True)
+    st.markdown(
+        '<div class="saju-section-title-badge">사주+MBTI 분석</div>',
+        unsafe_allow_html=True,
+    )
     st.caption("MBTI 4자 입력 (예: ENTJ, ISFP) 후 **엔터**를 누르면 분석합니다.")
 
     with st.container(key="step3_mbti_input_row"):
@@ -197,7 +202,7 @@ def render_step3_aptitude_mbti_block(
             c_mbti_in, c_mbti_ent = st.columns([0.62, 0.38], gap="small")
         with c_mbti_in:
             st.markdown('<p class="step3-mbti-field-label">입력</p>', unsafe_allow_html=True)
-            st.text_input(
+            M.text_input_no_autofill(
                 "MBTI 입력",
                 max_chars=4,
                 key="step3_mbti_text_input",

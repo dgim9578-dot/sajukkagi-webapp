@@ -44,16 +44,16 @@ def _ensure_step_and_consume_goto_query() -> None:
             raw = raw[0] if raw else ""
         goto = int(str(raw).strip())
         if goto in M.STEP_ORDER:
+            try:
+                del st.query_params["goto"]
+            except Exception:
+                pass
+            M.prepare_step_change_ui(dest=goto)
             st.session_state.step = goto
             if goto in M._FEATURE_STEPS:
                 st.session_state["_explicit_feature_step"] = goto
             if goto in (11, 12):
                 st.session_state["_navigated_to_chat_this_run"] = True
-            try:
-                del st.query_params["goto"]
-            except Exception:
-                pass
-            M.prepare_step_change_ui()
         else:
             try:
                 del st.query_params["goto"]
@@ -75,12 +75,29 @@ def main() -> None:
     from saju_app.ui import components as M
 
     _ensure_step_and_consume_goto_query()
+    try:
+        from saju_app.persistence.prefill import ensure_fresh_client_identity
+
+        first_boot = not st.session_state.get("_saju_client_identity_v1")
+        ensure_fresh_client_identity()
+        if first_boot:
+            M.hard_reset_personal_input_state(clear_analysis=True)
+    except Exception:
+        pass
+    try:
+        M.purge_all_step2_prefill_from_server()
+    except Exception:
+        pass
     M.apply_browser_refresh_landing()
-    if not st.session_state.get("_saju_reload_check_pending"):
+    privacy_ok = M.enforce_browser_privacy_isolation()
+    if privacy_ok is None:
+        # streamlit-javascript 첫 응답 전 — st.stop() 하면 빈 화면만 보임. 렌더는 계속합니다.
+        pass
+    elif not st.session_state.get("_saju_reload_check_pending"):
         M.restore_session_draft_if_needed()
     M.guard_feature_step_without_explicit_nav()
 
-    from saju_app.ui.execution import render_step_top_anchor
+    from saju_app.ui.execution import finalize_scroll_to_top_if_needed, render_step_top_anchor
     from saju_app.ui.steps import router as step_router
 
     render_step_top_anchor()
@@ -91,8 +108,6 @@ def main() -> None:
         webapp_launch.render_policy_footer()
     except Exception:
         pass
-
-    from saju_app.ui.execution import finalize_scroll_to_top_if_needed
 
     finalize_scroll_to_top_if_needed()
 

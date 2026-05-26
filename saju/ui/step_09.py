@@ -9,11 +9,8 @@ import streamlit as st
 from saju.core.engine import STEM_ELEMENT
 
 from saju_app.ui import action_timing as AT
-from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import analysis_favorite_memo as AFM
 from saju_app.ui import components as M
-from saju_app.ui import life_roadmap as LR
-from saju_app.ui import briefing_slides as BSlides
 from saju_app.ui import oheng_visuals as OV
 
 
@@ -67,7 +64,6 @@ def render() -> None:
     u_gender = st.session_state.get("u_gender", "남자")
     opt = st.session_state.get("saju_options", {})
     zi_boundary = str(opt.get("zi_boundary", "23:30"))
-    month_method = str(opt.get("month_method", "lichun_lunar"))
 
     engine9, core9 = M.ensure_engine_and_core(u_gapja)
     yongshin = str(
@@ -99,42 +95,14 @@ def render() -> None:
             "ephem(절입 정밀) 미설치 시 입연 나이는 0세부터 표시될 수 있습니다."
         )
 
-        if core9.get("ok"):
-            with st.expander("사주 핵심 요약 (STEP3 공통)", expanded=False):
-                st.write(core9.get("interpretation_200", ""))
-                _br = core9.get("branch_relations") or {}
-                st.caption(
-                    f"지지 충·합·형·파: {_br.get('clash_count', 0)} · {_br.get('combine_count', 0)} · "
-                    f"{_br.get('punish_count', 0)} · {_br.get('break_count', 0)}"
-                )
-
         user_stem = u_gapja[2][0] if len(u_gapja) > 2 else "甲"
 
-        rows = [r for r in (dae.get("rows") or []) if isinstance(r, dict)]
-        with st.container(key="step9_daewoon_timeline"):
-            BSlides.render_daewoon_timeline(
-                rows=rows,
-                current_age=current_age,
-                user_stem=user_stem,
-                birth_year=birth_year,
-            )
-        with st.expander("전체 대운 목록 (펼쳐보기)", expanded=False):
+        with st.expander("전체 대운 목록 (펼쳐보기)", expanded=True):
             _daewoon_table_rows(
                 dae=dae,
                 user_stem=user_stem,
                 birth_year=birth_year,
                 current_age=current_age,
-            )
-
-        st.divider()
-        with st.container(key="step9_life_roadmap"):
-            LR.render_life_roadmap_block(
-                u_gapja=list(u_gapja),
-                u_data=u_data,
-                u_gender=str(u_gender),
-                birth_year=birth_year,
-                zi_boundary=zi_boundary,
-                month_method=month_method,
             )
 
         st.divider()
@@ -149,7 +117,5 @@ def render() -> None:
             )
 
         st.caption(
-            "※ 대운 간지는 월주를 기준으로 순·역을 나누었고, 십성은 음양에 따라 세분화되었습니다. "
-            "입연 나이는 절입 시각(ephem) 기준 근사이며 학파·역서에 따라 표기가 다를 수 있습니다. "
-            "이사·결혼·임신·건강·재물 등 행동 타이밍은 세운·일지 참고용이며 의료·법률·투자 조언을 대체하지 않습니다."
+            "※이사·결혼·임신·건강·재물 등 행동 타이밍은 세운·일지 참고용이며 의료·법률·투자 조언을 대체하지 않습니다."
         )

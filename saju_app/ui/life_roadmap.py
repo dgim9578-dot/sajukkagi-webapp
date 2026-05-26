@@ -10,6 +10,8 @@ import streamlit as st
 from saju_app.core import calculations as C
 from saju_app.ui import components as M
 
+_ROADMAP_INTRO = "계약·이직·의료 결정은 전문가와 상의하고, 여기 출력은 참고용입니다."
+
 
 def _seyun_for_year(
     *,
@@ -32,12 +34,8 @@ def _roadmap_text_summary(
     hour: int | None,
     dae_rows: list[dict[str, Any]],
     current_year: int,
-) -> str:
-    lines: list[str] = [
-        "아래는 **10년 대운**과 **입춘 기준 세운(연간 십성)**을 묶어, "
-        "30·40·50대를 **짧은 문장**으로만 정리한 참고 요약입니다. "
-        "계약·이직·투자 결정은 현실 조건과 전문가 상담을 우선하세요.\n",
-    ]
+) -> tuple[str, str]:
+    decade_lines: list[str] = []
 
     for label, a0, a1 in (("30대", 30, 39), ("40대", 40, 49), ("50대", 50, 59)):
         y0, y1 = int(birth_year) + a0, int(birth_year) + a1
@@ -49,21 +47,18 @@ def _roadmap_text_summary(
             if len(pill) < 2:
                 continue
             ten = M.get_detailed_ten_stem(day_stem, pill[0])
-            dae_bits.append(
-                f"**{pill}({ten})** {int(r.get('year_start', 0))}~{int(r.get('year_end', 0))}년"
-            )
+            dae_bits.append(f"**{pill}({ten})**")
         c: Counter[str] = Counter()
         for y in range(y0, y1 + 1):
             _, ten = _seyun_for_year(year=y, day_stem=day_stem, hour=hour)
             c[ten] += 1
-        top = c.most_common(2)
+        top = c.most_common(1)
         seyun_phrase = (
-            " · ".join(f"{t}({n}년)" for t, n in top) if top else "뚜렷한 편중 없음"
+            f"{top[0][0]}({top[0][1]}년)" if top else "뚜렷한 편중 없음"
         )
         dae_phrase = " / ".join(dae_bits[:2]) if dae_bits else "대운 구간 데이터 없음"
-        lines.append(
-            f"**{label}** ({y0}~{y1}년, 만 {a0}~{a1}세): "
-            f"대운은 {dae_phrase}. "
+        decade_lines.append(
+            f"**{label}**: 대운은 {dae_phrase}. "
             f"이때 세운 십성은 주로 {seyun_phrase} 쪽으로 많이 겹칩니다."
         )
 
@@ -80,11 +75,11 @@ def _roadmap_text_summary(
         pill = str(dr.get("pillar", "") or "").strip()
         if len(pill) >= 2:
             dae_now = f"{pill}({M.get_detailed_ten_stem(day_stem, pill[0])})"
-    lines.append(
-        f"\n**올해 {current_year}년** 세운은 **{ten}**({pillar}), "
+    current_line = (
+        f"**올해 {current_year}년** 세운은 **{ten}**({pillar}), "
         f"같은 시기 10년 대운은 **{dae_now}** 입니다."
     )
-    return "\n".join(lines)
+    return "\n\n".join(decade_lines), current_line
 
 
 def render_life_roadmap_block(
@@ -97,9 +92,9 @@ def render_life_roadmap_block(
     month_method: str,
 ) -> None:
     st.subheader("🗺️ 내 인생 전체 로드맵 — 대운 + 세운")
+    st.markdown(_ROADMAP_INTRO)
     st.caption(
-        "복잡한 연도 도표 대신 **30·40·50대 한 줄 요약**만 제공합니다. "
-        f"(세운은 입춘 연주 기준이며 month_method={month_method} 설정과 완전히 같지 않을 수 있습니다.)"
+        f"세운은 입춘 연주 기준이며 month_method={month_method} 설정과 완전히 같지 않을 수 있습니다."
     )
 
     day_stem = u_gapja[2][0] if len(u_gapja) > 2 else "甲"
@@ -122,12 +117,16 @@ def render_life_roadmap_block(
         st.info("대운 데이터가 없어 로드맵 요약을 만들지 못했습니다.")
         return
 
-    st.markdown(
-        _roadmap_text_summary(
-            birth_year=int(birth_year),
-            day_stem=day_stem,
-            hour=h,
-            dae_rows=rows,
-            current_year=M.now_kst().year,
-        )
+    decades_md, current_md = _roadmap_text_summary(
+        birth_year=int(birth_year),
+        day_stem=day_stem,
+        hour=h,
+        dae_rows=rows,
+        current_year=M.now_kst().year,
     )
+
+    with st.container(key="step9_roadmap_decades"):
+        st.markdown(decades_md)
+
+    with st.container(key="step9_roadmap_current"):
+        st.markdown(current_md)

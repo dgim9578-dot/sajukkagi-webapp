@@ -8,9 +8,9 @@
 [theme.light]
 # 라이트: 크림 베이스 + 골드 액센트 (다크와 쌍)
 primaryColor = "#C9A227"
-backgroundColor = "#FAF8F3"
-secondaryBackgroundColor = "#F0EBE0"
-textColor = "#1A1A2E"
+backgroundColor = "#FFFDF8"
+secondaryBackgroundColor = "#FFF5E8"
+textColor = "#1C1510"
 linkColor = "#8A6D1A"
 
 [theme.dark]
@@ -20,9 +20,9 @@ secondaryBackgroundColor = "#1A1A2E"
 textColor = "#E5E5E5"
 linkColor = "#A5B4FC"
 
-# 상단 Fork·햄버거·Deploy 등 플랫폼 메뉴 최소화 (앱 기능과 무관)
+# 상단 Fork·햄버거·Deploy·왕관(관리) 등 플랫폼 UI 최소화 (앱 기능과 무관)
 [client]
-toolbarMode = "viewer"
+toolbarMode = "minimal"
 
 # PWA: ``app.py`` 옆 ``static/`` → 브라우저에서는 ``/app/static/...`` (Streamlit 공식 경로)
 [server]

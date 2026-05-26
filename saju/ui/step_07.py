@@ -481,39 +481,38 @@ def _commit_iching_draw(*, u_name: str) -> None:
     st.session_state.iching_today_revealed = True
     st.session_state["iching_last_idx"] = int(idx)
     st.session_state["iching_question_last"] = q_saved
-    flash = f"{u_name}님의 오늘의 괘: **{hx.label()}**\n\n{hx.gist}"
-    if q_saved:
-        flash += f"\n\n**적어 두신 질문:** {q_saved}"
-    st.session_state["_iching_flash"] = flash
 
 
 def render() -> None:
-    flash = st.session_state.pop("_iching_flash", None)
-    if flash:
-        st.success(str(flash))
-
     if st.session_state.get("last_iching_time") is not None:
         st.session_state.setdefault("iching_today_revealed", True)
 
+    revealed = bool(st.session_state.get("iching_today_revealed"))
+
     with M.premium_analysis_shell(7):
-        AFM.render_analysis_favorite_memo_band(step=7)
-        M.render_mood_image("step07_hero", variant="hero", alt="오늘의 주역")
+        if not revealed:
+            AFM.render_analysis_favorite_memo_band(step=7)
+            M.render_mood_image("step07_hero", variant="hero", alt="오늘의 주역")
         st.markdown("## ☯️ 오늘의 주역점")
-        st.markdown("다시뽑기는 3분 후에 하세요.")
+        if revealed:
+            st.caption("다시뽑기는 3분 후에 하세요.")
 
         st.markdown("##### 💭 질문")
         st.markdown(
-            '<span style="color:#dc2626;">'
+            '<div class="saju-step7-question-guide">'
+            '<span class="saju-guide-warn">'
             '"누가=언제=(누구)에게=무엇을=결과" 결과는 단문 형식으로 적어 주세요. '
             '"될까요/말까요"'
-            '</span> 형식은 안 됩니다. 간절한 마음으로 질문하고 괘를 뽑으세요.',
+            "</span> "
+            "형식은 안 됩니다. 간절한 마음으로 질문하고 괘를 뽑으세요."
+            "</div>",
             unsafe_allow_html=True,
         )
-        st.text_area(
+        M.text_area_no_autofill(
             "주역 질문",
             height=96,
             max_chars=500,
-            placeholder="예: 이번 전직 제안을 받아들이는 편이 나에게 이로울까요?",
+            placeholder="궁금한 내용을 입력 하세요",
             key="step7_iching_question_input",
             label_visibility="collapsed",
             help="선택 사항입니다. 적지 않아도 괘를 뽑을 수 있습니다.",
@@ -523,7 +522,6 @@ def render() -> None:
         idx = int(st.session_state.get("iching_last_idx", _today_hex_index(salt=u_name)))
         hx = get_hexagram(idx)
 
-        revealed = bool(st.session_state.get("iching_today_revealed"))
         remain = _iching_remain_seconds()
 
         if remain > 0:
@@ -572,12 +570,16 @@ def render() -> None:
                 M.rerun_full_app()
 
         if revealed:
-            st.divider()
-            interp, caution = _gist_interpretation_and_caution(hx.gist)
             u_key, l_key = _upper_lower_bagua(hx.names_hanja)
             u_sym = html.escape(_TRIGRAM_SYMBOL.get(u_key, ""))
             l_sym = html.escape(_TRIGRAM_SYMBOL.get(l_key, ""))
             title_plain = html.escape(f"제{hx.index + 1}괘 {hx.name_ko}")
+            gist_line = html.escape(str(hx.gist or "").split("\n", 1)[0])
+            st.markdown(
+                f"**{html.escape(u_name)}님의 오늘의 괘:** {u_sym} {title_plain} {l_sym}  \n"
+                f"{gist_line}",
+            )
+            interp, caution = _gist_interpretation_and_caution(hx.gist)
             hanja_line = html.escape(hx.names_hanja)
             hangul_line = html.escape(_names_hanja_hangul(hx.names_hanja, hx.name_ko))
             yao = _hexagram_six_yao_top_first(hx.names_hanja)
@@ -612,7 +614,7 @@ def render() -> None:
                         explanation_parts.append(
                             f'<p class="step7-caution-lead"><b>주의</b></p>{_md_to_step7_html(caution)}'
                         )
-                    with st.expander("괘 해설 · 주의 (펼쳐보기)", expanded=False):
+                    with st.expander("괘 해설 · 주의 (펼쳐보기)", expanded=True):
                         _render_step7_frame(
                             title="해설",
                             body_html='<div class="step7-interpret-divider"></div>'.join(
@@ -622,9 +624,6 @@ def render() -> None:
                         )
 
             st.caption("「뽑기」/「다시뽑기」를 누르면 위 괘가 확정되며 쿨다운이 시작됩니다.")
-            _last_q = str(st.session_state.get("iching_question_last", "") or "").strip()
-            if _last_q:
-                st.info(f"📝 **직전에 점칠 때의 질문:** {_last_q}")
             if st.session_state.get("last_iching_time"):
                 st.info(
                     "요지는 참고용입니다. 괘의·효사 등 전문 해석은 사주까기님과 상담 후 드러납니다."

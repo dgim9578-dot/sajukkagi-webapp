@@ -113,6 +113,14 @@ SAJU_PRO_MASTER_RULES: dict[str, dict[str, object]] = {
 }
 
 
+def _story(section: str, key: str, *, fallback: str = "") -> str:
+    """스토리텔링 DB 조회 — 없는 키는 KeyError 대신 fallback."""
+    bucket = SAJU_STORYTELLING_DATABASE.get(section)
+    if not isinstance(bucket, dict):
+        return fallback
+    return str(bucket.get(key, fallback) or fallback).strip()
+
+
 SAJU_STORYTELLING_DATABASE: dict[str, dict[str, str]] = {
     "love_and_marriage": {
         "female_pyeongwan": "편관운은 불꽃같은 설렘을 주지만, 시간이 지나면 구속감이나 스트레스로 바뀔 수 있어요. 초반 감정에 휩쓸리기보다 상대의 책임감과 생활 태도를 같이 보셔야 합니다.",
@@ -209,26 +217,26 @@ def _matched_master_rules(topic: str) -> list[str]:
 def _storytelling_tip(topic: str, *, gender: str, daewoon_ten: str) -> str:
     text = str(topic or "")
     is_female = _is_female_gender(gender)
-    love = SAJU_STORYTELLING_DATABASE["love_and_marriage"]
-    wealth = SAJU_STORYTELLING_DATABASE["wealth_and_career"]
-    move = SAJU_STORYTELLING_DATABASE["move_and_health"]
-
     if any(k in text for k in ("재회", "이별", "헤어", "속마음")):
-        return love["reunion"]
+        return _story("love_and_marriage", "reunion")
     if any(k in text for k in ("궁합", "감정", "인연", "연애", "결혼")):
         if "정관" in str(daewoon_ten) and is_female:
-            return love["female_jeonggwan"]
+            return _story("love_and_marriage", "female_jeonggwan")
         if "정재" in str(daewoon_ten) and not is_female:
-            return love["male_jeongjae"]
+            return _story("love_and_marriage", "male_jeongjae")
         if "주의" in text:
-            return love["caution"]
+            return _story("love_and_marriage", "caution")
         if "생활" in text or "궁합" in text:
-            return love["compatibility"]
-        return love["female_pyeongwan"] if is_female else love["male_pyeonjae"]
+            return _story("love_and_marriage", "compatibility")
+        return (
+            _story("love_and_marriage", "female_pyeongwan")
+            if is_female
+            else _story("love_and_marriage", "male_pyeonjae")
+        )
     if any(k in text for k in ("이직", "직장", "퇴사", "커리어", "승진")):
         if any(k in text for k in ("퇴사", "주의", "상사")):
-            return wealth["job_caution"]
-        return wealth["job_growth"]
+            return _story("wealth_and_career", "job_caution")
+        return _story("wealth_and_career", "job_growth")
     if any(
         k in text
         for k in (
@@ -250,16 +258,16 @@ def _storytelling_tip(topic: str, *, gender: str, daewoon_ten: str) -> str:
         )
     ):
         if any(k in text for k in ("손실", "주의", "동업", "비겁", "겁재")):
-            return wealth["money_caution"]
-        return wealth["siksang_wealth"]
+            return _story("wealth_and_career", "money_caution")
+        return _story("wealth_and_career", "siksang_wealth")
     if any(k in text for k in ("이사", "이동", "거처")):
-        return move["move"]
+        return _story("move_and_health", "move")
     if any(
         k in text
         for k in ("임신", "출산", "건강", "수술", "질병", "아픈", "아프", "병원", "부모", "모시", "요양")
     ):
         if "임신" in text or "출산" in text:
-            return move["pregnancy"]
+            return _story("move_and_health", "pregnancy")
         if any(k in text for k in ("부모", "모시", "요양", "병원", "어디")):
             return (
                 "부모님·가족 건강과 거처는 사주로 병명·병원을 단정하지 않습니다. "
@@ -267,7 +275,7 @@ def _storytelling_tip(topic: str, *, gender: str, daewoon_ten: str) -> str:
                 "먼저 보는 것이 좋습니다. 무리한 이사보다 의료진 상담 후, 병원·요양·자택 간병 중 "
                 "컨디션과 비용·가족 돌봄 여력에 맞는 선택을 비교하세요."
             )
-        return move["condition"]
+        return _story("move_and_health", "condition")
     return ""
 
 
@@ -311,10 +319,6 @@ def consulting_tip_for_action_year(
     rel = str(branch_rel or "없음").strip()
     ys = str(yongshin or "균형").strip()
     is_female = _is_female_gender(gender)
-    love = SAJU_STORYTELLING_DATABASE["love_and_marriage"]
-    wealth = SAJU_STORYTELLING_DATABASE["wealth_and_career"]
-    move_db = SAJU_STORYTELLING_DATABASE["move_and_health"]
-
     head = (
         f"**{y}년** 입춘 기준 세운 **{pill}**, 일간 대비 천간 십성 **{ten}**, "
         f"일지↔세운 지지 **{rel}**입니다."
@@ -349,12 +353,12 @@ def consulting_tip_for_action_year(
             lines.append(
                 f"세운 **{ten}**이면 주변과 역할·비용 분담을 먼저 정리한 뒤 이사를 검토하는 편이 낫습니다."
             )
-        lines.append(move_db["move"])
+        lines.append(_story("move_and_health", "move"))
     elif t == "job":
         if any(x in ten for x in ("정관", "편관", "정재", "편재", "식신", "상관")):
             lines.append(
                 f"{y}년 세운 **{ten}**은 제안·평가·성과가 겉으로 드러나기 쉬운 흐름으로 읽히는 경우가 많습니다. "
-                f"{wealth['job_growth']}"
+                f"{_story('wealth_and_career', 'job_growth')}"
             )
         elif "인" in ten:
             lines.append(
@@ -366,11 +370,11 @@ def consulting_tip_for_action_year(
             )
         if "상관" in ten:
             lines.append(
-                f"{y}년 세운 **{ten}** — {wealth['job_caution']}"
+                f"{y}년 세운 **{ten}** — {_story('wealth_and_career', 'job_caution')}"
             )
         if ten in ("비견", "겁재"):
             lines.append(
-                f"{y}년 세운 **{ten}** — {wealth['money_caution']}"
+                f"{y}년 세운 **{ten}** — {_story('wealth_and_career', 'money_caution')}"
             )
         if daewoon_ten and "관" in str(daewoon_ten):
             lines.append(
@@ -387,17 +391,17 @@ def consulting_tip_for_action_year(
                 f"{y}년 세운 **{ten}**이면 여성에게 관성운이 작동해 관계를 구체화·안정화하기 좋은 흐름으로 읽는 경우가 많습니다."
             )
             if "편관" in ten:
-                lines.append(love["female_pyeongwan"])
+                lines.append(_story("love_and_marriage", "female_pyeongwan"))
             elif "정관" in ten:
-                lines.append(love["female_jeonggwan"])
+                lines.append(_story("love_and_marriage", "female_jeonggwan"))
         elif not is_female and any(x in ten for x in ("정재", "편재")):
             lines.append(
                 f"{y}년 세운 **{ten}**이면 남성에게 재성운이 작동해 가정·생활 기반을 잡기 좋은 흐름으로 읽는 경우가 많습니다."
             )
             if "편재" in ten:
-                lines.append(love["male_pyeonjae"])
+                lines.append(_story("love_and_marriage", "male_pyeonjae"))
             elif "정재" in ten:
-                lines.append(love["male_jeongjae"])
+                lines.append(_story("love_and_marriage", "male_jeongjae"))
         elif "합" in rel:
             lines.append(
                 f"{y}년 지지 **합**은 정서적 끌림·동조가 살아나기 쉬우나, 생활 리듬·돈·가족 이슈까지 맞는지 확인하세요."
@@ -422,7 +426,7 @@ def consulting_tip_for_action_year(
                 f"{y}년 세운 **{ten}**은 임신 가능성을 단정하지 않습니다. "
                 "산부인과 상담·검사가 항상 우선입니다."
             )
-        lines.append(move_db["pregnancy"])
+        lines.append(_story("move_and_health", "pregnancy"))
         lines.append(f"생활 루틴 참고로는 용신 **{ys}**을 살리는 수면·식사·회복 습관을 안정판으로 삼으세요.")
     elif t == "health":
         if "충" in rel:
@@ -455,10 +459,10 @@ def consulting_tip_for_action_year(
         elif any(x in ten for x in ("식신", "상관")):
             lines.append(
                 f"{y}년 세운 **{ten}**은 **기술·전문성·콘텐츠**를 수익으로 연결하기 좋은 해로 읽히는 경우가 있습니다. "
-                f"{wealth['siksang_wealth']}"
+                f"{_story('wealth_and_career', 'siksang_wealth')}"
             )
         elif ten in ("비견", "겁재"):
-            lines.append(f"{y}년 세운 **{ten}** — {wealth['money_caution']}")
+            lines.append(f"{y}년 세운 **{ten}** — {_story('wealth_and_career', 'money_caution')}")
         else:
             lines.append(
                 f"{y}년 세운 **{ten}**은 **무리한 확장**보다 **현금 흐름·부채·연금**을 점검하는 해로 보는 편입니다."

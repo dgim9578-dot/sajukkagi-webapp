@@ -136,7 +136,7 @@ def render_all_memos_download_button(*, key: str = "step11_all_memos_download") 
         mime="text/plain;charset=utf-8",
         key=key,
         use_container_width=True,
-        type="primary",
+        type="secondary",
     )
 
 
@@ -187,7 +187,7 @@ def render_analysis_favorite_memo_band(*, step: int) -> None:
                 args=(int(step),),
             )
         with r2:
-            st.text_area(
+            M.text_area_no_autofill(
                 "메모",
                 value=memo0,
                 height=78,

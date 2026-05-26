@@ -1042,6 +1042,6 @@ def render_gapja_master_chart(
     st.session_state.gapja_chart_theme = theme_pick
 
     # 모바일 하단 설명 패널(dock)이 잘리지 않도록 최소 높이 확보
-    iframe_h = max(int(height) if height is not None else 700, 560)
+    iframe_h = max(int(height) if height is not None else 700, 620)
     html_body = build_gapja_master_chart_html(list(u_gapja), theme=str(theme_pick))
-    components.html(html_body, height=iframe_h, scrolling=True)
+    components.html(html_body, height=iframe_h, scrolling=False)

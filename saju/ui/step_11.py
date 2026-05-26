@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 
 import streamlit as st
 
@@ -725,7 +726,7 @@ def render() -> None:
     st.markdown("#### 고민 입력")
     q_col, send_col = st.columns([0.88, 0.12], gap="small")
     with q_col:
-        user_text = st.text_input(
+        user_text = M.text_input_no_autofill(
             "고민 입력",
             placeholder="고민을 입력하세요...",
             key="step11_chat_text_input",
@@ -736,33 +737,59 @@ def render() -> None:
     user_input = user_text if sent else None
 
     public_settings = W.public_webapp_settings()
+    kakao_url = str(public_settings.get("kakao_url") or "").strip()
+    phone = str(public_settings.get("phone") or "").strip() or "준비중"
+    tel_digits = re.sub(r"\D", "", phone)
+    tel_href = f"tel:{tel_digits}" if tel_digits else ""
 
-    contact_cols = st.columns(3, gap="small")
-    with contact_cols[0]:
-        kakao_url = public_settings.get("kakao_url") or "#"
-        st.markdown(
-            f"""
-<a href="{html.escape(kakao_url, quote=True)}" target="_blank"
-   style="display:block;text-align:center;padding:0.55rem 0.9rem;
-          border-radius:0.5rem;background:#f8fafc;border:1px solid #e5e7eb;
-          color:#334155;text-decoration:none;">💬 오픈채팅</a>
-""",
-            unsafe_allow_html=True,
-        )
-    with contact_cols[1]:
-        phone = public_settings.get("phone") or "준비중"
-        st.markdown(
-            f"""
-<div title="전화번호: {html.escape(phone)}"
-   style="display:block;text-align:center;padding:0.55rem 0.9rem;
-          border-radius:0.5rem;background:#b8860b;color:white;
-          text-decoration:none;font-weight:700;">📞 전화상담 {html.escape(phone)}</div>
-""",
-            unsafe_allow_html=True,
-        )
-    with contact_cols[2]:
-        if st.button("🖼️ QR문의", key="step11_show_qr_btn", use_container_width=True):
-            st.session_state.step11_show_qr = not bool(st.session_state.get("step11_show_qr", False))
+    with st.container(key="step11_consult_strip"):
+        st.caption("상담 연결")
+        try:
+            c_kakao, c_phone, c_qr = st.columns(3, gap="small")
+        except TypeError:
+            c_kakao, c_phone, c_qr = st.columns(3)
+        with c_kakao:
+            if kakao_url:
+                st.link_button(
+                    "💬\n오픈채팅",
+                    kakao_url,
+                    use_container_width=True,
+                    key="step11_kakao_link",
+                )
+            else:
+                st.button(
+                    "💬\n오픈채팅",
+                    use_container_width=True,
+                    disabled=True,
+                    key="step11_kakao_disabled",
+                )
+        with c_phone:
+            if tel_href:
+                st.link_button(
+                    "📞\n전화상담",
+                    tel_href,
+                    use_container_width=True,
+                    type="primary",
+                    key="step11_phone_link",
+                    help=phone,
+                )
+            else:
+                st.button(
+                    "📞\n전화상담",
+                    use_container_width=True,
+                    disabled=True,
+                    key="step11_phone_disabled",
+                    help=phone,
+                )
+        with c_qr:
+            if st.button(
+                "🖼️\nQR문의",
+                key="step11_show_qr_btn",
+                use_container_width=True,
+            ):
+                st.session_state.step11_show_qr = not bool(
+                    st.session_state.get("step11_show_qr", False)
+                )
 
     with st.container(key="step11_qr_panel"):
         if st.session_state.get("step11_show_qr") and M.QR_DATA:

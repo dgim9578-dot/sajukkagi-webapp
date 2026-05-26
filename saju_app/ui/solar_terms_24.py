@@ -604,9 +604,8 @@ def solar_term_frame_html(
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap" media="print" onload="this.media='all'" />
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap" /></noscript>
-<div id="{_hx(frame_id)}" class="saju-solar24-master" data-theme="hanji" role="region" aria-label="오늘의 24절기">
+<div id="{_hx(frame_id)}" class="saju-solar24-master" data-theme="hanji" role="region" aria-label="{_hx(t.name_ko)} 절기">
   <div class="s24-toolbar">
-    <span class="s24-toolbar-title">오늘의 24절기</span>
     <span class="s24-toolbar-badge" style="--s24-accent:{_hx(accent)};">한지 · {season}</span>
   </div>
   <p class="s24-flow-title">절기 에너지 흐름</p>
@@ -658,10 +657,10 @@ def solar_term_frame_html(
 }}
 #{frame_id} .s24-toolbar {{
   position: relative; z-index: 12;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px 2px;
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 8px 12px 2px;
 }}
-#{frame_id} .s24-toolbar-title {{ font-size: 1.05rem; font-weight: 900; }}
+#{frame_id} .s24-toolbar-title {{ display: none !important; }}
 #{frame_id} .s24-toolbar-badge {{
   font-size: 10px; padding: 4px 10px; border-radius: 999px;
   border: 1px solid var(--s24-border); background: rgba(255,255,255,0.55); font-weight: 700;
@@ -672,8 +671,9 @@ def solar_term_frame_html(
 }}
 #{frame_id} .s24-stage {{
   position: relative; z-index: 2; flex: 1 1 auto;
-  display: flex; align-items: center; justify-content: center;
-  min-height: 300px; padding-top: 28px; overflow: visible;
+  display: flex; align-items: flex-end; justify-content: center;
+  min-height: 300px; padding: 12px 0 10px; overflow: visible;
+  box-sizing: border-box;
 }}
 #{frame_id} .s24-ring {{
   position: absolute; width: 92%; max-width: 380px; height: auto;
@@ -814,9 +814,25 @@ def solar_term_frame_html(
   display: block;
 }}
 @media (max-width: 520px) {{
-  #{frame_id}.saju-solar24-master {{ min-height: 520px; height: auto; }}
-  #{frame_id} .s24-stage {{ min-height: 300px; padding-top: 24px; }}
-  #{frame_id} .s24-pillars {{ width: 94%; }}
+  #{frame_id}.saju-solar24-master {{
+    min-height: 460px; height: auto; overflow: visible;
+    padding-top: 6px; box-sizing: border-box;
+  }}
+  #{frame_id} .s24-stage {{
+    min-height: 268px; padding: 6px 0 8px;
+    align-items: flex-end; justify-content: center;
+  }}
+  #{frame_id} .s24-ring {{ top: 14%; width: 88%; max-width: 340px; opacity: 0.75; }}
+  #{frame_id} .s24-center {{ top: 50%; }}
+  #{frame_id} .s24-pillars {{ width: 94%; padding-bottom: 2px; }}
+  #{frame_id} .s24-slot {{ font-size: clamp(9px, 2.6vw, 11px); line-height: 1.2; }}
+  #{frame_id} .s24-han {{ margin-bottom: 0.08rem; }}
+  #{frame_id} .s24-hint {{ display: none; }}
+  #{frame_id} .s24-toolbar {{ padding: 8px 10px 0; }}
+  #{frame_id} .s24-center-inner {{
+    width: clamp(64px, 20vw, 88px);
+    height: clamp(64px, 20vw, 88px);
+  }}
 }}
 </style>
 <script>
@@ -923,6 +939,32 @@ def solar_term_frame_html(
     if (isInHoverZone(ev.target)) return;
     closeAll();
   }});
+
+  function reportHeight() {{
+    try {{
+      const h = Math.ceil(
+        root.getBoundingClientRect().height ||
+        root.offsetHeight ||
+        document.documentElement.scrollHeight ||
+        document.body.scrollHeight ||
+        0
+      );
+      if (h > 0) {{
+        window.parent.postMessage({{ type: "saju-solar24-resize", height: h }}, "*");
+      }}
+    }} catch (e) {{}}
+  }}
+  reportHeight();
+  [80, 280, 720].forEach((t) => setTimeout(reportHeight, t));
+  try {{
+    if (typeof ResizeObserver !== "undefined") {{
+      new ResizeObserver(reportHeight).observe(root);
+    }}
+  }} catch (e) {{}}
+  try {{
+    window.addEventListener("load", reportHeight);
+    window.addEventListener("resize", reportHeight);
+  }} catch (e) {{}}
 }})();
 </script>
 """.strip()

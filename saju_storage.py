@@ -58,6 +58,27 @@ from typing import Any, Callable, Concatenate, ParamSpec, TypeVar
 
 log = logging.getLogger(__name__)
 
+
+def clear_all_user_input_sessions():
+    """외부 사용자 데이터 오염 및 무작위 노출을 막기 위해
+    서버 메모리와 저장소의 임시 프리필 데이터를 강제로 전면 소각하는 프로용 초기화 함수"""
+    try:
+        import streamlit as st
+
+        # 1. 브라우저에 남아있는 모든 사용자 입력값(key)을 완전히 삭제
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+
+        # 2. 백엔드 저장소에 임시로 저장되었던 프리필(Prefill) 흔적 제거
+        sqlite_kvs_delete_prefix("step2_prefill")
+        sqlite_kvs_delete("admin_outbox")
+
+        # 3. 변경 사항 즉시 반영
+        st.success("모든 사용자 정보와 세션 버퍼가 강력하게 초기화되었습니다.")
+    except Exception:
+        pass
+
+
 P_sql = ParamSpec("P_sql")
 R_sql = TypeVar("R_sql")
 
@@ -370,8 +391,12 @@ def element_theme_css_block() -> str:
     for el, slug in _THEME_KEY_SLUG.items():
         cfg = THEME_CONFIG.get(el, _THEME_DEFAULT)
         primary = str(cfg.get("accent") or "#d4af37")
-        soft = str(cfg.get("primary_soft") or ELEMENT_COLORS.get(el, {}).get("soft", "#fef3c7"))
-        grad = str(cfg.get("gradient_css") or f"linear-gradient(135deg, {primary}, {primary})")
+        soft = str(
+            cfg.get("primary_soft") or ELEMENT_COLORS.get(el, {}).get("soft", "#fef3c7")
+        )
+        grad = str(
+            cfg.get("gradient_css") or f"linear-gradient(135deg, {primary}, {primary})"
+        )
         chunks.append(
             f'[data-theme="{slug}"] {{\n'
             f"  --primary: {primary};\n"
@@ -382,8 +407,7 @@ def element_theme_css_block() -> str:
             f"  --saju-theme-gradient: {grad};\n"
             f"}}"
         )
-    chunks.append(
-        """
+    chunks.append("""
 [data-theme] .saju-theme-accent { color: var(--primary); }
 [data-theme] .saju-theme-soft-bg { background: var(--primary-soft); }
 [data-theme] .saju-theme-gradient-bar {
@@ -394,8 +418,7 @@ def element_theme_css_block() -> str:
   color: var(--primary);
   border-bottom: 2px solid var(--primary);
 }
-"""
-    )
+""")
     return "\n".join(chunks)
 
 
@@ -443,7 +466,11 @@ def build_saju_theme_meta(gapja: list[str]) -> dict[str, Any]:
     meta = build_gapja_design_meta(gapja)
 
     pillars = [str(x or "") for x in list(gapja or [])[:4]]
-    day_stem = pillars[2][0] if len(pillars) > 2 and len(pillars[2]) >= 1 else str(meta.get("day_stem") or "")
+    day_stem = (
+        pillars[2][0]
+        if len(pillars) > 2 and len(pillars[2]) >= 1
+        else str(meta.get("day_stem") or "")
+    )
 
     element_counts = meta.get("element_counts")
     if not isinstance(element_counts, dict) or not element_counts:
@@ -520,7 +547,9 @@ class InvalidSessionIdError(ValueError):
     """``session_id`` 가 UUID v4 화이트리스트·길이 규칙을 만족하지 않을 때."""
 
 
-def normalize_session_id(session_id: str | None, *, required: bool = True) -> str | None:
+def normalize_session_id(
+    session_id: str | None, *, required: bool = True
+) -> str | None:
     """``session_id`` 를 검증하고 소문자 32자 hex(UUID v4)로 정규화합니다."""
     raw = str(session_id or "").strip()
     if not raw:
@@ -564,9 +593,7 @@ _ARCHIVE_SCRIPT_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 _ARCHIVE_ANY_TAG_RE = re.compile(r"<[^>]+>")
-_ARCHIVE_URI_SCHEME_RE = re.compile(
-    r"(?i)\b(?:javascript|vbscript|data)\s*:"
-)
+_ARCHIVE_URI_SCHEME_RE = re.compile(r"(?i)\b(?:javascript|vbscript|data)\s*:")
 _ARCHIVE_EVENT_HANDLER_RE = re.compile(r"(?i)\bon[a-z]+\s*=")
 _ARCHIVE_ROLE_WHITELIST = frozenset({"user", "assistant", "admin", "system", ""})
 
@@ -590,7 +617,9 @@ def _archive_scalar_to_str(value: Any) -> str:
     return str(value)
 
 
-def sanitize_archive_text(value: Any, *, max_len: int = _ARCHIVE_CONTENT_MAX_LEN) -> str:
+def sanitize_archive_text(
+    value: Any, *, max_len: int = _ARCHIVE_CONTENT_MAX_LEN
+) -> str:
     """사용자 입력 등 문자열을 아카이브 JSON에 넣기 전 정리합니다."""
     s = _archive_scalar_to_str(value)
     s = s.replace("\x00", "")
@@ -645,7 +674,11 @@ def sanitize_archive_record(record: dict[str, Any] | None) -> dict[str, Any]:
         if k in ("content", "msg"):
             out[k] = sanitize_archive_text(val, max_len=_ARCHIVE_CONTENT_MAX_LEN)
             continue
-        if isinstance(val, (str, bytes)) or isinstance(val, (_dt.datetime, _dt.date)) or val is not None:
+        if (
+            isinstance(val, (str, bytes))
+            or isinstance(val, (_dt.datetime, _dt.date))
+            or val is not None
+        ):
             out[k] = sanitize_archive_text(val)
         else:
             out[k] = val
@@ -862,7 +895,9 @@ def _get_redis():
             _redis = redis.from_url(
                 url,
                 decode_responses=True,
-                socket_connect_timeout=_redis_timeout("SAJU_REDIS_CONNECT_TIMEOUT_SEC", 1.5),
+                socket_connect_timeout=_redis_timeout(
+                    "SAJU_REDIS_CONNECT_TIMEOUT_SEC", 1.5
+                ),
                 socket_timeout=_redis_timeout("SAJU_REDIS_SOCKET_TIMEOUT_SEC", 2.0),
                 health_check_interval=30,
                 retry_on_timeout=True,
@@ -943,7 +978,9 @@ def redis_room_ttl_monitor(*, sample_limit: int = 40) -> dict[str, Any]:
         return out
     out["redis_connected"] = True
     try:
-        room_keys = sorted((str(k) for k in (r.smembers(_R_KEY_ROOM_INDEX) or [])), reverse=True)
+        room_keys = sorted(
+            (str(k) for k in (r.smembers(_R_KEY_ROOM_INDEX) or [])), reverse=True
+        )
         out["room_index_size"] = len(room_keys)
         sample_rows: list[dict[str, Any]] = []
         for rk in room_keys[:lim]:
@@ -961,8 +998,10 @@ def redis_room_ttl_monitor(*, sample_limit: int = 40) -> dict[str, Any]:
                 {
                     "room_key": rk,
                     "msg_ttl_sec": msg_ttl,
-                    "msg_ttl_human": _format_ttl_human(msg_ttl) if msg_ttl > 0 else (
-                        "만료 없음" if msg_ttl == -1 else "키 없음"
+                    "msg_ttl_human": (
+                        _format_ttl_human(msg_ttl)
+                        if msg_ttl > 0
+                        else ("만료 없음" if msg_ttl == -1 else "키 없음")
                     ),
                     "label_ttl_sec": label_ttl,
                 }
@@ -1049,7 +1088,10 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 
 def _sqlite_busy_timeout_ms() -> int:
     try:
-        return max(1000, int((os.environ.get("SAJU_SQLITE_BUSY_TIMEOUT_MS") or "30000").strip()))
+        return max(
+            1000,
+            int((os.environ.get("SAJU_SQLITE_BUSY_TIMEOUT_MS") or "30000").strip()),
+        )
     except ValueError:
         return 30000
 
@@ -1135,7 +1177,8 @@ def _ensure_user_profiles_revisit_pin_column(conn: sqlite3.Connection) -> None:
     """재방문 전용 비밀번호 해시(평문 저장 없음)."""
     try:
         cols = {
-            row[1] for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
+            row[1]
+            for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
         }
     except Exception:
         cols = set()
@@ -1234,8 +1277,7 @@ def _ensure_chat_archive_session_column(conn: sqlite3.Connection) -> None:
 def _ensure_global_chat_log_table(conn: sqlite3.Connection) -> None:
     """관리자 공용 타임라인을 대형 KV JSON 대신 append-only 테이블로 유지합니다."""
     try:
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS global_chat_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sync_ts TEXT NOT NULL DEFAULT '',
@@ -1250,8 +1292,7 @@ def _ensure_global_chat_log_table(conn: sqlite3.Connection) -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_global_chat_log_room_msg
                 ON global_chat_log(room_key, msg_index);
             CREATE INDEX IF NOT EXISTS idx_global_chat_log_id ON global_chat_log(id);
-            """
-        )
+            """)
         conn.commit()
     except Exception:
         log.exception("global_chat_log table ensure failed")
@@ -1261,7 +1302,8 @@ def _ensure_user_profiles_usage_columns(conn: sqlite3.Connection) -> None:
     """프로필 목록 UX용 조회수/최근 상담일 컬럼을 기존 DB에 추가합니다."""
     try:
         cols = {
-            row[1] for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
+            row[1]
+            for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
         }
     except Exception:
         cols = set()
@@ -1290,7 +1332,8 @@ def _ensure_user_profiles_gapja_meta_column(conn: sqlite3.Connection) -> None:
     """기존 프로필 DB에 디자인용 간지 메타데이터 컬럼을 추가합니다."""
     try:
         cols = {
-            row[1] for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
+            row[1]
+            for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
         }
     except Exception:
         cols = set()
@@ -1338,12 +1381,11 @@ def _migrate_json_files_to_sqlite(conn: sqlite3.Connection, app_dir: str) -> Non
     pre_path = os.path.join(app_dir, "step2_form_prefill.json")
     if os.path.isfile(pre_path):
         try:
-            with open(pre_path, encoding="utf-8") as f:
-                raw = f.read()
-            conn.execute(
-                "INSERT OR REPLACE INTO kv(k,v,updated_at) VALUES (?,?,?)",
-                ("step2_prefill", raw, ""),
-            )
+            os.remove(pre_path)
+        except OSError:
+            pass
+        try:
+            conn.execute("DELETE FROM kv WHERE k = ?", ("step2_prefill",))
         except Exception:
             pass
 
@@ -1528,7 +1570,9 @@ def sqlite_list_chat_room_summaries(conn, limit: int = 120) -> list[dict[str, An
                 lab = None
         u_name = str((lab or {}).get("u_name") or "")
         contact = str((lab or {}).get("contact") or "")
-        user_gapja = str((lab or {}).get("user_gapja") or (lab or {}).get("user_ilju") or "")
+        user_gapja = str(
+            (lab or {}).get("user_gapja") or (lab or {}).get("user_ilju") or ""
+        )
         consultation_type = str((lab or {}).get("consultation_type") or "미분류")
         try:
             msgs = json.loads(row["messages_json"] or "[]")
@@ -1555,6 +1599,21 @@ def sqlite_clear_chat_room(conn, room_key: str) -> None:
     if not rk:
         return
     conn.execute("DELETE FROM chat_room WHERE room_key = ?", (rk,))
+    conn.commit()
+
+
+@_with_sqlite
+def sqlite_kvs_delete_prefix(conn, prefix: str) -> None:
+    p = str(prefix or "").strip()
+    if not p:
+        return
+    conn.execute("DELETE FROM kv WHERE k LIKE ?", (p + "%",))
+    conn.commit()
+
+
+@_with_sqlite
+def sqlite_kvs_delete(conn, key: str) -> None:
+    conn.execute("DELETE FROM kv WHERE k = ?", (key,))
     conn.commit()
 
 
@@ -1820,7 +1879,9 @@ def sqlite_upsert_user_profile(
     bj = json.dumps(birth or {}, ensure_ascii=False, default=str)
     gapja_list = [str(x) for x in list(gapja or [])]
     gj = json.dumps(gapja_list, ensure_ascii=False, default=str)
-    gm = json.dumps(build_gapja_design_meta(gapja_list), ensure_ascii=False, default=str)
+    gm = json.dumps(
+        build_gapja_design_meta(gapja_list), ensure_ascii=False, default=str
+    )
     st = 0
     ts = _now_kst_iso()
     _ensure_user_profiles_gapja_meta_column(conn)
@@ -2104,8 +2165,12 @@ def redis_list_chat_room_summaries(limit: int = 120) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for rk in keys:
             msgs, lab = redis_get_chat_room(rk)
-            u_name = str((lab or {}).get("u_name") or "") if isinstance(lab, dict) else ""
-            contact = str((lab or {}).get("contact") or "") if isinstance(lab, dict) else ""
+            u_name = (
+                str((lab or {}).get("u_name") or "") if isinstance(lab, dict) else ""
+            )
+            contact = (
+                str((lab or {}).get("contact") or "") if isinstance(lab, dict) else ""
+            )
             user_gapja = (
                 str((lab or {}).get("user_gapja") or (lab or {}).get("user_ilju") or "")
                 if isinstance(lab, dict)
@@ -2185,6 +2250,16 @@ def redis_kvs_set(key: str, value: str) -> None:
         return
     try:
         r.set(f"{_NS}:kv:{key}", value)
+    except Exception as e:
+        _redis_note_failure(e)
+
+
+def redis_kvs_delete(key: str) -> None:
+    r = _redis_client()
+    if not r:
+        return
+    try:
+        r.delete(f"{_NS}:kv:{key}")
     except Exception as e:
         _redis_note_failure(e)
 
@@ -2292,7 +2367,9 @@ def _redis_archive_remove_row_ids(r: Any, row_ids: list[str]) -> int:
             if raw:
                 obj = json.loads(raw)
                 if isinstance(obj, dict):
-                    sid = coalesce_session_id(str(obj.get("session_id") or "")) or "_none"
+                    sid = (
+                        coalesce_session_id(str(obj.get("session_id") or "")) or "_none"
+                    )
         except Exception:
             pass
         try:
@@ -2313,9 +2390,7 @@ def _redis_archive_remove_row_ids(r: Any, row_ids: list[str]) -> int:
     return removed
 
 
-def redis_archive_prune_before(
-    cutoff_ms: float, *, batch_size: int = 2000
-) -> int:
+def redis_archive_prune_before(cutoff_ms: float, *, batch_size: int = 2000) -> int:
     """Redis v2 타임라인에서 ``cutoff_ms`` 이전 점수(밀리초) 행을 배치 삭제합니다."""
     r = _redis_client()
     if not r:
@@ -2324,7 +2399,9 @@ def redis_archive_prune_before(
     total = 0
     try:
         while True:
-            row_ids = r.zrangebyscore(_ARCH_TIMELINE, 0, float(cutoff_ms), start=0, num=batch)
+            row_ids = r.zrangebyscore(
+                _ARCH_TIMELINE, 0, float(cutoff_ms), start=0, num=batch
+            )
             if not row_ids:
                 break
             ids = [str(x) for x in row_ids]
@@ -2453,11 +2530,17 @@ def redis_list_user_profiles(limit: int = 80) -> list[dict[str, Any]]:
                     "fingerprint": fp,
                     "display_name": str(obj.get("display_name") or ""),
                     "birth": birth,
-                    "gapja": obj.get("gapja") if isinstance(obj.get("gapja"), list) else [],
-                    "gapja_meta": obj.get("gapja_meta")
-                    if isinstance(obj.get("gapja_meta"), dict)
-                    else build_gapja_design_meta(
+                    "gapja": (
                         obj.get("gapja") if isinstance(obj.get("gapja"), list) else []
+                    ),
+                    "gapja_meta": (
+                        obj.get("gapja_meta")
+                        if isinstance(obj.get("gapja_meta"), dict)
+                        else build_gapja_design_meta(
+                            obj.get("gapja")
+                            if isinstance(obj.get("gapja"), list)
+                            else []
+                        )
                     ),
                     "view_count": int(obj.get("view_count") or 0),
                     "last_consulted_at": str(obj.get("last_consulted_at") or ""),
@@ -2497,7 +2580,13 @@ def redis_get_user_profile(fingerprint: str) -> dict[str, Any] | None:
         "display_name": str(obj.get("display_name") or ""),
         "birth": birth,
         "gapja": obj.get("gapja") if isinstance(obj.get("gapja"), list) else [],
-        "gapja_meta": obj.get("gapja_meta") if isinstance(obj.get("gapja_meta"), dict) else build_gapja_design_meta(obj.get("gapja") if isinstance(obj.get("gapja"), list) else []),
+        "gapja_meta": (
+            obj.get("gapja_meta")
+            if isinstance(obj.get("gapja_meta"), dict)
+            else build_gapja_design_meta(
+                obj.get("gapja") if isinstance(obj.get("gapja"), list) else []
+            )
+        ),
         "view_count": int(obj.get("view_count") or 0),
         "last_consulted_at": str(obj.get("last_consulted_at") or ""),
         "created_at": str(obj.get("created_at") or ""),
@@ -2737,6 +2826,17 @@ def kv_set_json(key: str, obj: Any) -> None:
         redis_kvs_set(key, s)
 
 
+def kv_delete_json(key: str) -> None:
+    sqlite_kvs_delete(key)
+    if _redis_enabled():
+        redis_kvs_delete(key)
+
+
+def kv_delete_json_prefix(prefix: str) -> None:
+    sqlite_kvs_delete_prefix(prefix)
+    # Redis 미러는 STEP2 prefill 전용 prefix 삭제 시 생략(키 스캔 비용)
+
+
 def save_session_draft(session_id: str, draft: dict[str, Any]) -> None:
     """세션별 현재 STEP/UI draft를 KV에 저장합니다."""
     sid = coalesce_session_id(session_id)
@@ -2748,19 +2848,15 @@ def save_session_draft(session_id: str, draft: dict[str, Any]) -> None:
         **dict(draft or {}),
     }
     kv_set_json(f"session:{sid}:current_step", rec)
-    # 모바일 WebView 재시작 등으로 session_state만 비는 경우를 위한 마지막 작업 fallback.
-    kv_set_json("session:last_current_step", rec)
 
 
 def load_session_draft(session_id: str) -> dict[str, Any] | None:
-    """세션별 current step/draft를 읽습니다. 없으면 마지막 draft를 보조로 사용합니다."""
+    """세션별 current step/draft를 읽습니다 (세션 ID 일치 시에만)."""
     raw = str(session_id or "").strip()
     sid = coalesce_session_id(raw) if raw else None
     rec: Any | None = None
     if sid:
         rec = kv_get_json(f"session:{sid}:current_step")
-    if not isinstance(rec, dict):
-        rec = kv_get_json("session:last_current_step")
     return dict(rec) if isinstance(rec, dict) else None
 
 
@@ -2831,7 +2927,7 @@ def touch_user_profile(fingerprint: str) -> int:
     return int(n)
 
 
-_REVISIT_PIN_MIN_LEN = 4
+_REVISIT_PIN_MIN_LEN = 6
 _REVISIT_PIN_MAX_LEN = 32
 _R_KEY_REVISIT_PIN = "revisit_pin:"
 
@@ -2848,10 +2944,24 @@ def normalize_revisit_pin(pin: str) -> str:
 
 
 def validate_revisit_pin(pin: str) -> str | None:
-    """유효하면 None, 아니면 한글 오류 메시지."""
+    """신규 설정용 — 유효하면 None, 아니면 한글 오류 메시지."""
     p = normalize_revisit_pin(pin)
     if len(p) < _REVISIT_PIN_MIN_LEN:
         return f"비밀번호는 {_REVISIT_PIN_MIN_LEN}자 이상이어야 합니다."
+    if len(p) > _REVISIT_PIN_MAX_LEN:
+        return f"비밀번호는 {_REVISIT_PIN_MAX_LEN}자 이하여야 합니다."
+    if not any(ch.isdigit() for ch in p):
+        return "비밀번호에 숫자를 포함해 주세요."
+    if not any(not ch.isalnum() for ch in p):
+        return "비밀번호에 특수문자를 포함해 주세요."
+    return None
+
+
+def validate_revisit_pin_lookup(pin: str) -> str | None:
+    """로그인 조회용 — 기존 짧은 비밀번호도 허용."""
+    p = normalize_revisit_pin(pin)
+    if not p:
+        return "비밀번호를 입력해 주세요."
     if len(p) > _REVISIT_PIN_MAX_LEN:
         return f"비밀번호는 {_REVISIT_PIN_MAX_LEN}자 이하여야 합니다."
     return None
@@ -2865,7 +2975,7 @@ def revisit_pin_lookup_key(pin: str) -> str:
 
 @_with_sqlite
 def sqlite_get_user_profile_by_revisit_pin(conn, pin: str) -> dict[str, Any] | None:
-    if validate_revisit_pin(pin):
+    if validate_revisit_pin_lookup(pin):
         return None
     lookup = revisit_pin_lookup_key(pin)
     _ensure_user_profiles_revisit_pin_column(conn)
@@ -2879,7 +2989,9 @@ def sqlite_get_user_profile_by_revisit_pin(conn, pin: str) -> dict[str, Any] | N
 
 
 @_with_sqlite
-def sqlite_set_profile_revisit_pin(conn, fingerprint: str, pin: str) -> tuple[bool, str]:
+def sqlite_set_profile_revisit_pin(
+    conn, fingerprint: str, pin: str
+) -> tuple[bool, str]:
     fp = str(fingerprint or "").strip()
     err = validate_revisit_pin(pin)
     if err:
@@ -2922,7 +3034,11 @@ def redis_set_profile_revisit_pin(fingerprint: str, lookup_key: str) -> None:
         if prev_raw:
             try:
                 old = json.loads(prev_raw)
-                old_lk = str(old.get("revisit_pin_hash") or "") if isinstance(old, dict) else ""
+                old_lk = (
+                    str(old.get("revisit_pin_hash") or "")
+                    if isinstance(old, dict)
+                    else ""
+                )
                 if old_lk and old_lk != lk:
                     r.delete(f"{_R_KEY_REVISIT_PIN}{old_lk}")
             except Exception:
@@ -2932,7 +3048,9 @@ def redis_set_profile_revisit_pin(fingerprint: str, lookup_key: str) -> None:
             doc = json.loads(doc_raw)
             if isinstance(doc, dict):
                 doc["revisit_pin_hash"] = lk
-                r.set(_r_key_uprof(fp), json.dumps(doc, ensure_ascii=False, default=str))
+                r.set(
+                    _r_key_uprof(fp), json.dumps(doc, ensure_ascii=False, default=str)
+                )
         r.set(f"{_R_KEY_REVISIT_PIN}{lk}", fp)
     except Exception as e:
         _redis_note_failure(e)
@@ -2940,7 +3058,7 @@ def redis_set_profile_revisit_pin(fingerprint: str, lookup_key: str) -> None:
 
 def redis_get_user_profile_by_revisit_pin(pin: str) -> dict[str, Any] | None:
     r = _redis_client()
-    if not r or validate_revisit_pin(pin):
+    if not r or validate_revisit_pin_lookup(pin):
         return None
     lk = revisit_pin_lookup_key(pin)
     try:
@@ -2960,7 +3078,7 @@ def set_profile_revisit_pin(*, fingerprint: str, pin: str) -> tuple[bool, str]:
 
 def get_user_profile_by_revisit_pin(pin: str) -> dict[str, Any] | None:
     """비밀번호로 본인 프로필만 조회(홈 목록 노출 없음)."""
-    if validate_revisit_pin(pin):
+    if validate_revisit_pin_lookup(pin):
         return None
     # SQLite(해시·프로필)가 기준 — Redis는 SQLite에 없을 때만 보조
     rec = sqlite_get_user_profile_by_revisit_pin(pin)
@@ -3114,7 +3232,9 @@ def archive_prune_old_records(
     """
     keep_days = max(1, int(days))
     batch = max(50, min(int(batch_size), 10_000))
-    cutoff_dt = _dt.datetime.now(tz=ZoneInfo("Asia/Seoul")) - _dt.timedelta(days=keep_days)
+    cutoff_dt = _dt.datetime.now(tz=ZoneInfo("Asia/Seoul")) - _dt.timedelta(
+        days=keep_days
+    )
     cutoff_iso = cutoff_dt.isoformat(timespec="seconds")
     cutoff_ms = cutoff_dt.timestamp() * 1000.0
 
@@ -3287,4 +3407,3 @@ def __getattr__(name: str):
 
         return getattr(_b, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-

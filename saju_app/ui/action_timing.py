@@ -139,9 +139,7 @@ def _action_section_copy(profile: str) -> tuple[str, str]:
     if profile == "young":
         return (
             "📌 이사·이직·결혼·임신 — 올해·내년 행동 타이밍(참고)",
-            "‘올해 이사 가도 되나’, ‘언제 결혼·임신 준비를 검토할까’처럼 **실제 행동**과 맞닿는 질문을, "
-            "**입춘 기준 세운(연주)**과 **일지** 관계로만 짧게 짚습니다. "
-            "계약·이직·의료 결정은 전문가와 상의하고, 여기 출력은 **참고용**입니다.",
+            "계약·이직·의료 결정은 전문가와 상의하고, 여기 출력은 참고용입니다.",
         )
     if profile == "mid":
         return (
@@ -336,8 +334,16 @@ def _render_action_timing_frame(
         st.markdown(str(message or ""))
         st.caption(str(note or ""))
         if str(consulting or "").strip():
-            st.markdown("**상담 포인트**")
-            st.markdown(str(consulting))
+            consult_body = M._hx(str(consulting)).replace("\n", "<br>")
+            st.markdown(
+                f"""
+<div class="saju-step9-consult-frame">
+  <p class="saju-step9-consult-title">상담 포인트</p>
+  <div class="saju-step9-consult-body">{consult_body}</div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
         if str(caution or "").strip():
             st.warning(str(caution))
 
@@ -385,23 +391,6 @@ def render_action_timing_block(
     heading, intro = _action_section_copy(profile)
     st.subheader(heading)
     st.caption(intro)
-    st.caption(f"**만 {age_at_pick}세** 기준으로 이 연령대에 맞는 관심사 탭을 표시합니다.")
-
-    st.markdown(
-        f"- **{pick_y}년 세운 연주**: `{ctx.get('연주')}` · 천간 십성 **{ctx.get('세운십성')}**  \n"
-        f"- **일지 ↔ 세운 지지**: **{ctx.get('지지관계')}**"
-    )
-    if dr:
-        pill = str(dr.get("pillar", "") or "").strip()
-        dten = str(ctx.get("대운십성") or "—")
-        a0 = int(dr.get("age_start", 0))
-        a1 = int(dr.get("age_end", a0 + 9))
-        ys = int(dr.get("year_start", 0))
-        ye = int(dr.get("year_end", ys + 9))
-        st.caption(
-            f"같은 해의 **대운 구간**: {pill} · 천간 십성 **{dten}** ({ys}~{ye}년, 만 {a0}~{a1}세) — "
-            "대운이 바뀌는 해이면 생활 테마도 함께 바뀌는 경우가 많습니다."
-        )
 
     _render_action_timing_tabs(
         ctx=ctx,

@@ -22,7 +22,15 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from saju_app.persistence import storage as saju_storage
-from saju_app.ui.execution import force_scroll_to_top_then_rerun, rerun_full_app, report_exception_to_streamlit
+from saju_app.ui.execution import (
+    inject_expander_collapse_once,
+    inject_step2_tab_order_once,
+    inject_widget_focus_return_once,
+    queue_expander_collapse,
+    queue_widget_focus,
+    rerun_full_app,
+    report_exception_to_streamlit,
+)
 from saju_app.utils import (
     hx as _hx,
     html_br as _html_br,
@@ -58,23 +66,32 @@ def ensure_session_id() -> str:
     return sid
 
 
-_DRAFT_STATE_KEYS = (
-    "u_name",
-    "step2_self_name_input",
-    "u_gender",
-    "u_y",
-    "u_m",
-    "u_d",
-    "u_time",
-    "u_lunar",
-    "u_leap",
-    "u_contact",
-    "contact_value",
-    "u_data",
-    "u_gapja",
+_DRAFT_SKIP_KEYS_ON_RESTORE = frozenset(
+    {
+        "session_id",
+        "step",
+        "step2_opp_name_input",
+        "p_y",
+        "p_m",
+        "p_d",
+        "p_time",
+        "p_lunar",
+        "p_leap",
+        "p_gender",
+        "p_name",
+        "partner_name_snapshot",
+        "p_data",
+        "p_gapja",
+        "_step4_partner_bundle",
+        "_partner_registered",
+    }
+)
+
+_PARTNER_ANALYSIS_STATE_KEYS: tuple[str, ...] = (
     "p_name",
-    "step2_opp_name_input",
     "partner_name_snapshot",
+    "p_data",
+    "p_gapja",
     "p_gender",
     "p_y",
     "p_m",
@@ -82,11 +99,240 @@ _DRAFT_STATE_KEYS = (
     "p_time",
     "p_lunar",
     "p_leap",
-    "p_data",
-    "p_gapja",
-    "agree",
-    "_step2_payload",
-    "_return_step_after_input",
+    "_step4_partner_bundle",
+    "_step4_pair_sig",
+    "saju_engine__partner",
+    "saju_engine_sig__partner",
+)
+
+
+def clear_partner_analysis_state() -> None:
+    """상대방 미등록·정보입력 초기화 시 궁합(STEP4)에 쓰이는 모든 상대 세션을 제거합니다."""
+    for key in _PARTNER_ANALYSIS_STATE_KEYS:
+        st.session_state.pop(key, None)
+    st.session_state["_partner_registered"] = False
+    st.session_state.pop("_partner_registered_visit", None)
+    for key in list(st.session_state.keys()):
+        sk = str(key)
+        if sk.startswith("step2_opp_name_input") or sk.startswith("step2_p_"):
+            st.session_state.pop(key, None)
+        elif sk.startswith("_step2_opp_"):
+            st.session_state.pop(key, None)
+    st.session_state.pop("_step2_opp_unlocked", None)
+    st.session_state.pop("_step2_self_snap", None)
+
+
+def partner_is_registered() -> bool:
+    """STEP2에서 상대방 이름·생년월일을 저장한 경우에만 True."""
+    if not bool(st.session_state.get("_partner_registered")):
+        return False
+    owner_visit = str(st.session_state.get("_partner_registered_visit") or "").strip()
+    cur_visit = str(st.session_state.get("visit_id") or "").strip()
+    if not owner_visit or not cur_visit or owner_visit != cur_visit:
+        return False
+    return bool(_partner_name_from_session())
+
+
+def personal_input_owner_matches() -> bool:
+    """현재 visit_id가 마지막 정보입력 저장 주체와 일치하는지."""
+    owner = str(st.session_state.get("_personal_input_visit_id") or "").strip()
+    visit = str(st.session_state.get("visit_id") or "").strip()
+    return bool(owner and visit and owner == visit)
+
+
+def mark_partner_registered(*, active: bool) -> None:
+    st.session_state["_partner_registered"] = bool(active)
+    if active:
+        st.session_state["_partner_registered_visit"] = str(
+            st.session_state.get("visit_id") or ""
+        ).strip()
+    else:
+        st.session_state.pop("_partner_registered_visit", None)
+
+_STEP2_FORM_DRAFT_KEYS = frozenset(
+    {
+        "step2_self_name_input",
+        "u_name",
+        "user_name_snapshot",
+        "u_gender",
+        "u_y",
+        "u_m",
+        "u_d",
+        "u_time",
+        "u_lunar",
+        "u_leap",
+        "u_contact",
+        "contact_value",
+        "p_name",
+        "partner_name_snapshot",
+    }
+)
+
+
+_STEP2_EPOCH_WIDGET_BASES = ("u_y", "u_m", "u_d", "u_contact", "p_y", "p_m", "p_d")
+
+
+def _pop_step2_form_keys_from_session() -> None:
+    """STEP2 입력 위젯·개인정보 세션 키 제거."""
+    for key in list(st.session_state.keys()):
+        sk = str(key)
+        if sk.startswith("step2_self_name_input") or sk.startswith("step2_opp_name_input"):
+            st.session_state.pop(key, None)
+        if sk.startswith("_step2_opp_blank_"):
+            st.session_state.pop(key, None)
+        for base in _STEP2_EPOCH_WIDGET_BASES:
+            if sk.startswith(f"step2_{base}_"):
+                st.session_state.pop(key, None)
+    for key in _STEP2_FORM_DRAFT_KEYS:
+        st.session_state.pop(key, None)
+    for key in (
+        "p_y",
+        "p_m",
+        "p_d",
+        "p_time",
+        "p_lunar",
+        "p_leap",
+        "p_gender",
+        "p_data",
+        "p_gapja",
+        "_step4_partner_bundle",
+        "u_data",
+        "u_gapja",
+        "u_name",
+        "user_name_snapshot",
+        "p_name",
+        "partner_name_snapshot",
+        "contact_value",
+    ):
+        st.session_state.pop(key, None)
+    for key in list(st.session_state.keys()):
+        sk = str(key)
+        if sk.startswith("_step2_opp_privacy_") or sk.startswith("_step2_opp_guard_"):
+            st.session_state.pop(key, None)
+    st.session_state["_step2_widget_epoch"] = int(st.session_state.get("_step2_widget_epoch", 0)) + 1
+
+
+_STEP2_INPUT_KEY_PREFIXES: tuple[str, ...] = (
+    "in4_",
+    "s2v3_",
+    "step2_self_name_input",
+    "step2_opp_name_input",
+    "step2_u_",
+    "step2_p_",
+    "_step2_tabs_seeded_",
+    "_step2_opp_privacy_",
+    "_step2_opp_guard_",
+    "_step2_opp_blank_",
+    "_step2_opp_p_",
+    "_step2_opp_",
+    "_s2v3_",
+    "_in4_",
+)
+
+
+def hard_reset_personal_input_state(*, clear_analysis: bool = False) -> None:
+    """정보입력(STEP2) — 타 사용자/이전 입력·서버 prefill·위젯 잔존을 강제 제거."""
+    clear_partner_analysis_state()
+    for key in list(st.session_state.keys()):
+        sk = str(key)
+        for prefix in _STEP2_INPUT_KEY_PREFIXES:
+            if sk.startswith(prefix):
+                st.session_state.pop(key, None)
+    _pop_step2_form_keys_from_session()
+    for key in (
+        "agree",
+        "step2_revisit_pin",
+        "step2_revisit_pin_confirm",
+        "_step2_prefill_payload",
+        "_step2_payload",
+        "_step2_apply_pending",
+        "_step2_apply_error",
+        "_personal_input_visit_id",
+        "_personal_input_saved",
+        "saju_briefing",
+        "saju_briefing_fp",
+        "_saju_step2_input_privacy_guard",
+    ):
+        st.session_state.pop(key, None)
+    for key in list(st.session_state.keys()):
+        sk = str(key)
+        if sk.startswith("_step2_names_armed_") or sk.startswith("_step2_name_bound_"):
+            st.session_state.pop(key, None)
+    st.session_state["_step2_opp_epoch"] = int(st.session_state.get("_step2_opp_epoch", 0)) + 1
+    st.session_state.pop("_step2_opp_user_touched", None)
+    st.session_state.pop("_step2_opp_unlocked", None)
+    st.session_state.pop("_step2_self_snap", None)
+    st.session_state.pop("_s2v3_meta", None)
+    st.session_state.pop("_s2v3_seeded_retain", None)
+    st.session_state.pop("_in4_meta", None)
+    st.session_state.pop("_in4_seeded_retain", None)
+    st.session_state.pop("_step2_retain_form_active", None)
+    st.session_state.reset_id = int(st.session_state.get("reset_id", 0)) + 1
+    for key in list(st.session_state.keys()):
+        sk = str(key)
+        if sk.startswith("_step2_opp_privacy_") or sk.startswith("_saju_step2_input_privacy_guard_"):
+            st.session_state.pop(key, None)
+        if sk.startswith("_s2v3_widgets_ready_") or sk.startswith("_in4_widgets_ready_"):
+            st.session_state.pop(key, None)
+        if sk.startswith("_saju_step2_privacy_guard_injected_"):
+            st.session_state.pop(key, None)
+    st.session_state["_step2_prefill_payload"] = {}
+    if clear_analysis:
+        for key in (
+            "u_data",
+            "u_gapja",
+            "u_name",
+            "user_name_snapshot",
+            "contact_value",
+            "saju_engine",
+            "saju_engine_sig",
+            "birth_year",
+            "birth_month",
+            "birth_day",
+            "step2_u_bdate",
+            "step2_u_bdate_text",
+            "step2_p_bdate_text",
+        ):
+            st.session_state.pop(key, None)
+    try:
+        rotate_visit_identity()
+    except Exception:
+        pass
+    try:
+        purge_all_step2_prefill_from_server()
+    except Exception:
+        pass
+    try:
+        sid = ensure_session_id()
+        saju_storage.clear_session_draft(sid)
+    except Exception:
+        pass
+
+
+def scrub_personal_input_on_home() -> None:
+    """홈(STEP1) 진입 — 정보입력란·이름·상대방 잔존 제거(타 단말 노출 방지)."""
+    hard_reset_personal_input_state(clear_analysis=False)
+    for key in ("u_name", "user_name_snapshot", "contact_value", "agree"):
+        st.session_state.pop(key, None)
+
+
+def force_step2_privacy_reset(*, clear_session_draft: bool = True) -> None:
+    """STEP2 — 타 사용자/이전 입력 잔존 강제 제거(세션·서버 KV·위젯 epoch)."""
+    hard_reset_personal_input_state(clear_analysis=False)
+    if not clear_session_draft:
+        return
+    try:
+        sid = ensure_session_id()
+        saju_storage.clear_session_draft(sid)
+    except Exception:
+        pass
+    try:
+        clear_step2_prefill_storage()
+        purge_shared_step2_prefill_once()
+    except Exception:
+        pass
+
+_DRAFT_STATE_KEYS = (
     "step11_chat_room_key",
 )
 
@@ -101,6 +347,305 @@ def _jsonable_session_value(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(k): _jsonable_session_value(v) for k, v in value.items()}
     return str(value)
+
+
+def persist_current_session_draft(step: int | None = None) -> None:
+    """개인정보·사주 draft 서버 저장 비활성 (타 사용자 교차 노출 방지)."""
+    _ = step
+    return
+
+
+_BROWSER_CLIENT_TOKEN_KEY = "_saju_browser_client_token"
+_BROWSER_PRIVACY_CHECKED_KEY = "_saju_browser_privacy_checked"
+_BROWSER_PRIVACY_PENDING_KEY = "_saju_browser_privacy_pending"
+
+
+def _session_has_foreign_personal_leak() -> bool:
+    """저장 주체와 다른 visit·커밋된 스냅샷 잔존 여부 (입력 중 위젯 값은 제외)."""
+    owner = str(st.session_state.get("_personal_input_visit_id") or "").strip()
+    visit = str(st.session_state.get("visit_id") or "").strip()
+    if owner and visit and owner != visit:
+        return True
+    if not personal_input_owner_matches():
+        if str(st.session_state.get("u_name") or st.session_state.get("user_name_snapshot") or "").strip():
+            return True
+        if str(st.session_state.get("p_name") or st.session_state.get("partner_name_snapshot") or "").strip():
+            return True
+    if partner_is_registered() is False and (
+        st.session_state.get("p_gapja") or st.session_state.get("p_data")
+    ):
+        return True
+    return False
+
+
+def enforce_browser_privacy_isolation() -> bool | None:
+    """브라우저(localStorage) 단위 격리 — Streamlit 세션에 타 사용자 잔존 시 초기화.
+
+    Returns None: JS 응답 대기 중(첫 rerun).
+    """
+    if st.session_state.get(_BROWSER_PRIVACY_CHECKED_KEY):
+        if _session_has_foreign_personal_leak():
+            hard_reset_personal_input_state(clear_analysis=True)
+            st.session_state.step = 1
+        return True
+    try:
+        from streamlit_javascript import st_javascript
+    except ImportError:
+        st.session_state[_BROWSER_PRIVACY_CHECKED_KEY] = True
+        return True
+
+    raw = st_javascript(
+        """
+        (function () {
+            var roots = [];
+            try { roots.push(window); } catch (e) {}
+            try { if (window.parent && window.parent !== window) roots.push(window.parent); } catch (e) {}
+            try { if (window.top && window.top !== window) roots.push(window.top); } catch (e) {}
+            var k = "saju_privacy_client_v2";
+            var t = null;
+            for (var i = 0; i < roots.length; i++) {
+                try {
+                    var ls = roots[i].localStorage;
+                    if (!ls) continue;
+                    t = ls.getItem(k);
+                    if (!t) {
+                        t = (roots[i].crypto && roots[i].crypto.randomUUID)
+                            ? roots[i].crypto.randomUUID()
+                            : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+                        try { ls.setItem(k, t); } catch (e2) {}
+                    }
+                    if (t) break;
+                } catch (e) {}
+            }
+            if (!t) {
+                t = "ephemeral-" + String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+            }
+            return t;
+        })()
+        """,
+        key="saju_browser_privacy_client_v2",
+    )
+    if raw is None or raw == "" or raw == 0:
+        pending = int(st.session_state.get(_BROWSER_PRIVACY_PENDING_KEY, 0)) + 1
+        st.session_state[_BROWSER_PRIVACY_PENDING_KEY] = pending
+        if pending >= 2:
+            token = f"ephemeral-{pending}"
+            st.session_state[_BROWSER_CLIENT_TOKEN_KEY] = token
+            st.session_state[_BROWSER_PRIVACY_CHECKED_KEY] = True
+            return True
+        return None
+
+    st.session_state.pop(_BROWSER_PRIVACY_PENDING_KEY, None)
+
+    token = str(raw).strip()
+    prev = str(st.session_state.get(_BROWSER_CLIENT_TOKEN_KEY) or "").strip()
+    st.session_state[_BROWSER_CLIENT_TOKEN_KEY] = token
+    st.session_state[_BROWSER_PRIVACY_CHECKED_KEY] = True
+
+    foreign = _session_has_foreign_personal_leak()
+    if prev and prev != token:
+        hard_reset_personal_input_state(clear_analysis=True)
+        st.session_state.step = 1
+        return True
+    if foreign:
+        hard_reset_personal_input_state(clear_analysis=True)
+        st.session_state.step = 1
+        return True
+    return True
+
+
+def scrub_step2_partner_leak_before_widgets(*, retain: bool) -> None:
+    """STEP2 렌더 직전 — 상대방 legacy·누수 세션 제거."""
+    if retain and step2_retain_form_allowed() and partner_is_registered():
+        return
+    clear_partner_analysis_state()
+    for key in (
+        "p_name",
+        "partner_name_snapshot",
+        "p_data",
+        "p_gapja",
+        "p_y",
+        "p_m",
+        "p_d",
+        "p_time",
+        "p_gender",
+        "p_lunar",
+        "p_leap",
+        "_step4_partner_bundle",
+    ):
+        st.session_state.pop(key, None)
+
+
+def step2_retain_form_allowed() -> bool:
+    """정보입력 수정 모드 — STEP4 등에서 「정보 입력으로」 버튼으로만 허용."""
+    if not personal_input_owner_matches():
+        return False
+    try:
+        return_step = int(st.session_state.get("_return_step_after_input") or 0)
+    except (TypeError, ValueError):
+        return False
+    if return_step < 3:
+        return False
+    return bool(st.session_state.get("_personal_input_saved"))
+
+
+def inject_step2_input_privacy_guard() -> None:
+    """STEP2 이름 입력란 — 네이버 인앱 WebView 자동완성·bfcache·타 사용자 잔존값 억제."""
+    import streamlit.components.v1 as components
+
+    rid = int(st.session_state.get("reset_id", 0))
+    mk = f"_saju_step2_privacy_guard_injected_{rid}"
+    if st.session_state.get(mk):
+        return
+    st.session_state[mk] = True
+
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"<script>{_STEP2_INPUT_PRIVACY_GUARD_SCRIPT}</script>"
+        f"<script>window.__sajuStep2PrivacyRid={rid};</script>"
+        "</body></html>"
+    )
+    with st.container(key=f"saju_step2_privacy_guard_{rid}"):
+        components.html(html, height=1, scrolling=False)
+    st.markdown(
+        f"<script>{_STEP2_INPUT_PRIVACY_GUARD_SCRIPT}</script>",
+        unsafe_allow_html=True,
+    )
+
+
+_STEP2_INPUT_PRIVACY_GUARD_SCRIPT = """
+(() => {
+  const getWin = () => {
+    try {
+      if (window.parent && window.parent.document) return window.parent;
+    } catch (e) {}
+    try {
+      if (window.top && window.top.document) return window.top;
+    } catch (e) {}
+    return window;
+  };
+  const pw = getWin();
+  const doc = pw.document;
+  if (!doc) return;
+
+  const roots = [
+    ".st-key-in4_stack",
+    ".st-key-in4_self",
+    ".st-key-in4_opp",
+    ".st-key-s2v3_stack",
+    ".st-key-s2v3_self",
+    ".st-key-s2v3_opp",
+    ".st-key-step2_section_stack",
+    ".st-key-step2_navertone_self",
+    ".st-key-step2_navertone_opp",
+  ];
+  const partnerRoots = [
+    ".st-key-in4_opp",
+    ".st-key-s2v3_opp",
+    ".st-key-step2_navertone_opp",
+    ".st-key-step2_section_stack .st-key-step2_navertone_opp",
+  ];
+
+  const clearPartnerAutofill = (el) => {
+    if (!el || el.dataset.sajuUserEdited === "1") return;
+    if (document.activeElement === el) return;
+    try {
+      const inOpp = partnerRoots.some((ps) => {
+        try { return !!el.closest(ps); } catch (e) { return false; }
+      });
+      if (!inOpp) return;
+      const tag = (el.tagName || "").toLowerCase();
+      const isNum = el.type === "number" || (el.closest && el.closest(".stNumberInput"));
+      const raw = String(el.value || "").trim();
+      if (tag === "select") {
+        if (raw && raw !== "모름" && raw !== "양력" && raw !== "여자") {
+          try { el.selectedIndex = 0; el.dispatchEvent(new Event("change", { bubbles: true })); } catch (e) {}
+        }
+        return;
+      }
+      if (!raw) return;
+      if (isNum) {
+        el.value = el.getAttribute("data-saju-default") || "1995";
+      } else {
+        el.value = "";
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (e) {}
+  };
+
+  const patchInput = (el, isPartner) => {
+    if (!el || el.dataset.sajuStep2Patched === "1") return;
+    el.dataset.sajuStep2Patched = "1";
+    el.setAttribute("autocomplete", "off");
+    el.setAttribute("autocorrect", "off");
+    el.setAttribute("autocapitalize", "off");
+    el.setAttribute("spellcheck", "false");
+    el.setAttribute("data-1p-ignore", "true");
+    el.setAttribute("data-lpignore", "true");
+    el.setAttribute("data-bwignore", "true");
+    el.setAttribute("data-form-type", "other");
+    try {
+      el.setAttribute("name", "saju-step2-" + (isPartner ? "opp-" : "self-") + Math.random().toString(36).slice(2, 10));
+    } catch (e) {}
+    if (el.type === "text" || el.type === "number" || !el.type) {
+      el.addEventListener("input", () => { el.dataset.sajuUserEdited = "1"; }, { passive: true });
+    }
+    if (isPartner) {
+      clearPartnerAutofill(el);
+      [120, 400, 900, 1800, 3200, 6000].forEach((ms) => pw.setTimeout(() => clearPartnerAutofill(el), ms));
+    }
+  };
+
+  const patchTextInput = (el, isPartner) => patchInput(el, isPartner);
+
+  const patchAll = () => {
+    roots.forEach((sel) => {
+      try {
+        doc.querySelectorAll(sel + " input, " + sel + " select").forEach((el) => {
+          const isPartner = partnerRoots.some((ps) => {
+            try { return !!el.closest(ps); } catch (e) { return false; }
+          });
+          patchInput(el, isPartner);
+        });
+      } catch (e) {}
+    });
+  };
+
+  const clearPartnerSection = () => {
+    partnerRoots.forEach((sel) => {
+      try {
+        doc.querySelectorAll(sel + " input, " + sel + " select").forEach((el) => clearPartnerAutofill(el));
+      } catch (e) {}
+    });
+  };
+
+  patchAll();
+  [80, 200, 480, 1000, 2000, 3500, 5500].forEach((ms) => pw.setTimeout(patchAll, ms));
+
+  try {
+    const root = doc.body || doc.documentElement;
+    if (root && pw.MutationObserver) {
+      new pw.MutationObserver(patchAll).observe(root, { childList: true, subtree: true });
+    }
+  } catch (e) {}
+
+  try {
+    pw.addEventListener("pageshow", (ev) => {
+      if (ev && ev.persisted) clearPartnerSection();
+      patchAll();
+    });
+  } catch (e) {}
+
+  try {
+    const ua = String((pw.navigator && pw.navigator.userAgent) || "");
+    if (/NAVER|NaverApp|KAKAOTALK|Instagram|Line\\/|FBAN|FBAV/i.test(ua)) {
+      [600, 1500, 3000].forEach((ms) => pw.setTimeout(clearPartnerSection, ms));
+    }
+  } catch (e) {}
+})();
+"""
 
 
 def collect_session_draft_state() -> dict[str, Any]:
@@ -133,10 +678,13 @@ def reset_app_to_home_after_browser_reload() -> None:
     st.session_state.pop("_router_last_step", None)
     st.session_state["_session_draft_restored"] = True
     st.session_state["_saju_skip_draft_step_restore"] = True
-    st.session_state["_force_scroll_to_top_after_rerun"] = True
-    st.session_state["_saju_must_scroll_top"] = True
-    st.session_state["_saju_pending_scroll_top"] = True
+    st.session_state.pop("_force_scroll_to_top_after_rerun", None)
+    st.session_state.pop("_saju_must_scroll_top", None)
+    st.session_state.pop("_saju_pending_scroll_top", None)
+    st.session_state.pop("_saju_home_viewport_done", None)
+    st.session_state["_saju_apply_home_viewport"] = True
     clear_feature_ephemeral_state()
+    hard_reset_personal_input_state(clear_analysis=True)
     try:
         sid = ensure_session_id()
         saju_storage.save_session_draft(
@@ -225,41 +773,25 @@ def guard_feature_step_without_explicit_nav() -> None:
     clear_feature_ephemeral_state()
 
 
-def persist_current_session_draft(step: int | None = None) -> None:
-    """현재 STEP과 중간 입력값을 KV에 저장해 모바일 끊김/뒤로가기에 대비합니다."""
-    try:
-        sid = ensure_session_id()
-        cur_step = int(step if step is not None else st.session_state.get("step", 1))
-        import time as _time
-
-        last_step = st.session_state.get("_draft_persisted_at_step")
-        last_ts = float(st.session_state.get("_draft_persist_ts", 0.0) or 0.0)
-        now = _time.time()
-        if last_step == cur_step and (now - last_ts) < 25.0:
-            return
-        st.session_state["_draft_persisted_at_step"] = cur_step
-        st.session_state["_draft_persist_ts"] = now
-        draft_step = cur_step
-        if cur_step in _FEATURE_STEPS:
-            draft_step = int(st.session_state.get("_last_analysis_step", 1))
-        saju_storage.save_session_draft(
-            sid,
-            {
-                "step": max(STEP_NAV_MIN, min(STEP_NAV_MAX, draft_step)),
-                "state": collect_session_draft_state(),
-            },
-        )
-    except Exception:
-        pass
-
-
 def restore_session_draft_if_needed() -> None:
-    """앱 재진입 시 입력값 draft만 복원합니다. 화면(STEP)은 새로고침 시 홈(1) 고정."""
+    """앱 재진입 시 draft 복원 — 개인정보(u_data·이름·상대방)는 복원하지 않습니다."""
     if st.session_state.get("_session_draft_restored"):
         return
     if st.session_state.get("_saju_reload_check_pending"):
         return
     st.session_state["_session_draft_restored"] = True
+    clear_partner_analysis_state()
+    for key in (
+        "u_name",
+        "user_name_snapshot",
+        "contact_value",
+        "p_name",
+        "partner_name_snapshot",
+        "p_data",
+        "p_gapja",
+        "_step4_partner_bundle",
+    ):
+        st.session_state.pop(key, None)
     try:
         sid = ensure_session_id()
         draft = saju_storage.load_session_draft(sid)
@@ -267,9 +799,9 @@ def restore_session_draft_if_needed() -> None:
             return
         state = draft.get("state")
         if not isinstance(state, dict):
-            state = {}
+            return
         for key, value in state.items():
-            if str(key) in ("session_id", "step"):
+            if str(key) not in _DRAFT_STATE_KEYS:
                 continue
             if key not in st.session_state:
                 st.session_state[key] = value
@@ -346,27 +878,6 @@ def _gapja_from_birth(
     )
 
 
-def mark_birth_adjustment_notices_shown(*, user: bool = False, partner: bool = False) -> None:
-    _ = (user, partner)
-
-
-def birth_adjustment_notices_already_shown(subject: str) -> bool:
-    _ = subject
-    return True
-
-
-def render_birth_adjustment_notices_for_role(
-    *,
-    role: str,
-    display_name: str,
-    role_label: str = "",
-    compact: bool = False,
-    partner_step4_hint: bool = False,
-) -> bool:
-    _ = (role, display_name, role_label, compact, partner_step4_hint)
-    return False
-
-
 def render_step_intro_banner(
     text: str,
     *,
@@ -407,11 +918,6 @@ def render_mood_image(
         unsafe_allow_html=True,
     )
     return True
-
-
-def mood_images_installed() -> list[str]:
-    """디버그·관리용: 설치된 무드 이미지 slug 목록."""
-    return list_mood_slugs()
 
 
 # -------------------- 조후/적천수 가이드 (STEP3 등에서 사용) --------------------
@@ -812,13 +1318,20 @@ def _step_dock_html_full(*, unlocked: bool) -> str:
 
 
 def analysis_flow_unlocked() -> bool:
-    """본인 사주 간지가 계산되어 있으면 STEP3+·하단 메뉴 이동을 허용합니다.
+    """본인 사주가 저장·계산되었으면 STEP3+·하단 메뉴 이동을 허용합니다.
 
-    ``u_name`` 은 STEP2 ``text_input`` 키와 묶여 있어, 다른 STEP에서는 위젯 미생성으로
-    세션에서 비는 경우가 있습니다. 잠금 여부는 **``u_gapja``** 만으로 판별합니다.
+    ``u_name`` 은 STEP2 위젯 키와 묶여 다른 STEP에서 비어 있을 수 있어,
+    ``u_gapja``·``u_data``·``_personal_input_saved``·``saju_engine`` 을 함께 봅니다.
     """
-    ug = st.session_state.get("u_gapja")
-    return bool(ug and isinstance(ug, (list, tuple)) and len(ug) >= 3)
+    if _gapja_pillars_valid(st.session_state.get("u_gapja"), min_pillars=3):
+        return True
+    if st.session_state.get("_personal_input_saved") and st.session_state.get("u_data"):
+        _resync_user_gapja_from_u_data()
+        if _gapja_pillars_valid(st.session_state.get("u_gapja"), min_pillars=3):
+            return True
+    if _engine_dict_coherent(st.session_state.get("saju_engine")):
+        return True
+    return False
 
 
 def session_user_display_name() -> str:
@@ -848,16 +1361,193 @@ STEP2_TIME_OPTIONS = (
 
 # -------------------- STEP2 prefill persistence (persistence로 위임) --------------------
 from saju_app.persistence.prefill import (  # noqa: E402
-    load_step2_prefill_payload,
-    persist_step2_prefill_to_disk,
+    clear_step2_prefill_storage,
+    ensure_fresh_client_identity,
+    purge_all_step2_prefill_from_server,
+    purge_shared_step2_prefill_once,
+    rotate_visit_identity,
 )
 
 
 # -------------------- input helpers --------------------
+_AUTOCOMPLETE_OFF = "off"
+_AUTOCOMPLETE_PASSWORD = "new-password"
+_AUTOCOMPLETE_REVISIT_PIN = "one-time-code"
+_REVISIT_PIN_RULE_TEXT = "비밀번호는 숫자 특수문자 포함 6자 이상 설정 하세요"
+_REVISIT_PIN_RULE_TEXT_HOME = "비밀번호는 특수문자 포함 6자 이상 설정 하세요"
+
+_GLOBAL_AUTOFILL_GUARD_SCRIPT = """
+<script>
+(() => {{
+    const pw = window.parent !== window ? window.parent : window;
+    const doc = pw.document;
+    if (!doc) return;
+    let queued = false;
+    const stripEnterApplyHint = (el) => {{
+        if (!el) return;
+        try {{
+            const ph = String(el.getAttribute("placeholder") || "");
+            if (/엔터|신청|Press Enter|Enter to/i.test(ph)) {{
+                el.removeAttribute("placeholder");
+            }}
+            const aria = String(el.getAttribute("aria-label") || "");
+            if (/엔터|신청|Press Enter|Enter to/i.test(aria)) {{
+                el.removeAttribute("aria-label");
+            }}
+        }} catch (_) {{}}
+    }};
+    const patchOne = (el) => {{
+        if (!el || el.nodeType !== 1) return;
+        const tag = String(el.tagName || "").toLowerCase();
+        if (tag !== "input" && tag !== "textarea") return;
+        stripEnterApplyHint(el);
+        const type = String(el.type || "text").toLowerCase();
+        if (
+            type === "hidden" ||
+            type === "checkbox" ||
+            type === "radio" ||
+            type === "submit" ||
+            type === "button" ||
+            type === "file"
+        ) {{
+            return;
+        }}
+        let revisitRoot = null;
+        try {{
+            revisitRoot = el.closest(
+                ".st-key-step1_cta_row_main, .st-key-step1_revisit_pin_in, [class*='st-key-step2_revisit_pin']"
+            );
+        }} catch (_) {{
+            revisitRoot = null;
+        }}
+        const ac =
+            type === "password"
+                ? (revisitRoot ? "one-time-code" : "new-password")
+                : "off";
+        el.setAttribute("autocomplete", ac);
+        el.setAttribute("autocorrect", "off");
+        el.setAttribute("autocapitalize", "off");
+        el.setAttribute("spellcheck", "false");
+        el.setAttribute("data-1p-ignore", "true");
+        el.setAttribute("data-lpignore", "true");
+        el.setAttribute("data-form-type", "other");
+        if (type === "password") {{
+            el.setAttribute("data-bwignore", "true");
+        }}
+    }};
+    const hideInputInstructions = () => {{
+        try {{
+            doc.querySelectorAll('[data-testid="InputInstructions"]').forEach((node) => {{
+                const inStep2 = node.closest(
+                    ".st-key-step2_navertone_self, .st-key-step2_navertone_opp, .st-key-step2_save_actions"
+                );
+                if (inStep2) node.remove();
+            }});
+        }} catch (_) {{}}
+    }};
+    const patchAll = () => {{
+        queued = false;
+        try {{
+            doc.querySelectorAll("input, textarea").forEach(patchOne);
+        }} catch (_) {{}}
+        hideInputInstructions();
+    }};
+    const schedule = () => {{
+        if (queued) return;
+        queued = true;
+        pw.requestAnimationFrame(patchAll);
+    }};
+    schedule();
+    [120, 380, 900].forEach((ms) => pw.setTimeout(schedule, ms));
+    try {{
+        const root = doc.body || doc.documentElement;
+        if (root && pw.MutationObserver) {{
+            new pw.MutationObserver(schedule).observe(root, {{
+                childList: true,
+                subtree: true,
+            }});
+        }}
+    }} catch (_) {{}}
+}})();
+</script>
+"""
+
+_REVISIT_PIN_AUTOFILL_SCRIPT = """
+<script>
+(() => {{
+    const pw = window.parent !== window ? window.parent : window;
+    const doc = pw.document;
+    if (!doc) return;
+    const selectors = [
+        ".st-key-step1_cta_row_main input[type=password]",
+        ".st-key-step1_revisit_pin_in input[type=password]",
+        '[class*="st-key-step2_revisit_pin"] input[type=password]',
+        'form[data-testid="stForm"] input[type=password][autocomplete="one-time-code"]',
+    ];
+    const patchRevisitPin = (el) => {{
+        if (!el || el.dataset.sajuRevisitPatched === "1") return;
+        el.dataset.sajuRevisitPatched = "1";
+        el.setAttribute("autocomplete", "one-time-code");
+        el.setAttribute("autocorrect", "off");
+        el.setAttribute("autocapitalize", "off");
+        el.setAttribute("spellcheck", "false");
+        el.setAttribute("data-1p-ignore", "true");
+        el.setAttribute("data-lpignore", "true");
+        el.setAttribute("data-bwignore", "true");
+        el.setAttribute("data-form-type", "other");
+        el.setAttribute("inputmode", "text");
+        try {{
+            el.setAttribute(
+                "name",
+                "saju-revisit-pin-" + Math.random().toString(36).slice(2, 10)
+            );
+        }} catch (_) {{}}
+        el.setAttribute("readonly", "readonly");
+        const unlock = () => {{
+            try {{ el.removeAttribute("readonly"); }} catch (_) {{}}
+        }};
+        el.addEventListener("focus", unlock, {{ passive: true }});
+        el.addEventListener("click", unlock, {{ passive: true }});
+    }};
+    const patchForms = () => {{
+        try {{
+            doc.querySelectorAll('form[data-testid="stForm"]').forEach((form) => {{
+                form.setAttribute("autocomplete", "off");
+            }});
+        }} catch (_) {{}}
+    }};
+    const run = () => {{
+        patchForms();
+        selectors.forEach((sel) => {{
+            try {{
+                doc.querySelectorAll(sel).forEach(patchRevisitPin);
+            }} catch (_) {{}}
+        }});
+    }};
+    run();
+    [80, 220, 520, 1100].forEach((ms) => pw.setTimeout(run, ms));
+    try {{
+        const root = doc.body || doc.documentElement;
+        if (root && pw.MutationObserver) {{
+            new pw.MutationObserver(run).observe(root, {{ childList: true, subtree: true }});
+        }}
+    }} catch (_) {{}}
+}})();
+</script>
+"""
+
+
+def _with_autocomplete_kwargs(kwargs: dict[str, Any], *, password: bool = False) -> dict[str, Any]:
+    out = dict(kwargs)
+    if "autocomplete" not in out:
+        out["autocomplete"] = _AUTOCOMPLETE_PASSWORD if password else _AUTOCOMPLETE_OFF
+    return out
+
+
 def text_input_no_autofill(*args, **kwargs):
     """브라우저 저장 정보(자동완성) 팝업 억제."""
-    if "autocomplete" not in kwargs:
-        kwargs["autocomplete"] = "off"
+    password = kwargs.get("type") == "password"
+    kwargs = _with_autocomplete_kwargs(kwargs, password=password)
     try:
         return st.text_input(*args, **kwargs)
     except TypeError:
@@ -865,12 +1555,61 @@ def text_input_no_autofill(*args, **kwargs):
         return st.text_input(*args, **kwargs)
 
 
-def inject_name_input_autofill_guard() -> None:
-    """STEP2 자동완성 — ``text_input_no_autofill``(autocomplete=off)만 사용.
+def password_input_no_autofill(*args, **kwargs):
+    """비밀번호 입력 — 저장된 암호 제안 억제."""
+    kwargs["type"] = "password"
+    kwargs = _with_autocomplete_kwargs(kwargs, password=True)
+    try:
+        return st.text_input(*args, **kwargs)
+    except TypeError:
+        kwargs.pop("autocomplete", None)
+        return st.text_input(*args, **kwargs)
 
-    JS/MutationObserver는 Streamlit React ``removeChild`` 오류를 유발할 수 있어 비활성화합니다.
-    """
-    return
+
+def render_revisit_pin_rule_hint(*, compact: bool = False, home: bool = False) -> None:
+    """재방문 비밀번호 입력란 위 규칙 안내."""
+    cls = "saju-revisit-pin-rule saju-revisit-pin-rule--compact" if compact else "saju-revisit-pin-rule"
+    text = _REVISIT_PIN_RULE_TEXT_HOME if home else _REVISIT_PIN_RULE_TEXT
+    st.markdown(
+        f'<p class="{cls}">{_hx(text)}</p>',
+        unsafe_allow_html=True,
+    )
+
+
+def inject_revisit_pin_autofill_guard_once() -> None:
+    """재방문 PIN — Chrome/Edge 「저장된 암호」 팝업 추가 억제."""
+    if st.session_state.get("_saju_revisit_pin_autofill_guard"):
+        return
+    st.session_state["_saju_revisit_pin_autofill_guard"] = True
+    st.markdown(_REVISIT_PIN_AUTOFILL_SCRIPT, unsafe_allow_html=True)
+
+
+def revisit_pin_input_no_autofill(*args, **kwargs):
+    """재방문 비밀번호 — 브라우저 저장 암호 팝업 강력 억제."""
+    inject_revisit_pin_autofill_guard_once()
+    kwargs["type"] = "password"
+    out = dict(kwargs)
+    out["autocomplete"] = _AUTOCOMPLETE_REVISIT_PIN
+    try:
+        widget = st.text_input(*args, **out)
+    except TypeError:
+        out.pop("autocomplete", None)
+        widget = st.text_input(*args, **out)
+    inject_revisit_pin_autofill_guard_once()
+    return widget
+
+
+def text_area_no_autofill(*args, **kwargs):
+    """여러 줄 입력 — Streamlit textarea는 autocomplete 미지원, 전역 JS가 보완."""
+    return st.text_area(*args, **kwargs)
+
+
+def inject_global_input_autofill_guard() -> None:
+    """앱 전체 input/textarea — 브라우저 저장 암호·번호 자동완성 억제."""
+    if st.session_state.get("_saju_autofill_guard_injected"):
+        return
+    st.session_state["_saju_autofill_guard_injected"] = True
+    st.markdown(_GLOBAL_AUTOFILL_GUARD_SCRIPT, unsafe_allow_html=True)
 
 
 def number_input_optimized(label: str, value: int, min_value: int, max_value: int, key: str, suffix: str):
@@ -890,11 +1629,6 @@ def number_input_optimized(label: str, value: int, min_value: int, max_value: in
         )
     except Exception:
         return int(st.number_input(label, min_value=int(min_value), max_value=int(max_value), value=int(value), step=1, key=unique_key))
-
-
-def _step2_grid_anchor() -> None:
-    """레거시 호환: 예전 HTML 앵커는 React DOM 충돌을 유발할 수 있어 비웁니다."""
-    return
 
 
 def _step2_lbl(text: str) -> None:
@@ -920,136 +1654,9 @@ def clear_goto_query_and_reset_nav_tracking():
 
 
 def try_restore_step2_from_disk_prefill_if_needed() -> None:
-    """세션에 본인 간지가 비었을 때, 디스크 STEP2 prefill 이 있으면 세션을 채웁니다.
-
-    `?goto=` HTML 링크로 문서가 다시 로드되며 Streamlit 세션이 초기화된 환경(일부 인앱 WebView 등)에서
-    사주 분석(STEP3) 직후 궁합(STEP4) 이동 시 빈 세션으로 게이트만 보이는 문제를 완화합니다.
-    """
-    if _gapja_pillars_valid(st.session_state.get("u_gapja"), min_pillars=3):
-        return
-    pre = load_step2_prefill_payload()
-    if not isinstance(pre, dict) or not pre:
-        return
-    u_name = str(pre.get("u_name") or "").strip()
-    if not u_name:
-        return
-    try:
-        u_y = int(pre.get("u_y", 0))
-        u_m = int(pre.get("u_m", 0))
-        u_d = int(pre.get("u_d", 0))
-    except (TypeError, ValueError):
-        return
-    if not (1900 <= u_y <= 2100 and 1 <= u_m <= 12):
-        return
-    last_d = calendar.monthrange(u_y, u_m)[1]
-    if not (1 <= u_d <= last_d):
-        return
-
-    u_t_str = str(pre.get("u_t_str") or "모름")
-    if u_t_str not in STEP2_TIME_OPTIONS:
-        u_t_str = "모름"
-    _u_lun = str(pre.get("u_lunar", "양력")) == "음력"
-    _u_lp = str(pre.get("u_leap", "평달")) == "윤달"
-
-    try:
-        u_gapja = _gapja_from_birth(u_y, u_m, u_d, u_t_str, is_lunar=_u_lun, is_leap=_u_lp)
-    except Exception:
-        return
-    if not u_gapja or len(u_gapja) < 3:
-        return
-
-    st.session_state.u_name = u_name
-    st.session_state.user_name_snapshot = str(u_name).strip()
-    ug = str(pre.get("u_gender") or "남자")
-    st.session_state.u_gender = ug if ug in ("남자", "여자") else "남자"
-    st.session_state.u_data = (u_y, u_m, u_d, u_t_str, _u_lun, _u_lp)
-    st.session_state.u_gapja = list(u_gapja)
-    cv = str(pre.get("contact_num") or "").strip()
-    if cv:
-        st.session_state.contact_value = cv
-
-    opponent_name = str(pre.get("opponent_name", "")).strip()
-    if not opponent_name:
-        st.session_state.p_name = None
-        st.session_state.pop("partner_name_snapshot", None)
-        st.session_state.p_gapja = None
-        st.session_state.p_data = None
-        st.session_state.p_gender = None
-        return
-
-    try:
-        opponent_year = int(pre.get("opponent_year", 1995))
-        opponent_month = int(pre.get("opponent_month", 1))
-        opponent_day = int(pre.get("opponent_day", 1))
-    except (TypeError, ValueError):
-        st.session_state.p_name = None
-        st.session_state.pop("partner_name_snapshot", None)
-        st.session_state.p_gapja = None
-        st.session_state.p_data = None
-        st.session_state.p_gender = None
-        return
-    if not (1900 <= opponent_year <= 2100 and 1 <= opponent_month <= 12):
-        st.session_state.p_name = None
-        st.session_state.pop("partner_name_snapshot", None)
-        st.session_state.p_gapja = None
-        st.session_state.p_data = None
-        st.session_state.p_gender = None
-        return
-    last_d_opp = calendar.monthrange(opponent_year, opponent_month)[1]
-    if not (1 <= opponent_day <= last_d_opp):
-        st.session_state.p_name = None
-        st.session_state.pop("partner_name_snapshot", None)
-        st.session_state.p_gapja = None
-        st.session_state.p_data = None
-        st.session_state.p_gender = None
-        return
-
-    p_t_str = str(pre.get("opponent_time", "모름"))
-    if p_t_str not in STEP2_TIME_OPTIONS:
-        p_t_str = "모름"
-    _p_lun = str(pre.get("opponent_lunar", "양력")) == "음력"
-    _p_lp = str(pre.get("opponent_leap", "평달")) == "윤달"
-
-    try:
-        p_gapja = _gapja_from_birth(
-            opponent_year,
-            opponent_month,
-            opponent_day,
-            p_t_str,
-            is_lunar=_p_lun,
-            is_leap=_p_lp,
-        )
-    except Exception:
-        st.session_state.p_name = None
-        st.session_state.pop("partner_name_snapshot", None)
-        st.session_state.p_gapja = None
-        st.session_state.p_data = None
-        st.session_state.p_gender = None
-        return
-
-    if p_gapja and len(p_gapja) >= 3:
-        p_birth = (
-            int(opponent_year),
-            int(opponent_month),
-            int(opponent_day),
-            str(p_t_str),
-            bool(_p_lun),
-            bool(_p_lp),
-        )
-        _apply_partner_birth_to_session(p_birth, p_name=opponent_name)
-        store_step4_partner_bundle(
-            p_name=opponent_name,
-            birth=p_birth,
-            p_gapja=list(st.session_state.get("p_gapja") or p_gapja),
-        )
-        pg = str(pre.get("p_gender") or "여자")
-        st.session_state.p_gender = pg if pg in ("남자", "여자") else "여자"
-    else:
-        st.session_state.p_name = None
-        st.session_state.pop("partner_name_snapshot", None)
-        st.session_state.p_gapja = None
-        st.session_state.p_data = None
-        st.session_state.p_gender = None
+    """비활성 — STEP2 개인정보는 서버 prefill/draft에 저장·복원하지 않습니다."""
+    purge_all_step2_prefill_from_server()
+    return
 
 
 _STEPS_NEED_PROFILE_FOR_NAV = frozenset({3, 4, 5, 6, 7, 8, 9, 10, 11})
@@ -1058,15 +1665,31 @@ QUICK_MENU_OPEN_KEY = "saju_quick_menu_open"
 QUICK_MENU_NAV_EPOCH_KEY = "saju_nav_epoch"
 
 
-def prepare_step_change_ui() -> None:
-    """STEP 전환 직전: 하단 「기능 바로가기」 접기 + 다음 화면 최상단 스크롤."""
-    st.session_state["_force_scroll_to_top_after_rerun"] = True
-    st.session_state["_saju_must_scroll_top"] = True
-    st.session_state["_saju_pending_scroll_top"] = True
+def prepare_step_change_ui(*, dest: int | None = None) -> None:
+    """STEP 전환 직전: 하단 「기능 바로가기」 접기 + (선택) 최상단 스크롤."""
+    st.session_state.pop("_saju_scroll_armed_epoch", None)
+    st.session_state.pop("_saju_scroll_widgets_fired", None)
     st.session_state[QUICK_MENU_OPEN_KEY] = False
     st.session_state[QUICK_MENU_NAV_EPOCH_KEY] = int(
         st.session_state.get(QUICK_MENU_NAV_EPOCH_KEY, 0)
     ) + 1
+
+    preserve_scroll = bool(st.session_state.get("_saju_nav_preserve_scroll"))
+    if int(dest or 0) == 1:
+        st.session_state["_saju_apply_home_viewport"] = True
+        st.session_state.pop("_saju_home_viewport_done", None)
+        st.session_state.pop("_saju_pending_scroll_top", None)
+        st.session_state.pop("_force_scroll_to_top_after_rerun", None)
+        st.session_state.pop("_saju_must_scroll_top", None)
+    elif preserve_scroll:
+        st.session_state.pop("_saju_pending_scroll_top", None)
+        st.session_state.pop("_saju_step_scroll_lock_ms", None)
+        st.session_state["_saju_cancel_active_scroll_lock"] = True
+    else:
+        st.session_state["_saju_pending_scroll_top"] = True
+        st.session_state["_saju_step_scroll_lock_ms"] = 50
+        st.session_state["_saju_cancel_active_scroll_lock"] = True
+    st.session_state["_saju_nav_from_prepare"] = True
     legacy = "saju_bottom_quick_menu_expander"
     st.session_state.pop(legacy, None)
     for key in list(st.session_state.keys()):
@@ -1076,15 +1699,38 @@ def prepare_step_change_ui() -> None:
             st.session_state.pop(key, None)
 
 
-def navigate_to_step(dest: int) -> None:
-    """STEP 이동(``on_click`` 콜백용). Streamlit 이 이후 자동 rerun 하므로 ``rerun`` 은 호출하지 않습니다."""
-    prepare_step_change_ui()
-    clear_goto_query_and_reset_nav_tracking()
+def queue_step2_save_and_analyze() -> None:
+    """STEP2 하단 「다음 →」 — 저장·검증 후 STEP3(사주분석)으로 이동."""
+    st.session_state["_step2_queue_save"] = True
+
+
+def assign_step_and_rerun(dest: int) -> None:
+    """``on_click`` 이 아닌 버튼/로직에서 STEP 이동 + 전체 rerun."""
     d = max(STEP_NAV_MIN, min(STEP_NAV_MAX, int(dest)))
     try:
         cur = int(st.session_state.get("step", 1))
     except Exception:
         cur = 1
+    if d == cur:
+        st.session_state[QUICK_MENU_OPEN_KEY] = False
+        return
+    navigate_to_step(d)
+    rerun_full_app()
+
+
+def navigate_to_step(dest: int) -> None:
+    """STEP 이동(``on_click`` 콜백용). Streamlit 이 이후 자동 rerun 하므로 ``rerun`` 은 호출하지 않습니다."""
+    d = max(STEP_NAV_MIN, min(STEP_NAV_MAX, int(dest)))
+    st.session_state.pop("_saju_nav_preserve_scroll", None)
+    try:
+        cur = int(st.session_state.get("step", 1))
+    except Exception:
+        cur = 1
+    if d == cur:
+        st.session_state[QUICK_MENU_OPEN_KEY] = False
+        return
+    prepare_step_change_ui(dest=d)
+    clear_goto_query_and_reset_nav_tracking()
     if d in _FEATURE_STEPS and 1 <= cur <= 10:
         st.session_state["_last_analysis_step"] = cur
     if d in _FEATURE_STEPS:
@@ -1093,18 +1739,18 @@ def navigate_to_step(dest: int) -> None:
         st.session_state.pop("_explicit_feature_step", None)
     if d in (11, 12):
         st.session_state["_navigated_to_chat_this_run"] = True
+    if d == 2:
+        st.session_state.pop("_step2_retain_form", None)
+        st.session_state.pop("_step2_opp_unlocked", None)
+        st.session_state.pop("_step2_opp_user_touched", None)
+        if st.session_state.get("_return_step_after_input") is None:
+            st.session_state["_step2_need_fresh_form"] = True
+    st.session_state.step = int(d)
     if d in _STEPS_NEED_PROFILE_FOR_NAV and not analysis_flow_unlocked():
-        st.session_state.step = 2
         st.session_state._return_step_after_input = int(d)
-    else:
-        st.session_state.step = int(d)
+    elif d != 2:
+        st.session_state.pop("_return_step_after_input", None)
     track_analysis_step_for_draft(st.session_state.step)
-
-
-def _apply_feature_menu_navigation(dest: int) -> None:
-    """레거시: ``if st.button`` 분기 안에서 호출 시 명시 rerun."""
-    navigate_to_step(dest)
-    rerun_full_app()
 
 
 def _quick_menu_nav_epoch() -> int:
@@ -1182,14 +1828,23 @@ def render_bottom_step_nav(*, current_step: int | None = None) -> None:
                 )
             with nav_cols[1]:
                 if step < STEP_NAV_MAX:
-                    st.button(
-                        "다음 →",
-                        type="primary",
-                        use_container_width=True,
-                        key=f"saju_bottom_next_btn_{reset_id}",
-                        on_click=navigate_to_step,
-                        args=(min(STEP_NAV_MAX, step + 1),),
-                    )
+                    if step == 2:
+                        st.button(
+                            "다음 →",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"saju_bottom_next_btn_{reset_id}",
+                            on_click=queue_step2_save_and_analyze,
+                        )
+                    else:
+                        st.button(
+                            "다음 →",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"saju_bottom_next_btn_{reset_id}",
+                            on_click=navigate_to_step,
+                            args=(min(STEP_NAV_MAX, step + 1),),
+                        )
                 else:
                     st.empty()
 
@@ -1371,17 +2026,6 @@ def sync_shared_chat_room_into_session(room_key: str) -> None:
     if _sig(remote) == _sig(local):
         return
     st.session_state.shared_chat = remote
-
-
-
-def clear_all_consultation_archive_files(*, allow: bool = False, confirm: str = "") -> None:
-    if not str(os.environ.get("SAJU_ALLOW_CLEAR_ALL") or "").strip() == "1":
-        raise RuntimeError("SAJU_ALLOW_CLEAR_ALL=1 이 설정되어야만 전체 삭제가 가능합니다.")
-    if not allow:
-        raise RuntimeError("allow=True가 필요합니다.")
-    if str(confirm).strip() != "삭제합니다":
-        raise RuntimeError("confirm 문구가 일치하지 않습니다. (\"삭제합니다\")")
-    saju_storage.archive_clear_all()
 
 
 # -------------------- engine/core caching --------------------
@@ -1666,9 +2310,8 @@ def apply_step2_next_from_payload() -> bool:
         if not (1 <= u_d <= last_d):
             return _step2_fail(f"일은 1~{last_d} 범위로 입력해 주세요.")
 
+        # 상대방 이름은 STEP2 위젯 입력값만 사용(세션 p_name 폴백 금지 — 타 사용자 잔존 방지).
         opponent_name = str(payload.get("opponent_name", "")).strip()
-        if not opponent_name:
-            opponent_name = _partner_name_from_session()
         opponent_year = int(payload.get("opponent_year", 1995))
         opponent_month = int(payload.get("opponent_month", 1))
         opponent_day = int(payload.get("opponent_day", 1))
@@ -1728,17 +2371,14 @@ def apply_step2_next_from_payload() -> bool:
                     birth=p_birth,
                     p_gapja=fresh_p,
                 )
+                mark_partner_registered(active=True)
+            else:
+                clear_partner_analysis_state()
             st.session_state.pop("_step4_pair_sig", None)
             st.session_state.pop("saju_engine__partner", None)
             st.session_state.pop("saju_engine_sig__partner", None)
         else:
-            st.session_state.p_name = None
-            st.session_state.pop("partner_name_snapshot", None)
-            st.session_state.p_gapja = None
-            st.session_state.p_data = None
-            st.session_state.p_gender = None
-            st.session_state.pop("_step4_partner_bundle", None)
-            st.session_state.pop("_step4_pair_sig", None)
+            clear_partner_analysis_state()
 
         # 개인정보 입력값은 새로고침/재접속 시 이전 사용자에게 노출되지 않도록 디스크에 저장하지 않습니다.
 
@@ -1833,40 +2473,20 @@ def apply_step2_next_from_payload() -> bool:
 
         ensure_engine_and_core(u_gapja, birth_year=int(u_y), birth_record=st.session_state.u_data, gender=st.session_state.u_gender)
 
-        try:
-            persist_step2_prefill_to_disk(
-                {
-                    "u_name": u_name,
-                    "u_gender": str(st.session_state.get("u_gender") or "남자"),
-                    "u_y": u_y,
-                    "u_m": u_m,
-                    "u_d": u_d,
-                    "u_t_str": u_t_str,
-                    "u_lunar": "음력" if _u_lun else "양력",
-                    "u_leap": "윤달" if _u_lp else "평달",
-                    "opponent_name": p_name or "",
-                    "p_gender": str(st.session_state.get("p_gender") or "여자"),
-                    "opponent_year": int(opponent_year),
-                    "opponent_month": int(opponent_month),
-                    "opponent_day": int(opponent_day),
-                    "opponent_time": p_t_str if p_name else "모름",
-                    "opponent_lunar": "음력" if p_name and _p_lun else "양력",
-                    "opponent_leap": "윤달" if p_name and _p_lp else "평달",
-                    "contact_num": str(st.session_state.get("contact_value") or ""),
-                    "agree": True,
-                }
-            )
-        except Exception:
-            pass
-
         st.session_state.reset_id = int(st.session_state.get("reset_id", 0)) + 1
         st.session_state.pop("_return_step_after_input", None)
         st.session_state.pop("_step2_payload", None)
+        try:
+            from saju_app.persistence.prefill import ensure_visit_id
+
+            st.session_state["_personal_input_visit_id"] = ensure_visit_id()
+        except Exception:
+            st.session_state["_personal_input_visit_id"] = str(
+                st.session_state.get("visit_id") or ""
+            )
+        st.session_state["_personal_input_saved"] = True
         # 저장 직후에는 항상 STEP3(사주분석)으로 이동
-        prepare_step_change_ui()
-        st.session_state.step = 3
-        clear_goto_query_and_reset_nav_tracking()
-        rerun_full_app()
+        assign_step_and_rerun(3)
     except Exception as e:
         report_exception_to_streamlit(e, prefix="처리 중 오류")
         return False
@@ -1906,22 +2526,14 @@ def apply_user_profile_record_to_session(
                 pass
         if not str(st.session_state.get("u_gender") or "").strip():
             st.session_state.u_gender = "남자"
-        st.session_state.p_name = None
-        st.session_state.pop("partner_name_snapshot", None)
-        st.session_state.p_gapja = None
-        st.session_state.p_data = None
-        st.session_state.p_gender = None
+        clear_partner_analysis_state()
+        st.session_state["_personal_input_saved"] = True
+        st.session_state["_personal_input_visit_id"] = str(
+            st.session_state.get("visit_id") or ""
+        ).strip()
         st.session_state.reset_id = int(st.session_state.get("reset_id", 0)) + 1
-        ensure_engine_and_core(
-            list(st.session_state.u_gapja),
-            birth_year=y,
-            birth_record=st.session_state.u_data,
-            gender=str(st.session_state.get("u_gender") or "남자"),
-        )
         clear_goto_query_and_reset_nav_tracking()
-        prepare_step_change_ui()
-        st.session_state.step = max(STEP_NAV_MIN, min(STEP_NAV_MAX, int(dest_step)))
-        rerun_full_app()
+        assign_step_and_rerun(int(dest_step))
         return True
     except Exception as e:
         report_exception_to_streamlit(e, prefix="프로필 불러오기")
@@ -1980,6 +2592,8 @@ def _partner_birth_from_widgets() -> tuple[int, int, int, str, bool, bool] | Non
 
 
 def _partner_birth_from_p_data() -> tuple[int, int, int, str, bool, bool] | None:
+    if not partner_is_registered():
+        return None
     p_data = st.session_state.get("p_data")
     if not (p_data and isinstance(p_data, (list, tuple)) and len(p_data) >= 6):
         return None
@@ -2039,12 +2653,6 @@ def _apply_partner_birth_to_session(
         return None
     if not _gapja_pillars_valid(fresh, min_pillars=3):
         return None
-    st.session_state.p_y = int(py)
-    st.session_state.p_m = int(pm)
-    st.session_state.p_d = int(pd)
-    st.session_state.p_time = str(pt_str)
-    st.session_state.p_lunar = "음력" if p_is_lunar else "양력"
-    st.session_state.p_leap = "윤달" if p_is_lunar and p_is_leap else "평달"
     st.session_state.p_data = (
         int(py),
         int(pm),
@@ -2059,7 +2667,6 @@ def _apply_partner_birth_to_session(
         if pn:
             st.session_state.p_name = pn
             st.session_state.partner_name_snapshot = pn
-            st.session_state.step2_opp_name_input = pn
     return list(fresh)
 
 
@@ -2084,6 +2691,8 @@ def store_step4_partner_bundle(
 
 def _partner_birth_for_step4() -> tuple[int, int, int, str, bool, bool] | None:
     """STEP4 전용: p_data(최신 저장) → 번들(이름 일치) → 위젯 순."""
+    if not partner_is_registered():
+        return None
     pn = _partner_name_from_session()
     if not pn:
         return None
@@ -2129,8 +2738,12 @@ def _invalidate_step4_partner_engine(u_gapja: object, p_gapja: object, p_name: s
 
 def sync_partner_gapja_for_match_analysis() -> bool:
     """STEP4: 저장된 상대 생년월일로 p_gapja를 재계산하고 엔진 캐시를 갱신합니다."""
+    if not partner_is_registered():
+        clear_partner_analysis_state()
+        return False
     pn = _partner_name_from_session()
     if not pn:
+        clear_partner_analysis_state()
         return False
     birth = _partner_birth_for_step4()
     if not birth:
@@ -2145,6 +2758,8 @@ def sync_partner_gapja_for_match_analysis() -> bool:
 
 def _resync_partner_gapja_from_p_data() -> None:
     """상대 생년월일·시·음양으로 p_gapja·p_data·위젯 키를 재동기화."""
+    if not partner_is_registered():
+        return
     birth = _partner_birth_tuple_from_session()
     if not birth:
         return
@@ -2155,23 +2770,28 @@ def _partner_name_from_session() -> str:
     return str(
         st.session_state.get("partner_name_snapshot")
         or st.session_state.get("p_name")
-        or st.session_state.get("step2_opp_name_input")
         or ""
     ).strip()
 
 
 def ensure_partner_session_from_state() -> bool:
-    """STEP4 등: 상대방 이름·생년월일이 세션에 있으면 p_gapja·p_data를 복구합니다."""
+    """STEP4 등: STEP2에서 등록한 상대방만 p_gapja·p_data를 복구합니다."""
+    if not partner_is_registered():
+        clear_partner_analysis_state()
+        return False
     _resync_partner_gapja_from_p_data()
     if _gapja_pillars_valid(st.session_state.get("p_gapja"), min_pillars=3):
         pn = _partner_name_from_session()
         if pn:
             st.session_state.p_name = pn
             st.session_state.partner_name_snapshot = pn
-        return True
+            return True
+        clear_partner_analysis_state()
+        return False
 
     pn = _partner_name_from_session()
     if not pn:
+        clear_partner_analysis_state()
         return False
 
     p_data = st.session_state.get("p_data")
@@ -2216,7 +2836,6 @@ def ensure_partner_session_from_state() -> bool:
 
     st.session_state.p_name = pn
     st.session_state.partner_name_snapshot = pn
-    st.session_state.step2_opp_name_input = pn
     st.session_state.p_gapja = list(p_gapja)
     st.session_state.p_data = (py, pm, pd, pt_str, bool(p_is_lunar), bool(p_is_leap))
     pg = str(st.session_state.get("p_gender") or "여자")

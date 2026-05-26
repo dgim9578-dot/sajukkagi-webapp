@@ -577,7 +577,9 @@ img {
         M.render_mood_image("step08_hero", variant="hero", alt="AI 타로")
         st.markdown(
             """
-<h1>🌙 Mystic Flow Tarot 🔮</h1>
+<div class="saju-section-title-badge saju-section-title-badge--center">
+  🌙 사주+미스틱 플로우 타로 🔮
+</div>
 <div style='text-align:center;font-size:18px;margin-bottom:30px;'>
 당신의 감정과 운명의 흐름을 카드에 담아보세요.
 </div>
@@ -600,13 +602,11 @@ img {
 
             st.markdown("---")
             M.render_mood_image("step08_mid_spread", variant="mid", alt="타로 스프레드")
-            question = st.text_area(
-                "궁금 사항을 입력 하세요",
+            question = M.text_area_no_autofill(
+                "궁금 사항 입력",
                 key=_QUESTION_KEY,
-                placeholder=(
-                    "예: 3개월째 썸인데 상대 연락이 줄었어요. 제가 먼저 연락해도 될까요?\n"
-                    "예: 올해 안에 이직을 준비 중인데 지금 움직여도 될까요?"
-                ),
+                placeholder="궁금한 내용을 입력 하세요",
+                label_visibility="collapsed",
                 height=120,
             )
             spread_name = st.radio(

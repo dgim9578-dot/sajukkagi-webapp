@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import traceback
+
 import streamlit as st
 
 from saju_app.ui import components as M
@@ -90,14 +92,18 @@ def render() -> None:
     if need_scroll and not st.session_state.get("_saju_pending_scroll_top"):
         st.session_state["_saju_pending_scroll_top"] = True
 
-    sync_step_dom_now(step, slot="router")
+    sync_step_dom_now(step, slot="router", reveal=navigated)
     if navigated:
         prime_step_navigation_viewport(step=step)
 
     r = _load_step_render(step)
 
     with st.container(key=_step_mount_key(step)):
-        r()
+        try:
+            r()
+        except Exception as exc:
+            st.error(f"화면을 불러오지 못했습니다 (STEP{step}): {exc}")
+            st.code(traceback.format_exc(), language="python")
 
     M.persist_current_session_draft(step)
     st.session_state._router_last_step = step

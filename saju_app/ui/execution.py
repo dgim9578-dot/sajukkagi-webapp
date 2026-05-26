@@ -18,7 +18,11 @@ import streamlit.components.v1 as components
 _SCROLL_MANAGER_JS = r"""
 (function () {
     const pw = window.parent || window;
-    if (pw.__sajuStepScrollMgrV17) return;
+    if (pw.__sajuStepScrollMgrV21) return;
+    pw.__sajuStepScrollMgrV21 = true;
+    pw.__sajuStepScrollMgrV20 = true;
+    pw.__sajuStepScrollMgrV19 = true;
+    pw.__sajuStepScrollMgrV18 = true;
     pw.__sajuStepScrollMgrV17 = true;
     pw.__sajuStepScrollMgrV16 = true;
     pw.__sajuStepScrollMgrV15 = true;
@@ -30,6 +34,15 @@ _SCROLL_MANAGER_JS = r"""
     pw.__sajuStepScrollMgrV9 = true;
     pw.__sajuStepScrollMgrV8 = true;
 
+    const isMobileView = function (pwIn, doc) {
+        try {
+            const w = pwIn.innerWidth || doc.documentElement.clientWidth || 0;
+            if (w > 0 && w <= 768) return true;
+            return !!(pwIn.matchMedia && pwIn.matchMedia("(max-width: 768px)").matches);
+        } catch (e) {}
+        return false;
+    };
+
     pw.__sajuHideStreamlitPlatformChrome = function () {
         const doc = pw.document || document;
         if (!doc || !doc.body) return;
@@ -40,7 +53,8 @@ _SCROLL_MANAGER_JS = r"""
                 el.style.setProperty("display", "none", "important");
                 el.style.setProperty("visibility", "hidden", "important");
                 el.style.setProperty("pointer-events", "none", "important");
-                el.remove();
+                el.style.setProperty("height", "0", "important");
+                el.style.setProperty("overflow", "hidden", "important");
             } catch (e) {}
         };
 
@@ -93,7 +107,9 @@ _SCROLL_MANAGER_JS = r"""
 
     pw.__sajuHideStreamlitPlatformChrome();
     try {
-        [120, 480, 1200].forEach(function (ms) {
+        const doc0 = pw.document || document;
+        const mob0 = doc0 && isMobileView(pw, doc0);
+        (mob0 ? [320] : [120, 480]).forEach(function (ms) {
             pw.setTimeout(pw.__sajuHideStreamlitPlatformChrome, ms);
         });
     } catch (e) {}
@@ -109,6 +125,15 @@ _SCROLL_MANAGER_JS = r"""
         if (/samsung|sm-[a-z]|galaxy/i.test(ua)) {
             root.classList.add("saju-platform-galaxy");
         }
+        try {
+            const w = pw.innerWidth || root.clientWidth || 0;
+            if (
+                (w > 0 && w <= 768) ||
+                (pw.matchMedia && pw.matchMedia("(max-width: 768px)").matches)
+            ) {
+                root.classList.add("saju-mobile-stable");
+            }
+        } catch (e) {}
     };
     pw.__sajuDetectMobilePlatform();
 
@@ -126,18 +151,53 @@ _SCROLL_MANAGER_JS = r"""
         }
     };
 
+    pw.__sajuRevealMainContent = function (force) {
+        const doc = pw.document || document;
+        if (!doc) return;
+        const mobile = isMobileView(pw, doc);
+        const now = Date.now();
+        if (!force && mobile && pw.__sajuRevealLastAt && now - pw.__sajuRevealLastAt < 2500) {
+            return;
+        }
+        pw.__sajuRevealLastAt = now;
+        const show = function (el) {
+            if (!el || !el.style) return;
+            if (el.closest("[class*='saju_scroll_fire_']")) return;
+            if (el.closest(".st-key-saju_browser_privacy_client_v2")) return;
+            if (el.closest(".st-key-saju_browser_nav_check")) return;
+            try {
+                el.style.removeProperty("display");
+                el.style.removeProperty("visibility");
+                el.style.removeProperty("height");
+                el.style.removeProperty("max-height");
+                el.style.removeProperty("min-height");
+                el.style.removeProperty("opacity");
+                el.style.removeProperty("position");
+                el.style.removeProperty("left");
+                el.style.removeProperty("top");
+                el.style.removeProperty("pointer-events");
+            } catch (e) {}
+        };
+        try {
+            doc.querySelectorAll(
+                "[class*='st-key-saju_router_step_mount_'], " +
+                    ".st-key-saju_landing_stack, .st-key-saju_landing_hero, .saju-landing-hero"
+            ).forEach(show);
+        } catch (e) {}
+    };
+
     pw.__sajuCollapseHomeTopChrome = function (doc) {
+        /* 유틸 위젯만 숨김 — mount 이전 형제를 접으면 모바일에서 본문 전체가 사라질 수 있음 */
         const collapse = function (el) {
             if (!el || !el.style) return;
             if (el.id === "saju-step-top-anchor") return;
             try {
+                if (el.closest("[class*='st-key-saju_router_step_mount_']")) return;
+                if (el.closest(".st-key-saju_landing_stack")) return;
                 el.style.setProperty("display", "none", "important");
                 el.style.setProperty("visibility", "hidden", "important");
                 el.style.setProperty("height", "0", "important");
                 el.style.setProperty("max-height", "0", "important");
-                el.style.setProperty("min-height", "0", "important");
-                el.style.setProperty("margin", "0", "important");
-                el.style.setProperty("padding", "0", "important");
                 el.style.setProperty("overflow", "hidden", "important");
                 el.style.setProperty("pointer-events", "none", "important");
             } catch (e) {}
@@ -155,27 +215,6 @@ _SCROLL_MANAGER_JS = r"""
                 doc.querySelectorAll(sel).forEach(collapse);
             } catch (e) {}
         });
-        const stack = doc.querySelector(".st-key-saju_landing_stack");
-        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
-        if (mount && stack) {
-            let el = stack.previousElementSibling;
-            while (el) {
-                collapse(el);
-                el = el.previousElementSibling;
-            }
-        }
-        const block = doc.querySelector(".main .block-container");
-        if (block && mount) {
-            let el = mount.previousElementSibling;
-            while (el) {
-                if (el.id === "saju-step-top-anchor") {
-                    el = el.previousElementSibling;
-                    continue;
-                }
-                collapse(el);
-                el = el.previousElementSibling;
-            }
-        }
     };
 
     pw.__sajuPinHomeHeroTop = function () {
@@ -219,24 +258,17 @@ _SCROLL_MANAGER_JS = r"""
             el.style.setProperty("margin-top", "0", "important");
         });
 
-        if (stack && hero) {
+        if (stack && hero && !isMobileView(pw, doc)) {
             try {
                 const rect = hero.getBoundingClientRect();
                 const gap = Math.ceil(rect.top || 0);
-                if (gap > 2) {
+                if (gap > 2 && gap < 120) {
                     stack.style.setProperty("margin-top", "-" + gap + "px", "important");
-                } else {
-                    const pullPx = root.classList.contains("saju-platform-galaxy")
-                        ? 18
-                        : root.classList.contains("saju-platform-android")
-                          ? 14
-                          : 8;
-                    stack.style.setProperty(
-                        "margin-top",
-                        "calc(-1 * " + pullPx + "px)",
-                        "important"
-                    );
                 }
+            } catch (e) {}
+        } else if (stack) {
+            try {
+                stack.style.setProperty("margin-top", "0", "important");
             } catch (e) {}
         }
 
@@ -260,15 +292,6 @@ _SCROLL_MANAGER_JS = r"""
         );
     };
 
-    const isMobileView = function (pw, doc) {
-        try {
-            const w = pw.innerWidth || doc.documentElement.clientWidth || 0;
-            if (w > 0 && w <= 768) return true;
-            return !!(pw.matchMedia && pw.matchMedia("(max-width: 768px)").matches);
-        } catch (e) {}
-        return false;
-    };
-
     pw.__sajuUserIsScrolling = false;
     pw.__sajuBindUserScrollGuard = function () {
         if (pw.__sajuUserScrollGuardBound) return;
@@ -276,10 +299,8 @@ _SCROLL_MANAGER_JS = r"""
         const doc = pw.document || document;
         if (!doc) return;
         const markUserScroll = function () {
+            if (pw.__sajuStepNavScrollActive) return;
             pw.__sajuUserIsScrolling = true;
-            if (typeof pw.__sajuCancelStepScroll === "function") {
-                try { pw.__sajuCancelStepScroll(); } catch (e) {}
-            }
             if (pw.__sajuUserScrollTimer) {
                 try { clearTimeout(pw.__sajuUserScrollTimer); } catch (e) {}
             }
@@ -287,9 +308,12 @@ _SCROLL_MANAGER_JS = r"""
                 pw.__sajuUserIsScrolling = false;
             }, 450);
         };
-        ["touchstart", "touchmove", "wheel", "scroll"].forEach(function (ev) {
+        const mobile = isMobileView(pw, doc);
+        const events = mobile
+            ? ["touchstart", "touchmove"]
+            : ["touchstart", "touchmove", "wheel"];
+        events.forEach(function (ev) {
             doc.addEventListener(ev, markUserScroll, { passive: true, capture: true });
-            try { pw.addEventListener(ev, markUserScroll, { passive: true, capture: true }); } catch (e) {}
         });
     };
     pw.__sajuBindUserScrollGuard();
@@ -297,6 +321,14 @@ _SCROLL_MANAGER_JS = r"""
     pw.__sajuForceStepScrollTop = function (epoch, lockMs) {
         const doc = pw.document || document;
         const mobile = isMobileView(pw, doc);
+        const epochKey = String(epoch || "0");
+
+        if (pw.__sajuLastScrollEpoch === epochKey && pw.__sajuLastScrollAt) {
+            const since = Date.now() - pw.__sajuLastScrollAt;
+            if (since < (mobile ? 900 : 400)) return;
+        }
+        pw.__sajuLastScrollEpoch = epochKey;
+        pw.__sajuLastScrollAt = Date.now();
 
         if (typeof pw.__sajuCancelStepScroll === "function") {
             try { pw.__sajuCancelStepScroll(); } catch (e) {}
@@ -304,9 +336,14 @@ _SCROLL_MANAGER_JS = r"""
 
         let cancelled = false;
         const timers = [];
+        const holdMs = mobile
+            ? 220
+            : Math.min(600, Math.max(320, Number(lockMs) || 400));
 
+        pw.__sajuStepNavScrollActive = true;
         pw.__sajuCancelStepScroll = function () {
             cancelled = true;
+            pw.__sajuStepNavScrollActive = false;
             timers.forEach(function (id) {
                 try { clearTimeout(id); } catch (e) {}
             });
@@ -314,13 +351,9 @@ _SCROLL_MANAGER_JS = r"""
             pw.__sajuCancelStepScroll = null;
         };
 
-        const getMain = function () {
-            return getMainScrollEl(doc);
-        };
-
         const snap = function () {
-            if (cancelled || pw.__sajuUserIsScrolling) return;
-            const main = getMain();
+            if (cancelled) return;
+            const main = getMainScrollEl(doc);
             if (!main) return;
             try { main.scrollTop = 0; main.scrollLeft = 0; } catch (e) {}
             if (!mobile) {
@@ -332,27 +365,29 @@ _SCROLL_MANAGER_JS = r"""
                 const anchor = doc.getElementById("saju-step-top-anchor");
                 if (anchor) {
                     try {
-                        anchor.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
+                        anchor.scrollIntoView({
+                            block: "start",
+                            inline: "nearest",
+                            behavior: "auto",
+                        });
                     } catch (e) {}
                 }
-                try { pw.scrollTo(0, 0); } catch (e) {}
             }
         };
 
-        pw.__sajuLastScrollEpoch = String(epoch || "0");
         snap();
-        if (!mobile) {
+        if (mobile) {
+            timers.push(setTimeout(snap, 96));
+        } else {
             try { requestAnimationFrame(snap); } catch (e) { timers.push(setTimeout(snap, 16)); }
-            timers.push(setTimeout(snap, 48));
+            timers.push(setTimeout(snap, 120));
         }
-        const doneMs = mobile
-            ? Math.min(80, Math.max(40, Number(lockMs) || 60))
-            : Math.min(220, Math.max(100, Number(lockMs) || 180));
         timers.push(setTimeout(function () {
+            pw.__sajuStepNavScrollActive = false;
             if (typeof pw.__sajuCancelStepScroll === "function") {
                 pw.__sajuCancelStepScroll();
             }
-        }, doneMs));
+        }, holdMs));
     };
 
     pw.__sajuApplySolar24IframeHeight = function (heightPx) {
@@ -525,15 +560,19 @@ _ST_JS_CALL_MANAGER = """
 })()
 """
 
-_LOCK_MS = 120
-_LOCK_MS_MOBILE = 50
+_LOCK_MS = 400
+_LOCK_MS_MOBILE = 220
 
 
 def inject_step_scroll_manager_once() -> None:
     """parent 창 전역 스크롤 매니저 — 세션당 1회."""
-    if st.session_state.get("_saju_scroll_mgr_v17"):
+    if st.session_state.get("_saju_scroll_mgr_v21"):
         return
-    st.session_state["_saju_scroll_mgr_v17"] = True
+    st.session_state["_saju_scroll_mgr_v21"] = True
+    st.session_state.pop("_saju_scroll_mgr_v20", None)
+    st.session_state.pop("_saju_scroll_mgr_v19", None)
+    st.session_state.pop("_saju_scroll_mgr_v18", None)
+    st.session_state.pop("_saju_scroll_mgr_v17", None)
     st.session_state.pop("_saju_scroll_mgr_v16", None)
     st.session_state.pop("_saju_scroll_mgr_v15", None)
     st.session_state.pop("_saju_scroll_mgr_v8", None)
@@ -569,7 +608,22 @@ _CALENDAR_LOCALE_NUDGE_JS = r"""
 _CALENDAR_LOCALE_INSTALL_JS = r"""
 (function () {
     const pw = window.parent || window;
-    const VERSION = 11;
+    const VERSION = 14;
+    const BIRTH_TIME_LABELS = [
+        "모름",
+        "자(23:30~01:29)",
+        "축(01:30~03:29)",
+        "인(03:30~05:29)",
+        "묘(05:30~07:29)",
+        "진(07:30~09:29)",
+        "사(09:30~11:29)",
+        "오(11:30~13:29)",
+        "미(13:30~15:29)",
+        "신(15:30~17:29)",
+        "유(17:30~19:29)",
+        "술(19:30~21:29)",
+        "해(21:30~23:29)",
+    ];
 
     function installCore() {
 
@@ -854,14 +908,111 @@ li[data-baseweb="option"][data-saju-month-num]::before {
         } catch (e) {}
     }
 
+    function isSajuBirthTimeOptionList(options) {
+        if (!options || !options.length) return false;
+        if (options[0] && shouldSkipMonthPatchRoot(options[0])) return true;
+        if (options.length === 13) {
+            const t0 = String(options[0].textContent || "").trim();
+            if (t0 === "모름" || options[0].getAttribute("data-saju-birth-time") === "1") {
+                return true;
+            }
+        }
+        let hits = 0;
+        for (let i = 0; i < options.length; i++) {
+            const t = String(options[i].textContent || "").trim();
+            if (!t) continue;
+            if (t === "모름") {
+                hits += 2;
+                continue;
+            }
+            if (/^(자|축|인|묘|진|사|오|미|신|유|술|해)\(/.test(t)) hits++;
+            if (/^\d{1,2}:\d{2}/.test(t)) hits++;
+            if (/^\d{1,2}\.$/.test(t) && options.length === 13) return true;
+        }
+        return hits >= 2;
+    }
+
+    function step2HasCalendar() {
+        return getDocs().some(function (d) {
+            return !!d.querySelector('[data-baseweb="calendar"]');
+        });
+    }
+
+    function safeToPatchMonths() {
+        if (onStep2BirthPage() && !step2HasCalendar()) return false;
+        return true;
+    }
+
+    function markBirthTimeSelects() {
+        getDocs().forEach(function (d) {
+            d.querySelectorAll(
+                ".st-key-step2_u_time_wrap [data-baseweb='select'], .st-key-step2_p_time_wrap [data-baseweb='select']"
+            ).forEach(function (sel) {
+                sel.setAttribute("data-saju-birth-time-select", "1");
+            });
+        });
+    }
+
+    function restoreBirthTimeSelectLabels() {
+        getDocs().forEach(function (d) {
+            d.querySelectorAll(
+                ".st-key-step2_u_time_wrap, .st-key-step2_p_time_wrap"
+            ).forEach(function (wrap) {
+                const options = wrap.querySelectorAll(
+                    '[data-baseweb="popover"] [role="option"], ' +
+                        '[data-baseweb="select-dropdown"] [role="option"], ' +
+                        '[data-baseweb="menu"] [role="option"], ' +
+                        '[role="listbox"] [role="option"]'
+                );
+                options.forEach(function (el, idx) {
+                    if (idx >= BIRTH_TIME_LABELS.length) return;
+                    const label = BIRTH_TIME_LABELS[idx];
+                    el.setAttribute("data-saju-birth-time", "1");
+                    el.removeAttribute("data-saju-month-num");
+                    try {
+                        setPlainText(el, label);
+                        el.style.removeProperty("font-size");
+                        el.style.removeProperty("color");
+                    } catch (e) {}
+                });
+                wrap.querySelectorAll(
+                    '[data-baseweb="select-value"], [class*="SelectValue"], [class*="select__single-value"]'
+                ).forEach(function (node) {
+                    const t = String(node.textContent || "").trim();
+                    if (/^\d{1,2}\.?$/.test(t)) return;
+                    for (let i = 0; i < BIRTH_TIME_LABELS.length; i++) {
+                        const lab = BIRTH_TIME_LABELS[i];
+                        if (t === lab || (t && lab.indexOf(t) === 0)) {
+                            try { setPlainText(node, lab); } catch (e2) {}
+                            break;
+                        }
+                    }
+                });
+            });
+        });
+    }
+
+    function shouldSkipMonthPatchRoot(node) {
+        if (!node || !node.closest) return false;
+        return !!node.closest(
+            ".st-key-step2_u_time_wrap, .st-key-step2_p_time_wrap, " +
+                "[data-saju-birth-time-select='1'], [data-saju-birth-time='1'], " +
+                ".st-key-step2_self_row1_name_gender, .st-key-step2_opp_row1_name_gender, " +
+                ".st-key-step2_self_row2_bdate_cal, .st-key-step2_opp_row2_bdate_cal"
+        );
+    }
+
     function looksLikeMonthDropdown(options) {
         if (!options || !options.length || options.length > 14) return false;
         if (isYearOptionList(options)) return false;
+        if (isSajuBirthTimeOptionList(options)) return false;
         let monthish = 0;
         for (let i = 0; i < options.length; i++) {
             if (parseMonthNumber(options[i].textContent)) monthish++;
         }
-        if (options.length >= 12 && options.length <= 14) return true;
+        if (options.length >= 12 && options.length <= 14) {
+            return monthish >= 8;
+        }
         return monthish >= 1 && options.length >= 3;
     }
 
@@ -883,7 +1034,10 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     function patchMonthOptionList(options) {
         if (!options || !options.length) return;
         if (isYearOptionList(options)) return;
+        if (isSajuBirthTimeOptionList(options)) return;
+        if (options[0] && shouldSkipMonthPatchRoot(options[0])) return;
         if (options.length >= 12 && options.length <= 14) {
+            if (!looksLikeMonthDropdown(options)) return;
             const start = options.length === 13 ? 1 : 0;
             for (let i = 0; i < 12; i++) {
                 paintMonthLabel(options[start + i], String(i + 1));
@@ -903,6 +1057,7 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     function scanAllMonthOptions(d) {
         d.querySelectorAll(MONTH_OPTION_SEL).forEach(function (el) {
             if (el.closest('[role="grid"]')) return;
+            if (shouldSkipMonthPatchRoot(el)) return;
             const num = parseMonthNumber(el.textContent);
             if (num) paintMonthLabel(el, num);
         });
@@ -920,11 +1075,14 @@ li[data-baseweb="option"][data-saju-month-num]::before {
                 roots.add(root);
             }
             roots.forEach(function (box) {
+                if (shouldSkipMonthPatchRoot(box)) return;
                 const opts = Array.from(box.querySelectorAll(MONTH_OPTION_SEL)).filter(function (el) {
                     return !el.closest('[role="grid"]');
                 });
+                if (!opts.length) return;
+                if (isSajuBirthTimeOptionList(opts)) return;
                 if (opts.length >= 12 && opts.length <= 14 && !isYearOptionList(opts)) {
-                    patchMonthOptionList(opts);
+                    if (looksLikeMonthDropdown(opts)) patchMonthOptionList(opts);
                 } else if (looksLikeMonthDropdown(opts)) {
                     patchMonthOptionList(opts);
                 }
@@ -1015,6 +1173,11 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     }
 
     function patchMonths() {
+        markBirthTimeSelects();
+        restoreBirthTimeSelectLabels();
+        if (!safeToPatchMonths()) {
+            return;
+        }
         patchGlobalMonthOptions();
         forceMonthDropdownNumeric();
         patchMonthSelectDisplays();
@@ -1031,9 +1194,13 @@ li[data-baseweb="option"][data-saju-month-num]::before {
 
     function hasOpenMonthMenu() {
         return getDocs().some(function (d) {
-            return !!d.querySelector(
+            const nodes = d.querySelectorAll(
                 '[data-baseweb="popover"] ' + MONTH_OPTION_SEL + ', [data-baseweb="select-dropdown"] ' + MONTH_OPTION_SEL
             );
+            for (let i = 0; i < nodes.length; i++) {
+                if (!shouldSkipMonthPatchRoot(nodes[i])) return true;
+            }
+            return false;
         });
     }
 
@@ -1063,12 +1230,21 @@ li[data-baseweb="option"][data-saju-month-num]::before {
 
     function patchAll() {
         injectStyle();
+        markBirthTimeSelects();
+        restoreBirthTimeSelectLabels();
+        if (onStep2BirthPage() && !step2HasCalendar()) {
+            fixStep2FormRows();
+            return;
+        }
         forceCalendars();
-        patchMonths();
+        if (safeToPatchMonths()) patchMonths();
+        restoreBirthTimeSelectLabels();
         fixStep2FormRows();
     }
 
     pw.__sajuCalendarPatchNow = patchAll;
+    pw.__sajuMarkBirthTimeSelects = markBirthTimeSelects;
+    pw.__sajuRestoreBirthTimeSelectLabels = restoreBirthTimeSelectLabels;
     pw.__sajuCalendarLocaleVersion = VERSION;
 
     if (pw.__sajuCalendarMo) {
@@ -1097,11 +1273,12 @@ li[data-baseweb="option"][data-saju-month-num]::before {
                     return !!d.querySelector('[data-baseweb="calendar"]');
                 });
             if (!calOpen) return;
+            if (!safeToPatchMonths()) return;
             patchMonths();
             if (calOpen) {
                 forceCalendars();
             }
-        }, (pw.matchMedia && pw.matchMedia("(max-width: 768px)").matches) ? 140 : 48);
+        }, (pw.matchMedia && pw.matchMedia("(max-width: 768px)").matches) ? 320 : 48);
         tickTimer = pw.__sajuCalendarTickTimer;
     }
 
@@ -1114,13 +1291,18 @@ li[data-baseweb="option"][data-saju-month-num]::before {
         if (calMoTimer) clearTimeout(calMoTimer);
         calMoTimer = setTimeout(function () {
             calMoTimer = null;
-            patchMonths();
+            markBirthTimeSelects();
+            if (onStep2BirthPage() && !step2HasCalendar()) {
+                fixStep2FormRows();
+                return;
+            }
+            if (safeToPatchMonths()) patchMonths();
             if (hasOpenMonthMenu() || getDocs().some(function (d) {
                 return !!d.querySelector('[data-baseweb="popover"] [data-baseweb="calendar"], [data-baseweb="calendar"]');
             })) {
                 patchAll();
             }
-        }, mobile ? 120 : 24);
+        }, mobile ? 280 : 24);
     }
     function bindPointerPatch() {
         const mobile = pw.matchMedia && pw.matchMedia("(max-width: 768px)").matches;
@@ -1133,6 +1315,11 @@ li[data-baseweb="option"][data-saju-month-num]::before {
                 ev,
                 function () {
                     schedulePatch();
+                    if (onStep2BirthPage() && !step2HasCalendar()) {
+                        fixStep2FormRows();
+                        return;
+                    }
+                    if (!safeToPatchMonths()) return;
                     if (mobile) {
                         setTimeout(patchMonths, 0);
                         setTimeout(patchMonths, 160);
@@ -1196,10 +1383,13 @@ _CALENDAR_WEEKDAY_EN_JS = _CALENDAR_LOCALE_INSTALL_JS
 
 
 def inject_calendar_locale_installer_once() -> None:
-    """parent 창에 달력 locale v11 설치(세션당 1회)."""
-    if st.session_state.get("_saju_calendar_install_v11"):
+    """parent 창에 달력 locale v14 설치(세션당 1회)."""
+    if st.session_state.get("_saju_calendar_install_v14"):
         return
-    st.session_state["_saju_calendar_install_v11"] = True
+    st.session_state["_saju_calendar_install_v14"] = True
+    st.session_state.pop("_saju_calendar_install_v13", None)
+    st.session_state.pop("_saju_calendar_install_v12", None)
+    st.session_state.pop("_saju_calendar_install_v11", None)
     for old in (
         "_saju_calendar_locale_v10",
         "_saju_calendar_locale_v9",
@@ -1212,7 +1402,7 @@ def inject_calendar_locale_installer_once() -> None:
         "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
         f"<script>{_CALENDAR_LOCALE_INSTALL_JS}</script></body></html>"
     )
-    with st.container(key="saju_calendar_locale_install_v11"):
+    with st.container(key="saju_calendar_locale_install_v14"):
         components.html(html, height=1, scrolling=False)
 
 
@@ -1226,6 +1416,26 @@ def ensure_calendar_locale_on_step2() -> None:
     """STEP2 화면 진입 시 달력 locale 매니저 설치 + 즉시 패치."""
     inject_calendar_locale_installer_once()
     nudge_calendar_locale_patch(slot="step2_boot")
+
+
+def protect_step2_birth_time_selects() -> None:
+    """STEP2 태어난 시간 selectbox — 달력 월 패치가 건드리지 않도록 보호."""
+    inject_calendar_locale_installer_once()
+    trigger_js = (
+        "(function(){"
+        "const pw=window.parent||window;"
+        "if(typeof pw.__sajuMarkBirthTimeSelects==='function'){pw.__sajuMarkBirthTimeSelects();}"
+        "if(typeof pw.__sajuRestoreBirthTimeSelectLabels==='function'){pw.__sajuRestoreBirthTimeSelectLabels();}"
+        "if(typeof pw.__sajuCalendarPatchNow==='function'){pw.__sajuCalendarPatchNow();}"
+        "})();"
+    )
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"<script>{trigger_js}</script></body></html>"
+    )
+    with st.container(key="saju_step2_time_protect"):
+        components.html(html, height=1, scrolling=False)
 
 
 def nudge_calendar_locale_patch(*, slot: str = "page") -> None:
@@ -1254,14 +1464,16 @@ def render_step_top_anchor() -> None:
     )
 
 
-def _fire_step_scroll_to_top(nav_epoch: int) -> None:
-    """STEP 전환 — 전역 매니저 1회 호출(가벼운 snap, 런당 1회)."""
+def _fire_step_scroll_to_top(nav_epoch: int, *, phase: str = "late") -> None:
+    """STEP 전환 — 전역 매니저 호출(early=본문 전, late=본문 후 재시도)."""
     epoch = int(nav_epoch)
-    if st.session_state.get("_saju_scroll_widgets_fired") == epoch:
+    phase_tag = f"{epoch}:{phase}"
+    if st.session_state.get("_saju_scroll_phase_fired") == phase_tag:
         return
+    st.session_state["_saju_scroll_phase_fired"] = phase_tag
     st.session_state["_saju_scroll_widgets_fired"] = epoch
 
-    lock_ms = int(st.session_state.get("_saju_step_scroll_lock_ms", _LOCK_MS_MOBILE))
+    lock_ms = int(st.session_state.get("_saju_step_scroll_lock_ms", _LOCK_MS))
 
     trigger_js = (
         f"(function(){{"
@@ -1276,7 +1488,7 @@ def _fire_step_scroll_to_top(nav_epoch: int) -> None:
         "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
         f"<script>{trigger_js}</script></body></html>"
     )
-    with st.container(key=f"saju_scroll_fire_{epoch}"):
+    with st.container(key=f"saju_scroll_fire_{epoch}_{phase}"):
         components.html(html, height=1, scrolling=False)
 
 
@@ -1397,7 +1609,7 @@ def inject_expander_collapse_once() -> None:
 _STEP2_TAB_ORDER_SELF = (
     "step2_self_name_input",
     "u_gender",
-    "step2_u_bdate",
+    "step2_u_bdate_text",
     "u_lunar",
     "u_time",
     "u_contact",
@@ -1405,7 +1617,7 @@ _STEP2_TAB_ORDER_SELF = (
 _STEP2_TAB_ORDER_OPP = (
     "step2_opp_name_input",
     "p_gender",
-    "step2_p_bdate",
+    "step2_p_bdate_text",
     "p_lunar",
     "p_time",
 )
@@ -1527,6 +1739,10 @@ _STEP2_TAB_MANAGER_JS = r"""
         return summary;
       }
     }
+    const combo = root.querySelector(
+      '[data-baseweb="select"] [role="combobox"], [data-baseweb="select"] [aria-haspopup="listbox"]'
+    );
+    if (combo && isVisible(combo, win)) return combo;
     const numIn = root.querySelector(
       '[data-testid="stNumberInput"] input:not([type="hidden"]):not([disabled])'
     );
@@ -2059,17 +2275,42 @@ def _fire_step1_home_viewport() -> None:
     st.session_state.pop("_saju_apply_home_viewport", None)
 
 
-def sync_step_dom_now(step: int | None = None, *, slot: str = "main") -> None:
+def inject_step_dom_boot_once() -> None:
+    """앱 기동 직후 — STEP·본문 표시(모바일 빈 화면 방지)."""
+    if st.session_state.get("_saju_step_dom_boot_v1"):
+        return
+    st.session_state["_saju_step_dom_boot_v1"] = True
+    inject_step_scroll_manager_once()
+    step = max(1, min(12, int(st.session_state.get("step", 1))))
+    boot_js = (
+        "(function(){"
+        "const pw=window.parent||window;"
+        f"if(typeof pw.__sajuSyncStepToHtml==='function'){{pw.__sajuSyncStepToHtml({step});}}"
+        "if(typeof pw.__sajuRevealMainContent==='function'){pw.__sajuRevealMainContent(true);}"
+        "})();"
+    )
+    st.markdown(f"<script>{boot_js}</script>", unsafe_allow_html=True)
+
+
+def sync_step_dom_now(
+    step: int | None = None, *, slot: str = "main", reveal: bool = False
+) -> None:
     """현재 STEP을 parent ``<html>`` 에 즉시 반영(라우터·finalize 공용).
 
     ``slot`` 마다 Streamlit ``key`` 를 달리해 동일 rerun 내 중복 key 오류를 막습니다.
     """
     s = max(1, min(12, int(step if step is not None else st.session_state.get("step", 1))))
     safe_slot = re.sub(r"[^a-zA-Z0-9_]", "_", str(slot or "main"))[:48]
+    reveal_js = (
+        "if(typeof pw.__sajuRevealMainContent==='function'){pw.__sajuRevealMainContent(true);}"
+        if reveal
+        else ""
+    )
     trigger_js = (
         "(function(){"
         "const pw=window.parent||window;"
         f"if(typeof pw.__sajuSyncStepToHtml==='function'){{pw.__sajuSyncStepToHtml({s});}}"
+        f"{reveal_js}"
         "})();"
     )
     html = (
@@ -2082,27 +2323,16 @@ def sync_step_dom_now(step: int | None = None, *, slot: str = "main") -> None:
 
 
 def prime_step_navigation_viewport(*, step: int) -> None:
-    """STEP 본문 렌더 전 — 최상단 스크롤(짧은 잠금). DOM 동기화는 router ``sync`` 가 담당."""
-    s = max(1, min(12, int(step)))
-    if s == 1:
-        return
-    if st.session_state.get("_saju_nav_preserve_scroll"):
-        return
-    if not step_scroll_is_pending():
-        return
-    nav_epoch = int(st.session_state.get("saju_nav_epoch", 0))
-    if st.session_state.get("_saju_scroll_widgets_fired") == nav_epoch:
-        return
-    _fire_step_scroll_to_top(nav_epoch)
+    """STEP 본문 렌더 전 — 모바일 깜박임 방지를 위해 스크롤은 finalize 1회만."""
+    return
 
 
-def inject_sync_step_to_html() -> None:
-    """페이지 하단 — STEP 동기화 + STEP1 홈 보정(모바일 스크롤 중엔 최상단 강제 안 함)."""
-    step = int(st.session_state.get("step", 1))
-    sync_step_dom_now(step, slot="finalize")
-    if step != 1:
+def _inject_home_chrome_tail_once() -> None:
+    """STEP1 홈 진입 1회 — 히어로 정렬(매 rerun 호출 시 모바일 깜박임)."""
+    if st.session_state.get("_saju_home_chrome_tail_done"):
         return
-    home_nav = bool(_home_viewport_is_pending())
+    st.session_state["_saju_home_chrome_tail_done"] = True
+    home_nav = True
     scroll_home_js = (
         "if(!pw.__sajuUserIsScrolling&&typeof pw.__sajuScrollHomeTopOnce==='function')"
         "{pw.__sajuScrollHomeTopOnce();}"
@@ -2129,16 +2359,22 @@ def inject_sync_step_to_html() -> None:
         components.html(html, height=1, scrolling=False)
 
 
+def inject_sync_step_to_html() -> None:
+    """레거시 호환 — 홈 크롬 보정만 필요 시 호출."""
+    if int(st.session_state.get("step", 1)) == 1 and _home_viewport_is_pending():
+        _inject_home_chrome_tail_once()
+
+
 def finalize_scroll_to_top_if_needed() -> None:
     """페이지 최하단 — STEP1 홈 뷰포트 또는 STEP 전환 후 최상단 스크롤."""
-    inject_sync_step_to_html()
-
     if st.session_state.pop("_saju_cancel_active_scroll_lock", False):
         inject_cancel_step_scroll_lock_once()
 
     step = int(st.session_state.get("step", 1))
     if step == 1:
         if _home_viewport_is_pending():
+            sync_step_dom_now(step, slot="finalize_home")
+            _inject_home_chrome_tail_once()
             _fire_step1_home_viewport()
         return
 
@@ -2153,11 +2389,7 @@ def finalize_scroll_to_top_if_needed() -> None:
     except Exception:
         pass
 
-    if st.session_state.get("_saju_scroll_widgets_fired") == nav_epoch:
-        mark_scroll_completed_for_current_nav()
-        return
-
-    _fire_step_scroll_to_top(nav_epoch)
+    _fire_step_scroll_to_top(nav_epoch, phase="late")
     mark_scroll_completed_for_current_nav()
 
 

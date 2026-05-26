@@ -97,7 +97,11 @@ def main() -> None:
         M.restore_session_draft_if_needed()
     M.guard_feature_step_without_explicit_nav()
 
-    from saju_app.ui.execution import finalize_scroll_to_top_if_needed, render_step_top_anchor
+    from saju_app.ui.execution import (
+        finalize_scroll_to_top_if_needed,
+        render_step_top_anchor,
+    )
+
     from saju_app.ui.steps import router as step_router
 
     render_step_top_anchor()

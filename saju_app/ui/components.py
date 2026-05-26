@@ -1357,6 +1357,28 @@ STEP2_TIME_OPTIONS = (
     "술(19:30~21:29)",
     "해(21:30~23:29)",
 )
+def coerce_step2_time_option(raw: object) -> str:
+    """태어난 시간 selectbox — 깨진·축약 라벨을 정식 옵션으로 복원."""
+    val = str(raw or "").strip()
+    if val in STEP2_TIME_OPTIONS:
+        return val
+    if not val:
+        return "모름"
+    for opt in STEP2_TIME_OPTIONS:
+        if opt.startswith(val) or val.startswith(opt.split("(")[0]):
+            return opt
+    m = re.match(r"^(\d{1,2})\.?$", val)
+    if m:
+        idx = int(m.group(1))
+        if 0 <= idx < len(STEP2_TIME_OPTIONS):
+            return STEP2_TIME_OPTIONS[idx]
+    branch = re.match(r"^([자축인묘진사오미신유술해])", val)
+    if branch:
+        b = branch.group(1)
+        for opt in STEP2_TIME_OPTIONS[1:]:
+            if opt.startswith(f"{b}("):
+                return opt
+    return "모름"
 
 
 # -------------------- STEP2 prefill persistence (persistence로 위임) --------------------
@@ -1370,19 +1392,70 @@ from saju_app.persistence.prefill import (  # noqa: E402
 
 
 # -------------------- input helpers --------------------
-_AUTOCOMPLETE_OFF = "off"
+# Chrome/Edge는 autocomplete=off 를 무시하는 경우가 많아 one-time-code 사용
+_AUTOCOMPLETE_TEXT = "one-time-code"
+_AUTOCOMPLETE_OFF = "one-time-code"
 _AUTOCOMPLETE_PASSWORD = "new-password"
 _AUTOCOMPLETE_REVISIT_PIN = "one-time-code"
+_AUTOFILL_GUARD_VERSION = "v6"
 _REVISIT_PIN_RULE_TEXT = "비밀번호는 숫자 특수문자 포함 6자 이상 설정 하세요"
 _REVISIT_PIN_RULE_TEXT_HOME = "비밀번호는 특수문자 포함 6자 이상 설정 하세요"
 
 _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
 <script>
 (() => {{
+    const GUARD_VER = "v5";
     const pw = window.parent !== window ? window.parent : window;
     const doc = pw.document;
     if (!doc) return;
+    if (pw.__sajuAutofillGuardVer === GUARD_VER) return;
+    pw.__sajuAutofillGuardVer = GUARD_VER;
     let queued = false;
+    const randSuffix = () => Math.random().toString(36).slice(2, 10);
+    const isRevisitPinField = (el) => {{
+        if (!el) return false;
+        try {{
+            return !!el.closest(
+                ".st-key-step1_cta_row_main, .st-key-step1_revisit_pin_in, " +
+                    "[class*='st-key-step2_revisit_pin'], " +
+                    ".st-key-step2_revisit_pin, .st-key-step2_revisit_pin_confirm"
+            );
+        }} catch (_) {{
+            return false;
+        }}
+    }};
+    const isCredentialSensitiveText = (el) => {{
+        if (!el) return false;
+        try {{
+            if (
+                el.closest(
+                    "[class*='st-key-step2_u_bdate'], [class*='st-key-step2_p_bdate'], " +
+                        "[class*='step2_u_bdate_text'], [class*='step2_p_bdate_text']"
+                )
+            ) {{
+                return true;
+            }}
+            const ph = String(el.getAttribute("placeholder") || "");
+            if (/\\d{{4}}\\/\\d{{2}}\\/\\d{{2}}/.test(ph)) return true;
+            const keyCls = String(el.closest("[class*='st-key-']")?.className || "");
+            if (/bdate|contact|revisit|password|pin/i.test(keyCls)) return true;
+        }} catch (_) {{}}
+        return false;
+    }};
+    const ensureDecoyFields = () => {{
+        if (doc.getElementById("saju-autofill-decoy")) return;
+        try {{
+            const box = doc.createElement("div");
+            box.id = "saju-autofill-decoy";
+            box.setAttribute("aria-hidden", "true");
+            box.style.cssText =
+                "position:fixed;left:-10000px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;";
+            box.innerHTML =
+                '<input type="text" tabindex="-1" autocomplete="username" name="saju-decoy-user">' +
+                '<input type="password" tabindex="-1" autocomplete="current-password" name="saju-decoy-pass">';
+            (doc.body || doc.documentElement).appendChild(box);
+        }} catch (_) {{}}
+    }};
     const stripEnterApplyHint = (el) => {{
         if (!el) return;
         try {{
@@ -1395,6 +1468,17 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
                 el.removeAttribute("aria-label");
             }}
         }} catch (_) {{}}
+    }};
+    const bindReadonlyUnlock = (el) => {{
+        if (!el || el.dataset.sajuReadonlyUnlock === "1") return;
+        el.dataset.sajuReadonlyUnlock = "1";
+        const unlock = () => {{
+            try {{ el.removeAttribute("readonly"); }} catch (_) {{}}
+        }};
+        try {{ el.setAttribute("readonly", "readonly"); }} catch (_) {{}}
+        el.addEventListener("focus", unlock, {{ passive: true }});
+        el.addEventListener("pointerdown", unlock, {{ passive: true }});
+        el.addEventListener("click", unlock, {{ passive: true }});
     }};
     const patchOne = (el) => {{
         if (!el || el.nodeType !== 1) return;
@@ -1412,28 +1496,41 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
         ) {{
             return;
         }}
-        let revisitRoot = null;
-        try {{
-            revisitRoot = el.closest(
-                ".st-key-step1_cta_row_main, .st-key-step1_revisit_pin_in, [class*='st-key-step2_revisit_pin']"
-            );
-        }} catch (_) {{
-            revisitRoot = null;
+        const revisit = isRevisitPinField(el);
+        const sensitiveText =
+            type !== "password" && (isCredentialSensitiveText(el) || revisit);
+        let ac = "one-time-code";
+        if (type === "password") {{
+            ac = revisit ? "one-time-code" : "new-password";
         }}
-        const ac =
-            type === "password"
-                ? (revisitRoot ? "one-time-code" : "new-password")
-                : "off";
         el.setAttribute("autocomplete", ac);
         el.setAttribute("autocorrect", "off");
         el.setAttribute("autocapitalize", "off");
         el.setAttribute("spellcheck", "false");
+        el.setAttribute("aria-autocomplete", "none");
         el.setAttribute("data-1p-ignore", "true");
         el.setAttribute("data-lpignore", "true");
         el.setAttribute("data-form-type", "other");
-        if (type === "password") {{
+        el.setAttribute("data-saju-no-credential", "1");
+        if (type === "password" || revisit) {{
             el.setAttribute("data-bwignore", "true");
         }}
+        if (!el.dataset.sajuFieldName) {{
+            el.dataset.sajuFieldName = "1";
+            try {{
+                el.setAttribute("name", "saju-field-" + randSuffix());
+            }} catch (_) {{}}
+        }}
+        if (sensitiveText || revisit) {{
+            bindReadonlyUnlock(el);
+        }}
+    }};
+    const patchForms = () => {{
+        try {{
+            doc.querySelectorAll("form").forEach((form) => {{
+                form.setAttribute("autocomplete", "off");
+            }});
+        }} catch (_) {{}}
     }};
     const hideInputInstructions = () => {{
         try {{
@@ -1447,18 +1544,27 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
     }};
     const patchAll = () => {{
         queued = false;
+        ensureDecoyFields();
+        patchForms();
         try {{
             doc.querySelectorAll("input, textarea").forEach(patchOne);
         }} catch (_) {{}}
         hideInputInstructions();
     }};
+    let debounceTimer = null;
     const schedule = () => {{
-        if (queued) return;
-        queued = true;
-        pw.requestAnimationFrame(patchAll);
+        if (debounceTimer) {{
+            try {{ clearTimeout(debounceTimer); }} catch (_) {{}}
+        }}
+        debounceTimer = pw.setTimeout(function () {{
+            debounceTimer = null;
+            if (queued) return;
+            queued = true;
+            try {{ pw.requestAnimationFrame(patchAll); }} catch (_) {{ patchAll(); }}
+        }}, 220);
     }};
     schedule();
-    [120, 380, 900].forEach((ms) => pw.setTimeout(schedule, ms));
+    [120, 480].forEach((ms) => pw.setTimeout(schedule, ms));
     try {{
         const root = doc.body || doc.documentElement;
         if (root && pw.MutationObserver) {{
@@ -1481,6 +1587,8 @@ _REVISIT_PIN_AUTOFILL_SCRIPT = """
     const selectors = [
         ".st-key-step1_cta_row_main input[type=password]",
         ".st-key-step1_revisit_pin_in input[type=password]",
+        ".st-key-step2_revisit_pin input[type=password]",
+        ".st-key-step2_revisit_pin_confirm input[type=password]",
         '[class*="st-key-step2_revisit_pin"] input[type=password]',
         'form[data-testid="stForm"] input[type=password][autocomplete="one-time-code"]',
     ];
@@ -1546,6 +1654,7 @@ def _with_autocomplete_kwargs(kwargs: dict[str, Any], *, password: bool = False)
 
 def text_input_no_autofill(*args, **kwargs):
     """브라우저 저장 정보(자동완성) 팝업 억제."""
+    inject_global_input_autofill_guard()
     password = kwargs.get("type") == "password"
     kwargs = _with_autocomplete_kwargs(kwargs, password=password)
     try:
@@ -1557,6 +1666,7 @@ def text_input_no_autofill(*args, **kwargs):
 
 def password_input_no_autofill(*args, **kwargs):
     """비밀번호 입력 — 저장된 암호 제안 억제."""
+    inject_global_input_autofill_guard()
     kwargs["type"] = "password"
     kwargs = _with_autocomplete_kwargs(kwargs, password=True)
     try:
@@ -1601,14 +1711,23 @@ def revisit_pin_input_no_autofill(*args, **kwargs):
 
 def text_area_no_autofill(*args, **kwargs):
     """여러 줄 입력 — Streamlit textarea는 autocomplete 미지원, 전역 JS가 보완."""
-    return st.text_area(*args, **kwargs)
+    inject_global_input_autofill_guard()
+    out = dict(kwargs)
+    if "autocomplete" not in out:
+        out["autocomplete"] = _AUTOCOMPLETE_TEXT
+    try:
+        return st.text_area(*args, **out)
+    except TypeError:
+        out.pop("autocomplete", None)
+        return st.text_area(*args, **out)
 
 
 def inject_global_input_autofill_guard() -> None:
     """앱 전체 input/textarea — 브라우저 저장 암호·번호 자동완성 억제."""
-    if st.session_state.get("_saju_autofill_guard_injected"):
+    guard_key = f"_saju_autofill_guard_{_AUTOFILL_GUARD_VERSION}"
+    if st.session_state.get(guard_key):
         return
-    st.session_state["_saju_autofill_guard_injected"] = True
+    st.session_state[guard_key] = True
     st.markdown(_GLOBAL_AUTOFILL_GUARD_SCRIPT, unsafe_allow_html=True)
 
 
@@ -1669,25 +1788,28 @@ def prepare_step_change_ui(*, dest: int | None = None) -> None:
     """STEP 전환 직전: 하단 「기능 바로가기」 접기 + (선택) 최상단 스크롤."""
     st.session_state.pop("_saju_scroll_armed_epoch", None)
     st.session_state.pop("_saju_scroll_widgets_fired", None)
+    st.session_state.pop("_saju_scroll_phase_fired", None)
     st.session_state[QUICK_MENU_OPEN_KEY] = False
     st.session_state[QUICK_MENU_NAV_EPOCH_KEY] = int(
         st.session_state.get(QUICK_MENU_NAV_EPOCH_KEY, 0)
     ) + 1
 
     preserve_scroll = bool(st.session_state.get("_saju_nav_preserve_scroll"))
+    st.session_state.pop("_saju_scroll_phase_fired", None)
     if int(dest or 0) == 1:
         st.session_state["_saju_apply_home_viewport"] = True
         st.session_state.pop("_saju_home_viewport_done", None)
-        st.session_state.pop("_saju_pending_scroll_top", None)
-        st.session_state.pop("_force_scroll_to_top_after_rerun", None)
-        st.session_state.pop("_saju_must_scroll_top", None)
-    elif preserve_scroll:
+        st.session_state.pop("_saju_home_chrome_tail_done", None)
+    else:
+        st.session_state.pop("_saju_home_chrome_tail_done", None)
+    if preserve_scroll:
         st.session_state.pop("_saju_pending_scroll_top", None)
         st.session_state.pop("_saju_step_scroll_lock_ms", None)
         st.session_state["_saju_cancel_active_scroll_lock"] = True
     else:
         st.session_state["_saju_pending_scroll_top"] = True
-        st.session_state["_saju_step_scroll_lock_ms"] = 50
+        st.session_state["_force_scroll_to_top_after_rerun"] = True
+        st.session_state["_saju_step_scroll_lock_ms"] = 220
         st.session_state["_saju_cancel_active_scroll_lock"] = True
     st.session_state["_saju_nav_from_prepare"] = True
     legacy = "saju_bottom_quick_menu_expander"

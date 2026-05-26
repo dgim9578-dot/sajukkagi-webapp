@@ -37,6 +37,12 @@ def configure_application() -> None:
         pass
     init_session_state()
     try:
+        from saju_app.ui.execution import inject_step_dom_boot_once
+
+        inject_step_dom_boot_once()
+    except Exception:
+        pass
+    try:
         from saju_app.ui import share_meta as _share_meta
 
         _share_meta.inject_link_share_meta()
@@ -1650,7 +1656,7 @@ def configure_application() -> None:
         }
         html.saju-home-step1 .st-key-saju_landing_stack,
         html[data-saju-step="1"] .st-key-saju_landing_stack {
-            margin-top: calc(-0.65rem - env(safe-area-inset-top, 0px)) !important;
+            margin-top: max(0px, env(safe-area-inset-top, 0px)) !important;
         }
         html.saju-home-step1 .st-key-saju_landing_hero,
         html[data-saju-step="1"] .st-key-saju_landing_hero {
@@ -1678,6 +1684,30 @@ def configure_application() -> None:
             overflow: hidden !important;
             justify-content: flex-start !important;
             border-radius: 0 0 clamp(16px, 4.5vw, 20px) clamp(16px, 4.5vw, 20px) !important;
+        }
+        html.saju-home-step1 .saju-landing-hero.saju-landing-hero--nova,
+        html[data-saju-step="1"] .saju-landing-hero.saju-landing-hero--nova,
+        html.saju-home-step1 .saju-landing-hero--luxe.saju-landing-hero--intense.saju-landing-hero--nova,
+        html[data-saju-step="1"] .saju-landing-hero--luxe.saju-landing-hero--intense.saju-landing-hero--nova,
+        .st-key-saju_landing_hero .saju-landing-hero--nova {
+            background-color: #08060f !important;
+            background-image:
+                radial-gradient(ellipse 130% 90% at 50% -25%, rgba(255, 214, 110, 0.55) 0%, transparent 58%),
+                radial-gradient(ellipse 70% 55% at 92% 88%, rgba(124, 92, 255, 0.42) 0%, transparent 52%),
+                radial-gradient(ellipse 65% 50% at 8% 92%, rgba(212, 175, 55, 0.35) 0%, transparent 48%),
+                linear-gradient(155deg, #0c0a14 0%, #1a1230 38%, #0f0c18 72%, #050408 100%) !important;
+            border: 1px solid rgba(255, 220, 140, 0.42) !important;
+            box-shadow:
+                0 28px 72px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(255, 230, 160, 0.12),
+                0 0 64px rgba(212, 175, 55, 0.28),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+        }
+        html.saju-home-step1 .saju-landing-hero--nova .saju-landing-hero-beam,
+        html[data-saju-step="1"] .saju-landing-hero--nova .saju-landing-hero-beam,
+        html.saju-home-step1 .saju-landing-hero--nova .saju-landing-hero-shimmer,
+        html[data-saju-step="1"] .saju-landing-hero--nova .saju-landing-hero-shimmer {
+            opacity: 0.7 !important;
         }
         html.saju-home-step1 .st-key-step1_solar24,
         html[data-saju-step="1"] .st-key-step1_solar24 {
@@ -4593,6 +4623,24 @@ def configure_application() -> None:
     .st-key-step2_p_time_wrap .stSelectbox {
         width: 100% !important;
     }
+    @media (max-width: 768px) {
+        .st-key-step2_u_time_wrap [data-baseweb="popover"],
+        .st-key-step2_p_time_wrap [data-baseweb="popover"],
+        .st-key-step2_u_time_wrap [data-baseweb="select-dropdown"],
+        .st-key-step2_p_time_wrap [data-baseweb="select-dropdown"] {
+            min-width: min(100vw - 1.5rem, 22rem) !important;
+            max-width: min(100vw - 1rem, 24rem) !important;
+        }
+        .st-key-step2_u_time_wrap [role="option"],
+        .st-key-step2_p_time_wrap [role="option"],
+        .st-key-step2_u_time_wrap [data-baseweb="option"],
+        .st-key-step2_p_time_wrap [data-baseweb="option"] {
+            white-space: nowrap !important;
+            font-size: max(14px, 0.88rem) !important;
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
+        }
+    }
     .st-key-step2_u_time_wrap [data-testid="stWidgetLabel"] label,
     .st-key-step2_p_time_wrap [data-testid="stWidgetLabel"] label,
     .st-key-step2_u_time_wrap .stSelectbox label,
@@ -6811,6 +6859,90 @@ def configure_application() -> None:
     [data-baseweb="option"][data-saju-month-num="12"]::after { content: "12월" !important; }
     [data-baseweb="calendar"] [data-baseweb="day"] {
         letter-spacing: 0 !important;
+    }
+
+    /* 모바일 빈 화면 복구 — STEP 마운트·홈 배너가 JS/CSS에 의해 접히지 않도록 */
+    @media (max-width: 768px) {
+        .main .block-container,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        section.main {
+            visibility: visible !important;
+            min-height: 40vh !important;
+        }
+        html:not(.saju-not-step1) .st-key-saju_landing_stack,
+        html:not(.saju-not-step1) .st-key-saju_landing_hero,
+        html:not(.saju-not-step1) .saju-landing-hero {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: relative !important;
+            left: auto !important;
+            pointer-events: auto !important;
+        }
+        html:not(.saju-not-step1) .saju-landing-hero {
+            display: flex !important;
+        }
+        html[data-saju-step="1"] .st-key-saju_router_step_mount_01,
+        html.saju-home-step1 .st-key-saju_router_step_mount_01,
+        html[data-saju-step="2"] .st-key-saju_router_step_mount_02,
+        html[data-saju-step="3"] .st-key-saju_router_step_mount_03,
+        html[data-saju-step="4"] .st-key-saju_router_step_mount_04,
+        html[data-saju-step="5"] .st-key-saju_router_step_mount_05,
+        html[data-saju-step="6"] .st-key-saju_router_step_mount_06,
+        html[data-saju-step="7"] .st-key-saju_router_step_mount_07,
+        html[data-saju-step="8"] .st-key-saju_router_step_mount_08,
+        html[data-saju-step="9"] .st-key-saju_router_step_mount_09,
+        html[data-saju-step="10"] .st-key-saju_router_step_mount_10,
+        html[data-saju-step="11"] .st-key-saju_router_step_mount_11,
+        html[data-saju-step="12"] .st-key-saju_router_step_mount_12 {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            pointer-events: auto !important;
+        }
+        html[data-saju-step="1"] .st-key-saju_landing_stack,
+        html.saju-home-step1 .st-key-saju_landing_stack,
+        html[data-saju-step="1"] .st-key-saju_landing_hero,
+        html.saju-home-step1 .st-key-saju_landing_hero,
+        html[data-saju-step="1"] .saju-landing-hero,
+        html.saju-home-step1 .saju-landing-hero {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: relative !important;
+            left: auto !important;
+            pointer-events: auto !important;
+        }
+        html[data-saju-step="1"] .saju-landing-hero,
+        html.saju-home-step1 .saju-landing-hero {
+            display: flex !important;
+        }
+    }
+    /* 모바일 안정화 — 과한 애니메이션·스크롤 튐 방지 */
+    html.saju-mobile-stable .saju-landing-hero--nova,
+    html.saju-mobile-stable .saju-landing-hero--nova *,
+    html.saju-mobile-stable .saju-landing-hero--luxe {
+        animation: none !important;
+        transition: none !important;
+    }
+    html.saju-mobile-stable [data-testid="stAppViewContainer"],
+    html.saju-mobile-stable [data-testid="stMain"],
+    html.saju-mobile-stable section.main {
+        scroll-behavior: auto !important;
+        overscroll-behavior-y: auto !important;
     }
 
 </style>

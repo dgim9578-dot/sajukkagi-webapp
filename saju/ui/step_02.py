@@ -7,8 +7,34 @@ import re
 from datetime import date
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from saju_app.ui import components as M
+from saju_app.ui import execution as saju_execution
+
+
+def protect_step2_birth_time_selects() -> None:
+    """STEP2 태어난 시간 — 달력 월 패치가 시간 select를 망가뜨리지 않도록."""
+    fn = getattr(saju_execution, "protect_step2_birth_time_selects", None)
+    if callable(fn):
+        fn()
+        return
+    saju_execution.inject_calendar_locale_installer_once()
+    trigger_js = (
+        "(function(){"
+        "const pw=window.parent||window;"
+        "if(typeof pw.__sajuMarkBirthTimeSelects==='function'){pw.__sajuMarkBirthTimeSelects();}"
+        "if(typeof pw.__sajuRestoreBirthTimeSelectLabels==='function'){pw.__sajuRestoreBirthTimeSelectLabels();}"
+        "if(typeof pw.__sajuCalendarPatchNow==='function'){pw.__sajuCalendarPatchNow();}"
+        "})();"
+    )
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"<script>{trigger_js}</script></body></html>"
+    )
+    with st.container(key="saju_step2_time_protect"):
+        components.html(html, height=1, scrolling=False)
 
 _SELF_NAME_INPUT_KEY = "step2_self_name_input"
 _OPP_NAME_INPUT_KEY = "step2_opp_name_input"
@@ -164,10 +190,17 @@ def _ensure_bdate_text_from_ymd(
     st.session_state[text_key] = _format_bdate_str(y, m, d)
 
 
-def _pull_ymd_from_bdate_text(
-    *, bdate_key: str, y_key: str, m_key: str, d_key: str
+def _sync_ymd_from_bdate_text(
+    *,
+    bdate_key: str,
+    y_key: str,
+    m_key: str,
+    d_key: str,
 ) -> bool:
-    """생년월일 텍스트 → y/m/d 동기화. 성공 시 True."""
+    """생년월일 텍스트 → y/m/d 만 동기화(저장·달력 변경·버튼 콜백용).
+
+    ``text_input`` 위젯 키는 건드리지 않습니다 (렌더 후 수정 시 StreamlitAPIException).
+    """
     text_key = _bdate_text_key(bdate_key)
     parsed = _parse_bdate_text(st.session_state.get(text_key))
     if parsed is None:
@@ -175,17 +208,49 @@ def _pull_ymd_from_bdate_text(
     st.session_state[y_key] = int(parsed.year)
     st.session_state[m_key] = int(parsed.month)
     st.session_state[d_key] = int(parsed.day)
-    st.session_state[text_key] = _format_bdate_str(
-        parsed.year, parsed.month, parsed.day
-    )
     st.session_state.pop(bdate_key, None)
     return True
 
 
+def _normalize_bdate_text_on_change(
+    *,
+    bdate_key: str,
+    y_key: str,
+    m_key: str,
+    d_key: str,
+) -> None:
+    """``text_input`` ``on_change`` 전용 — 슬래시 형식 정규화."""
+    if not _sync_ymd_from_bdate_text(
+        bdate_key=bdate_key, y_key=y_key, m_key=m_key, d_key=d_key
+    ):
+        return
+    text_key = _bdate_text_key(bdate_key)
+    parsed = _parse_bdate_text(st.session_state.get(text_key))
+    if parsed is None:
+        return
+    st.session_state[text_key] = _format_bdate_str(
+        parsed.year, parsed.month, parsed.day
+    )
+
+
 def _bdate_text_change_callback(*, y_key: str, m_key: str, d_key: str, bdate_key: str):
     def _cb() -> None:
-        _pull_ymd_from_bdate_text(
-            bdate_key=bdate_key, y_key=y_key, m_key=m_key, d_key=d_key
+        _normalize_bdate_text_on_change(
+            bdate_key=bdate_key,
+            y_key=y_key,
+            m_key=m_key,
+            d_key=d_key,
+        )
+
+    return _cb
+
+
+def _birth_time_change_callback(*, time_key: str):
+    """태어난 시간 select — 선택 직후 정식 라벨로 복원(모름으로 덮어쓰지 않음)."""
+
+    def _cb() -> None:
+        st.session_state[time_key] = M.coerce_step2_time_option(
+            st.session_state.get(time_key)
         )
 
     return _cb
@@ -429,13 +494,24 @@ def _try_begin_step2_save() -> None:
     if not self_nm:
         st.error("본인 이름을 입력해 주세요.")
         return
-    if not _pull_ymd_from_bdate_text(
-        bdate_key=_SELF_BDATE_KEY, y_key="u_y", m_key="u_m", d_key="u_d"
-    ):
+    if _parse_bdate_text(st.session_state.get(_SELF_BDATE_TEXT_KEY)) is None:
         st.error(
             "본인 생년월일을 **YYYY/MM/DD** 형식으로 입력해 주세요. (예: 1995/01/01)"
         )
         return
+    _sync_ymd_from_bdate_text(
+        bdate_key=_SELF_BDATE_KEY, y_key="u_y", m_key="u_m", d_key="u_d"
+    )
+    opp_nm = str(st.session_state.get(_OPP_NAME_INPUT_KEY) or "").strip()
+    if opp_nm and _parse_bdate_text(st.session_state.get(_OPP_BDATE_TEXT_KEY)) is None:
+        st.error(
+            "상대방 생년월일을 **YYYY/MM/DD** 형식으로 입력해 주세요. (예: 1990/05/15)"
+        )
+        return
+    if opp_nm:
+        _sync_ymd_from_bdate_text(
+            bdate_key=_OPP_BDATE_KEY, y_key="p_y", m_key="p_m", d_key="p_d"
+        )
     if not bool(st.session_state.get("agree", False)):
         st.error("개인정보 수집·이용 동의가 필요합니다.")
         return
@@ -453,7 +529,7 @@ def _try_begin_step2_save() -> None:
 def _on_lunar_change_self() -> None:
     if str(st.session_state.get("u_lunar") or "양력") == "양력":
         st.session_state.u_leap = "평달"
-    _pull_ymd_from_bdate_text(
+    _sync_ymd_from_bdate_text(
         bdate_key=_SELF_BDATE_KEY, y_key="u_y", m_key="u_m", d_key="u_d"
     )
 
@@ -461,7 +537,7 @@ def _on_lunar_change_self() -> None:
 def _on_lunar_change_opp() -> None:
     if str(st.session_state.get("p_lunar") or "양력") == "양력":
         st.session_state.p_leap = "평달"
-    _pull_ymd_from_bdate_text(
+    _sync_ymd_from_bdate_text(
         bdate_key=_OPP_BDATE_KEY, y_key="p_y", m_key="p_m", d_key="p_d"
     )
 
@@ -512,8 +588,9 @@ def _render_person_form(
     contact_key: str = "u_contact",
 ) -> None:
     time_options = list(M.STEP2_TIME_OPTIONS)
-    if str(st.session_state.get(time_key) or "모름") not in time_options:
-        st.session_state[time_key] = "모름"
+    st.session_state[time_key] = M.coerce_step2_time_option(
+        st.session_state.get(time_key, "모름")
+    )
 
     row_key = "self" if show_contact else "opp"
     with st.container(key=container_key):
@@ -561,6 +638,7 @@ def _render_person_form(
                         "태어난 시간",
                         time_options,
                         key=time_key,
+                        on_change=_birth_time_change_callback(time_key=time_key),
                     )
             with contact_c:
                 if show_contact:
@@ -674,24 +752,25 @@ def render() -> None:
             st.caption("다음 방문 시 본인 정보로 바로 이동합니다.")
             rp1, rp2 = st.columns(2, gap="small")
             with rp1:
-                M.password_input_no_autofill(
+                M.revisit_pin_input_no_autofill(
                     "재방문 비밀번호",
                     key="step2_revisit_pin",
                     placeholder="새 비밀번호",
                 )
             with rp2:
-                M.password_input_no_autofill(
+                M.revisit_pin_input_no_autofill(
                     "비밀번호 확인",
                     key="step2_revisit_pin_confirm",
                     placeholder="한 번 더 입력",
                 )
-        if st.button(
+        st.button(
             "✅ 저장하고 사주 분석 시작",
             type="primary",
             use_container_width=True,
             key="step2_save_and_analyze_btn",
-        ):
-            _try_begin_step2_save()
+            on_click=_try_begin_step2_save,
+        )
 
     M.inject_step2_tab_order_once()
     M.inject_widget_focus_return_once()
+    protect_step2_birth_time_selects()

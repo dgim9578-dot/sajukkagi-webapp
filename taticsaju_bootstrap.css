@@ -1,0 +1,107 @@
+[1mdiff --git a/saju_app/app.py b/saju_app/app.py[m
+[1mindex 8433d30..47bd035 100644[m
+[1m--- a/saju_app/app.py[m
+[1m+++ b/saju_app/app.py[m
+[36m@@ -66,8 +66,42 @@[m [mdef _ensure_step_and_consume_goto_query() -> None:[m
+             pass[m
+ [m
+ [m
+[32m+[m[32mdef _current_step() -> int:[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        return max(1, min(12, int(st.session_state.get("step", 1))))[m
+[32m+[m[32m    except Exception:[m
+[32m+[m[32m        return 1[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef _run_browser_privacy_widgets() -> None:[m
+[32m+[m[32m    """``st_javascript`` iframe — DOM 상 본문 뒤에 붙여야 홈 배너가 위로 밀리지 않음.[m
+[32m+[m
+[32m+[m[32m    한 번의 스크립트 실행에서 두 번 호출되면 ``st_javascript`` 위젯 key 가 중복돼[m
+[32m+[m[32m    ``StreamlitDuplicateElementKey`` 가 발생하므로, 실행당 1회만 수행합니다.[m
+[32m+[m[32m    """[m
+[32m+[m[32m    if st.session_state.get("_saju_privacy_widgets_run_done"):[m
+[32m+[m[32m        return[m
+[32m+[m[32m    st.session_state["_saju_privacy_widgets_run_done"] = True[m
+[32m+[m
+[32m+[m[32m    from saju_app.ui import components as M[m
+[32m+[m
+[32m+[m[32m    M.apply_browser_refresh_landing()[m
+[32m+[m[32m    M.enforce_browser_privacy_isolation()[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef _run_session_guards() -> None:[m
+[32m+[m[32m    """draft 복원·기능 STEP 가드(javascript 위젯 없음)."""[m
+[32m+[m[32m    from saju_app.ui import components as M[m
+[32m+[m
+[32m+[m[32m    if not st.session_state.get("_saju_reload_check_pending"):[m
+[32m+[m[32m        M.restore_session_draft_if_needed()[m
+[32m+[m[32m    M.guard_feature_step_without_explicit_nav()[m
+[32m+[m
+[32m+[m
+ def main() -> None:[m
+     configure_application()[m
+[32m+[m[32m    # 실행당 브라우저 프라이버시 위젯 1회 가드 초기화(중복 key 방지)[m
+[32m+[m[32m    st.session_state["_saju_privacy_widgets_run_done"] = False[m
+     root = _project_root()[m
+     if root not in sys.path:[m
+         sys.path.insert(0, root)[m
+[36m@@ -84,28 +118,45 @@[m [mdef main() -> None:[m
+             M.hard_reset_personal_input_state(clear_analysis=True)[m
+     except Exception:[m
+         pass[m
+[31m-    try:[m
+[31m-        M.purge_all_step2_prefill_from_server()[m
+[31m-    except Exception:[m
+[31m-        pass[m
+[31m-    M.apply_browser_refresh_landing()[m
+[31m-    privacy_ok = M.enforce_browser_privacy_isolation()[m
+[31m-    if privacy_ok is None:[m
+[31m-        # streamlit-javascript 첫 응답 전 — st.stop() 하면 빈 화면만 보임. 렌더는 계속합니다.[m
+[31m-        pass[m
+[31m-    elif not st.session_state.get("_saju_reload_check_pending"):[m
+[31m-        M.restore_session_draft_if_needed()[m
+[31m-    M.guard_feature_step_without_explicit_nav()[m
+[32m+[m[32m    if not st.session_state.get("_saju_step2_prefill_purged_v1"):[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            M.purge_all_step2_prefill_from_server()[m
+[32m+[m[32m            st.session_state["_saju_step2_prefill_purged_v1"] = True[m
+[32m+[m[32m        except Exception:[m
+[32m+[m[32m            pass[m
+[32m+[m
+[32m+[m[32m    step = _current_step()[m
+[32m+[m[32m    home_first = step == 1[m
+[32m+[m
+[32m+[m[32m    if not home_first:[m
+[32m+[m[32m        _run_browser_privacy_widgets()[m
+[32m+[m[32m        _run_session_guards()[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        _run_session_guards()[m
+ [m
+     from saju_app.ui.execution import ([m
+         finalize_scroll_to_top_if_needed,[m
+[32m+[m[32m        get_step_nav_from_step,[m
+[32m+[m[32m        inject_step_nav_transition_early,[m
+[32m+[m[32m        prime_step_nav_scroll_before_render,[m
+         render_step_top_anchor,[m
+     )[m
+ [m
+     from saju_app.ui.steps import router as step_router[m
+ [m
+[31m-    render_step_top_anchor()[m
+[31m-    step_router.render()[m
+[32m+[m[32m    nav_from = get_step_nav_from_step(target_step=step)[m
+[32m+[m[32m    if nav_from is not None:[m
+[32m+[m[32m        inject_step_nav_transition_early(target_step=step, from_step=nav_from)[m
+[32m+[m
+[32m+[m[32m    if home_first:[m
+[32m+[m[32m        step_router.render()[m
+[32m+[m[32m        _run_browser_privacy_widgets()[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        prime_step_nav_scroll_before_render()[m
+[32m+[m[32m        render_step_top_anchor()[m
+[32m+[m[32m        step_router.render()[m
+[32m+[m[32m        _run_browser_privacy_widgets()[m
+[32m+[m
+     try:[m
+         from saju_app.ui import webapp_launch as webapp_launch[m
+ [m

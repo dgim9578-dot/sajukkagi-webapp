@@ -87,12 +87,13 @@ def render_policy_footer() -> None:
     link_html = " · ".join(links)
     if link_html:
         link_html = " · " + link_html
-    st.caption(
-        "본 서비스는 운세.성향 참고용입니다 건강. 질병. 법률 등 중요한 사항은 전문가와 상담하세요"
-    )
-    if link_html:
-        st.markdown(
-            f'<div style="font-size:0.85rem;color:#6b7280;">운영자: {html.escape(s["operator_name"])}{link_html}</div>',
-            unsafe_allow_html=True,
+    with st.container(key="saju_policy_footer"):
+        st.caption(
+            "본 서비스는 운세.성향 참고용입니다 건강. 질병. 법률 등 중요한 사항은 전문가와 상담하세요"
         )
+        if link_html:
+            st.markdown(
+                f'<div style="font-size:0.85rem;color:#6b7280;">운영자: {html.escape(s["operator_name"])}{link_html}</div>',
+                unsafe_allow_html=True,
+            )
 

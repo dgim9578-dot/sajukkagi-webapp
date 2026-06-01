@@ -184,6 +184,8 @@ def _render_match_sections_batch(sections: list[tuple[str, str, str]]) -> None:
 def render() -> None:
     M._resync_user_gapja_from_u_data()
     if not M.partner_is_registered():
+        M.reconcile_partner_registration()
+    if not M.partner_is_registered():
         M.clear_partner_analysis_state()
     else:
         M.sync_partner_gapja_for_match_analysis()
@@ -201,18 +203,27 @@ def render() -> None:
                 "궁합 분석을 하려면 **본인 사주**가 먼저 필요합니다. "
                 "정보 입력(STEP2)에서 생년월일·시간을 저장한 뒤 다시 오시거나, 이미 입력하셨다면 **사주 분석(STEP3)**으로 이동해 주세요."
             )
+            def _go_step2_then_back() -> None:
+                M.prepare_step_change_ui()
+                st.session_state._return_step_after_input = 4
+                M.navigate_to_step(2)
+
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("← 정보 입력으로", use_container_width=True, key="step4_gate_step2"):
-                    M.prepare_step_change_ui()
-                    st.session_state.step = 2
-                    st.session_state._return_step_after_input = 4
-                    rerun_full_app()
+                st.button(
+                    "← 정보 입력으로",
+                    use_container_width=True,
+                    key="step4_gate_step2",
+                    on_click=_go_step2_then_back,
+                )
             with c2:
-                if st.button("← 사주 분석으로", use_container_width=True, key="step4_gate_step3"):
-                    M.prepare_step_change_ui()
-                    st.session_state.step = 3
-                    rerun_full_app()
+                st.button(
+                    "← 사주 분석으로",
+                    use_container_width=True,
+                    key="step4_gate_step3",
+                    on_click=M.navigate_to_step,
+                    args=(3,),
+                )
         st.stop()
 
     if not M.partner_is_registered() or not p_gapja or len(p_gapja) < 3:
@@ -221,11 +232,17 @@ def render() -> None:
             "STEP2 **상대방정보**에서 이름·생년월일을 입력한 뒤 "
             "**저장하고 사주 분석 시작**을 눌러 주세요."
         )
-        if st.button("← 정보 입력(상대방)으로", use_container_width=True, key="step4_gate_partner_birth"):
+        def _go_step2_partner_birth() -> None:
             M.prepare_step_change_ui()
-            st.session_state.step = 2
             st.session_state._return_step_after_input = 4
-            rerun_full_app()
+            M.navigate_to_step(2)
+
+        st.button(
+            "← 정보 입력(상대방)으로",
+            use_container_width=True,
+            key="step4_gate_partner_birth",
+            on_click=_go_step2_partner_birth,
+        )
         return
 
     _pn_raw = str(
@@ -236,11 +253,17 @@ def render() -> None:
     if not _pn_raw:
         M.clear_partner_analysis_state()
         st.warning("상대방 정보가 없습니다. 먼저 정보 입력에서 상대방 이름·생년월일을 등록해 주세요.")
-        if st.button("← 정보 입력으로", use_container_width=True, key="step4_gate_partner_name"):
+        def _go_step2_partner_name() -> None:
             M.prepare_step_change_ui()
-            st.session_state.step = 2
             st.session_state._return_step_after_input = 4
-            rerun_full_app()
+            M.navigate_to_step(2)
+
+        st.button(
+            "← 정보 입력으로",
+            use_container_width=True,
+            key="step4_gate_partner_name",
+            on_click=_go_step2_partner_name,
+        )
         st.stop()
 
     p_name = _pn_raw
@@ -251,11 +274,12 @@ def render() -> None:
             "STEP2 **상대방정보**에서 상대 **생년월일·시간**을 본인과 다르게 입력한 뒤 "
             "**저장하고 사주 분석 시작**을 다시 눌러 주세요."
         )
-        if st.button("← 정보 입력(상대방)으로", use_container_width=True, key="step4_gate_same_gapja"):
-            M.prepare_step_change_ui()
-            st.session_state.step = 2
-            st.session_state._return_step_after_input = 4
-            rerun_full_app()
+        st.button(
+            "← 정보 입력(상대방)으로",
+            use_container_width=True,
+            key="step4_gate_same_gapja",
+            on_click=_go_step2_partner_birth,
+        )
         st.stop()
 
     with M.premium_analysis_shell(4):

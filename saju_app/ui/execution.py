@@ -7,18 +7,88 @@ STEP(다음/이전) 이동 시 최상단 스크롤:
 
 from __future__ import annotations
 
+import json
+import logging
 import re
+import time
 import traceback
 from typing import NoReturn
 
 import streamlit as st
 import streamlit.components.v1 as components
 
+log = logging.getLogger(__name__)
+
+_FORCE_SCROLL_OPTS_KEY = "_saju_force_scroll_opts"
+# parent 창 JS 와 Python 세션 키를 반드시 동일 숫자로 맞출 것 (불일치 시 구버전 JS 가 남아 멈춤·스크롤 미적용)
+_SCROLL_MGR_JS_VER = 93
+
+
+def schedule_force_scroll_after_nav(
+    *, delay_ms: int = 0, strength: str = "light"
+) -> None:
+    """레거시 호환 — 실제 스크롤은 ``finalize_scroll_to_top_if_needed`` 1회만 실행합니다."""
+    st.session_state[_FORCE_SCROLL_OPTS_KEY] = {
+        "delay_ms": max(0, min(80, int(delay_ms))),
+        "strength": str(strength or "light").strip().lower(),
+    }
+
+
+def _pop_force_scroll_nav_opts() -> dict[str, int | str]:
+    raw = st.session_state.pop(_FORCE_SCROLL_OPTS_KEY, None)
+    if isinstance(raw, dict):
+        return raw
+    return {"delay_ms": 150, "strength": "strong"}
+
+
+def force_scroll_to_top(*, delay_ms: int = 0, strength: str = "light") -> None:
+    """STEP 전환 시 최상단 스냅(1회) — 모바일 멈춤 방지를 위해 지연 재시도 없음."""
+    _ = strength
+    _ = delay_ms
+    try:
+        js_code = """
+<script>
+(function () {
+    const pw = (window.parent && window.parent !== window) ? window.parent : window;
+    if (typeof pw.__sajuSnapViewportTop === "function") {
+        pw.__sajuSnapViewportTop({ force: true });
+        try {
+            pw.requestAnimationFrame(function () {
+                pw.__sajuSnapViewportTop({ force: true });
+            });
+        } catch (e) {}
+        return;
+    }
+    if (typeof pw.__sajuSnapStepTopFast === "function") {
+        pw.__sajuSnapStepTopFast();
+    }
+})();
+</script>
+"""
+        st.markdown(js_code, unsafe_allow_html=True)
+        st.session_state["last_step_scroll"] = {
+            "at": int(time.time()),
+            "status": "top_forced",
+            "strength": "light",
+            "delay_ms": 0,
+        }
+    except Exception as e:
+        log.warning("force_scroll_to_top failed: %s", e)
+
+
 # parent(window) 에 1회 설치 — STEP 전환 시 가벼운 최상단 스크롤만 (잠금·MO 없음)
 _SCROLL_MANAGER_JS = r"""
 (function () {
     const pw = window.parent || window;
-    if (pw.__sajuStepScrollMgrV21) return;
+    const MGR_VER = __SCROLL_MGR_JS_VER__;
+    const verKey = "__sajuStepScrollMgrV" + MGR_VER;
+    if (pw[verKey] && typeof pw.__sajuNavScrollOnce === "function") return;
+    pw[verKey] = true;
+    pw.__sajuStepScrollMgrV26 = true;
+    pw.__sajuStepScrollMgrV25 = true;
+    pw.__sajuStepScrollMgrV24 = true;
+    pw.__sajuStepScrollMgrV23 = true;
+    pw.__sajuStepScrollMgrV22 = true;
     pw.__sajuStepScrollMgrV21 = true;
     pw.__sajuStepScrollMgrV20 = true;
     pw.__sajuStepScrollMgrV19 = true;
@@ -64,7 +134,6 @@ _SCROLL_MANAGER_JS = r"""
             '[data-testid="stToolbar"]',
             '[data-testid="stDecoration"]',
             ".stDeployButton",
-            'iframe[title="streamlit"]',
             'a[href*="streamlit.app/manage"]',
             'a[href*="share.streamlit.io/manage"]',
             "[class*='viewerBadge']",
@@ -122,8 +191,17 @@ _SCROLL_MANAGER_JS = r"""
         if (/android/i.test(ua)) {
             root.classList.add("saju-platform-android");
         }
-        if (/samsung|sm-[a-z]|galaxy/i.test(ua)) {
+        if (
+            /samsung|sm-[a-z0-9]|galaxy|samsungbrowser/i.test(ua) ||
+            /android.*samsung/i.test(ua)
+        ) {
             root.classList.add("saju-platform-galaxy");
+        }
+        if (/kakaotalk|kakao/i.test(ua)) {
+            root.classList.add("saju-platform-kakao", "saju-platform-inapp");
+        }
+        if (/instagram|fbav|fban|line\//i.test(ua) || /inapp|wv\)/i.test(ua)) {
+            root.classList.add("saju-platform-inapp");
         }
         try {
             const w = pw.innerWidth || root.clientWidth || 0;
@@ -137,11 +215,51 @@ _SCROLL_MANAGER_JS = r"""
     };
     pw.__sajuDetectMobilePlatform();
 
-    pw.__sajuSyncStepToHtml = function (step) {
+    pw.__sajuCollapseHiddenHard = function (el) {
+        if (!el || !el.style) return;
+        if (el.id === "saju-step-top-anchor") return;
+        try {
+            el.style.setProperty("display", "none", "important");
+            el.style.setProperty("visibility", "hidden", "important");
+            el.style.setProperty("height", "0", "important");
+            el.style.setProperty("max-height", "0", "important");
+            el.style.setProperty("overflow", "hidden", "important");
+            el.style.setProperty("pointer-events", "none", "important");
+            el.style.setProperty("opacity", "0", "important");
+        } catch (e) {}
+    };
+
+    pw.__sajuHideLandingChrome = function (doc) {
+        if (!doc) return;
+        if (typeof pw.__sajuIsHomeStep === "function" && pw.__sajuIsHomeStep()) return;
+        [
+            ".st-key-saju_landing_stack",
+            ".st-key-saju_landing_hero",
+            ".st-key-saju_landing_cta",
+            ".st-key-step1_solar24",
+            ".st-key-step1_cta_row_main",
+            ".st-key-step1_cta_row_free",
+            ".saju-landing-hero",
+        ].forEach(function (sel) {
+            try {
+                doc.querySelectorAll(sel).forEach(pw.__sajuCollapseHiddenHard);
+            } catch (e) {}
+        });
+    };
+
+    const _coerceStepNum = function (step) {
+        const n = String(step == null ? "" : step).trim();
+        if (!/^\d+$/.test(n)) return "1";
+        const v = Math.max(1, Math.min(12, parseInt(n, 10) || 1));
+        return String(v);
+    };
+
+    pw.__sajuHideStaleStepMounts = function (step) {
+        /* Streamlit React 트리에 inline style 을 쓰지 않음 — <html data-saju-step> + CSS 만 */
         const doc = pw.document || document;
         const root = doc && doc.documentElement;
         if (!root) return;
-        const n = String(step == null ? "" : step);
+        const n = _coerceStepNum(step);
         root.setAttribute("data-saju-step", n);
         root.classList.remove("saju-home-step1", "saju-not-step1");
         if (n === "1") {
@@ -149,41 +267,110 @@ _SCROLL_MANAGER_JS = r"""
         } else if (n) {
             root.classList.add("saju-not-step1");
         }
+        if (n !== "1") {
+            if (typeof pw.__sajuStopMobileHomeLayoutGuard === "function") {
+                pw.__sajuStopMobileHomeLayoutGuard();
+            }
+        }
+    };
+
+    pw.__sajuScheduleHideStaleStepMounts = function (step) {
+        const n = _coerceStepNum(step);
+        if (typeof pw.__sajuHideStaleStepMounts === "function") {
+            pw.__sajuHideStaleStepMounts(n);
+        }
+        try {
+            pw.setTimeout(function () {
+                if (typeof pw.__sajuHideStaleStepMounts === "function") {
+                    pw.__sajuHideStaleStepMounts(n);
+                }
+            }, 96);
+        } catch (e) {}
+    };
+
+    pw.__sajuScheduleHomeSolar24Fit = function () {
+        if (!pw.__sajuIsHomeStep || !pw.__sajuIsHomeStep()) return;
+        const run = function () {
+            if (typeof pw.__sajuFitHomeSolar24Iframe === "function") {
+                try {
+                    pw.__sajuFitHomeSolar24Iframe();
+                } catch (e) {}
+            }
+        };
+        run();
+        try {
+            [360, 1200].forEach(function (ms) {
+                pw.setTimeout(function () {
+                    if (!pw.__sajuIsHomeStep || !pw.__sajuIsHomeStep()) return;
+                    if (pw.__sajuUserIsScrolling) return;
+                    run();
+                }, ms);
+            });
+        } catch (e) {}
+    };
+
+    pw.__sajuSyncStepToHtml = function (step) {
+        const doc = pw.document || document;
+        const root = doc && doc.documentElement;
+        if (!root) return;
+        const n = _coerceStepNum(step);
+        root.setAttribute("data-saju-step", n);
+        root.classList.remove("saju-home-step1", "saju-not-step1");
+        if (n === "1") {
+            root.classList.add("saju-home-step1");
+            pw.__sajuHomeHeroPinnedEpoch = null;
+            pw.__sajuHomeLayoutFixApplied = false;
+            if (typeof pw.__sajuPinHomeHeroTop === "function") {
+                pw.__sajuPinHomeHeroTop(true);
+            }
+            if (typeof pw.__sajuStartMobileHomeLayoutGuard === "function") {
+                pw.__sajuStartMobileHomeLayoutGuard();
+            }
+        } else if (n) {
+            root.classList.add("saju-not-step1");
+            pw.__sajuHomeHeroPinnedEpoch = null;
+            if (typeof pw.__sajuClearHomeTopPull === "function") {
+                pw.__sajuClearHomeTopPull();
+            }
+        }
+        if (typeof pw.__sajuHideStaleStepMounts === "function") {
+            pw.__sajuHideStaleStepMounts(n);
+        }
     };
 
     pw.__sajuRevealMainContent = function (force) {
         const doc = pw.document || document;
-        if (!doc) return;
+        const root = doc && doc.documentElement;
+        if (!doc || !root) return;
         const mobile = isMobileView(pw, doc);
         const now = Date.now();
         if (!force && mobile && pw.__sajuRevealLastAt && now - pw.__sajuRevealLastAt < 2500) {
             return;
         }
         pw.__sajuRevealLastAt = now;
-        const show = function (el) {
-            if (!el || !el.style) return;
-            if (el.closest("[class*='saju_scroll_fire_']")) return;
-            if (el.closest(".st-key-saju_browser_privacy_client_v2")) return;
-            if (el.closest(".st-key-saju_browser_nav_check")) return;
-            try {
-                el.style.removeProperty("display");
-                el.style.removeProperty("visibility");
-                el.style.removeProperty("height");
-                el.style.removeProperty("max-height");
-                el.style.removeProperty("min-height");
-                el.style.removeProperty("opacity");
-                el.style.removeProperty("position");
-                el.style.removeProperty("left");
-                el.style.removeProperty("top");
-                el.style.removeProperty("pointer-events");
-            } catch (e) {}
-        };
-        try {
-            doc.querySelectorAll(
-                "[class*='st-key-saju_router_step_mount_'], " +
-                    ".st-key-saju_landing_stack, .st-key-saju_landing_hero, .saju-landing-hero"
-            ).forEach(show);
-        } catch (e) {}
+        const step = String(root.getAttribute("data-saju-step") || "1");
+        if (typeof pw.__sajuHideStaleStepMounts === "function") {
+            pw.__sajuHideStaleStepMounts(step);
+        }
+        const onHome =
+            step === "1" ||
+            (typeof pw.__sajuIsHomeStep === "function" && pw.__sajuIsHomeStep());
+        if (onHome) {
+            if (typeof pw.__sajuScheduleHomeSolar24Fit === "function") {
+                pw.__sajuScheduleHomeSolar24Fit();
+            }
+            if (mobile && typeof pw.__sajuPinHomeHeroTop === "function") {
+                pw.__sajuPinHomeHeroTop(true);
+            }
+            if (
+                mobile &&
+                typeof pw.__sajuStartMobileHomeLayoutGuard === "function"
+            ) {
+                pw.__sajuStartMobileHomeLayoutGuard();
+            }
+        } else if (typeof pw.__sajuStopMobileHomeLayoutGuard === "function") {
+            pw.__sajuStopMobileHomeLayoutGuard();
+        }
     };
 
     pw.__sajuCollapseHomeTopChrome = function (doc) {
@@ -202,6 +389,11 @@ _SCROLL_MANAGER_JS = r"""
                 el.style.setProperty("pointer-events", "none", "important");
             } catch (e) {}
         };
+        if (typeof pw.__sajuHideStaleStepMounts === "function") {
+            const root = doc && doc.documentElement;
+            const step = root ? String(root.getAttribute("data-saju-step") || "1") : "1";
+            pw.__sajuHideStaleStepMounts(step);
+        }
         [
             ".st-key-saju_browser_nav_check",
             ".st-key-saju_browser_privacy_client_v2",
@@ -217,26 +409,901 @@ _SCROLL_MANAGER_JS = r"""
         });
     };
 
-    pw.__sajuPinHomeHeroTop = function () {
+    pw.__sajuWalkParentsFlushTop = function (start) {
+        const doc = pw.document || document;
+        if (!doc || !start) return;
+        let node = start.parentElement;
+        while (node && node !== doc.documentElement) {
+            if (!node.style) {
+                node = node.parentElement;
+                continue;
+            }
+            try {
+                const tid = node.getAttribute && node.getAttribute("data-testid");
+                const isScrollRoot =
+                    tid === "stAppViewContainer" ||
+                    tid === "stMain" ||
+                    tid === "stMainBlockContainer" ||
+                    (node.classList &&
+                        (node.classList.contains("stApp") ||
+                            node.classList.contains("main") ||
+                            node.classList.contains("block-container")));
+                if (isScrollRoot) {
+                    node.style.setProperty("display", "block", "important");
+                }
+                node.style.setProperty("justify-content", "flex-start", "important");
+                node.style.setProperty("align-items", "stretch", "important");
+                node.style.setProperty("align-content", "flex-start", "important");
+                node.style.setProperty("min-height", "0", "important");
+                node.style.setProperty("height", "auto", "important");
+                node.style.setProperty("max-height", "none", "important");
+                node.style.setProperty("flex", "none", "important");
+                node.style.setProperty("margin-top", "0", "important");
+                node.style.setProperty("padding-top", "0", "important");
+                if (
+                    !node.getAttribute ||
+                    node.getAttribute("data-saju-home-pulled") !== "1"
+                ) {
+                    node.style.setProperty("transform", "none", "important");
+                }
+            } catch (eWalk) {}
+            node = node.parentElement;
+        }
+    };
+
+    pw.__sajuEnsureHomeTopStyleTag = function () {
+        const doc = pw.document || document;
+        if (!doc || !doc.head) return;
+        const oldTag = doc.getElementById("saju-home-top-flush-style");
+        if (oldTag) {
+            try {
+                oldTag.remove();
+            } catch (eRm) {}
+        }
+        const tag = doc.createElement("style");
+        tag.id = "saju-home-top-flush-style";
+        tag.textContent =
+            "html.saju-home-step1,html[data-saju-step='1']{scroll-padding-top:0!important;}" +
+            "html.saju-home-step1 body,html[data-saju-step='1'] body{" +
+            "display:block!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;}" +
+            "html.saju-home-step1 .stApp,html[data-saju-step='1'] .stApp," +
+            "html.saju-home-step1 [data-testid='stAppViewContainer'],html[data-saju-step='1'] [data-testid='stAppViewContainer']," +
+            "html.saju-home-step1 [data-testid='stAppViewContainer']>.main,html[data-saju-step='1'] [data-testid='stAppViewContainer']>.main," +
+            "html.saju-home-step1 section.main,html[data-saju-step='1'] section.main," +
+            "html.saju-home-step1 [data-testid='stMain'],html[data-saju-step='1'] [data-testid='stMain']," +
+            "html.saju-home-step1 [data-testid='stMainBlockContainer'],html[data-saju-step='1'] [data-testid='stMainBlockContainer']," +
+            "html.saju-home-step1 .main .block-container,html[data-saju-step='1'] .main .block-container{" +
+            "display:block!important;min-height:0!important;height:auto!important;max-height:none!important;" +
+            "justify-content:flex-start!important;align-items:stretch!important;align-content:flex-start!important;" +
+            "flex:none!important;margin-top:0!important;padding-top:0!important;}" +
+            ".stApp:has(.st-key-saju_router_step_mount_01) .main .block-container{padding-top:0!important;margin-top:0!important;padding-left:0!important;padding-right:0!important;max-width:100%!important;min-height:0!important;}" +
+            "html:has(.st-key-saju_router_step_mount_01) [data-testid='stAppViewContainer']{min-height:0!important;height:auto!important;display:block!important;flex:none!important;justify-content:flex-start!important;align-items:stretch!important;}" +
+            ".stApp:has(.st-key-saju_router_step_mount_01) .main .block-container>[data-testid='stVerticalBlock']{" +
+            "display:flex!important;flex-direction:column!important;justify-content:flex-start!important;" +
+            "min-height:0!important;height:auto!important;gap:0!important;padding-top:0!important;margin-top:0!important;}" +
+            ".stApp:has(.st-key-saju_router_step_mount_01) .main .block-container>[data-testid='stVerticalBlock']>[data-testid='stElementContainer']:not(:has(.st-key-saju_router_step_mount_01)):not(:has(.st-key-saju_global_bottom_chrome)){" +
+            "display:none!important;height:0!important;max-height:0!important;margin:0!important;padding:0!important;visibility:hidden!important;position:absolute!important;left:-99999px!important;width:0!important;}" +
+            ".stApp:has(.st-key-saju_router_step_mount_01) .main .block-container>[data-testid='stVerticalBlock']>[data-testid='stElementContainer']:has(.st-key-saju_router_step_mount_01){" +
+            "display:block!important;visibility:visible!important;height:auto!important;max-height:none!important;position:relative!important;left:auto!important;width:100%!important;}" +
+            ".st-key-saju_router_step_mount_01{margin-top:0!important;padding-top:0!important;}" +
+            "html:has(.st-key-saju_router_step_mount_01) [data-testid='stAppViewContainer']," +
+            ".stApp:has(.st-key-saju_router_step_mount_01) [data-testid='stAppViewContainer']{" +
+            "height:auto!important;min-height:0!important;max-height:none!important;" +
+            "display:block!important;justify-content:flex-start!important;}" +
+            ".stApp:has(.st-key-saju_router_step_mount_01) [data-testid='stAppViewContainer']>.main," +
+            ".stApp:has(.st-key-saju_router_step_mount_01) section.main{" +
+            "padding-top:0!important;margin-top:0!important;min-height:0!important;height:auto!important;" +
+            "display:block!important;justify-content:flex-start!important;align-items:stretch!important;}" +
+            ".stApp:has(.st-key-saju_router_step_mount_01) [data-testid='stVerticalBlockBorderWrapper']{" +
+            "display:block!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;}" +
+            ".st-key-saju_router_step_mount_01 .st-key-saju_landing_stack{margin-top:0!important;padding-top:0!important;}" +
+            ".st-key-saju_router_step_mount_01 [data-testid='stVerticalBlock']{gap:0!important;row-gap:0!important;}";
+        doc.head.appendChild(tag);
+    };
+
+    pw.__sajuHideBlocksBeforeHomeMount = function () {
+        const doc = pw.document || document;
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        const block = doc.querySelector(".main .block-container");
+        if (!mount || !block) return;
+        const hide = function (el) {
+            if (!el || !el.style) return;
+            try {
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("height", "0", "important");
+                el.style.setProperty("max-height", "0", "important");
+                el.style.setProperty("visibility", "hidden", "important");
+            } catch (e) {}
+        };
+        if (typeof pw.__sajuHidePreMountStreamlitBlocks === "function") {
+            pw.__sajuHidePreMountStreamlitBlocks();
+            return;
+        }
+        const vb = block.querySelector(
+            ':scope > [data-testid="stVerticalBlock"]'
+        );
+        const rows = vb
+            ? vb.querySelectorAll(':scope > [data-testid="stElementContainer"]')
+            : block.querySelectorAll(':scope > [data-testid="stElementContainer"]');
+        rows.forEach(function (ec) {
+            if (ec.classList.contains("st-key-saju_router_step_mount_01")) return;
+            if (ec.contains(mount)) return;
+            if (ec.querySelector(".st-key-saju_global_bottom_chrome")) return;
+            hide(ec);
+        });
+    };
+
+    pw.__sajuSnapAllScrollRootsTop = function () {
+        const doc = pw.document || document;
+        [
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            doc.querySelector("section.main"),
+            doc.body,
+            doc.scrollingElement,
+            doc.documentElement,
+        ].forEach(function (el) {
+            if (!el) return;
+            try {
+                el.scrollTop = 0;
+                el.scrollLeft = 0;
+            } catch (e) {}
+        });
+        try {
+            pw.scrollTo(0, 0);
+        } catch (eWin) {}
+    };
+
+    pw.__sajuClearHomeTopPull = function () {
+        const doc = pw.document || document;
+        if (!doc) return;
+        const nodes = [
+            doc.querySelector(".stApp"),
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.querySelector('[data-testid="stAppViewContainer"] > .main'),
+            doc.querySelector("section.main"),
+            doc.querySelector(".main .block-container"),
+            doc.querySelector(
+                ".main .block-container > [data-testid='stVerticalBlock']"
+            ),
+            doc.querySelector(".st-key-saju_router_step_mount_01"),
+        ];
+        try {
+            doc.querySelectorAll("[data-saju-home-flush='1']").forEach(function (el) {
+                nodes.push(el);
+            });
+        } catch (eAll) {}
+        nodes.forEach(function (el) {
+            if (!el || !el.style) return;
+            try {
+                el.style.removeProperty("transform");
+                el.style.removeProperty("margin-top");
+                el.removeAttribute("data-saju-home-pulled");
+                el.removeAttribute("data-saju-home-flush");
+            } catch (eClr) {}
+        });
+    };
+
+    pw.__sajuHidePreMountStreamlitBlocks = function () {
+        const doc = pw.document || document;
+        const block = doc.querySelector(".main .block-container");
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        if (!block || !mount) return;
+        const vb = block.querySelector(
+            ':scope > [data-testid="stVerticalBlock"]'
+        );
+        const rows = vb
+            ? vb.querySelectorAll(':scope > [data-testid="stElementContainer"]')
+            : block.querySelectorAll('[data-testid="stElementContainer"]');
+        const hide = function (el) {
+            if (!el || !el.style) return;
+            if (
+                el.querySelector(".st-key-saju_router_step_mount_01") ||
+                el.querySelector(".st-key-saju_global_bottom_chrome")
+            ) {
+                return;
+            }
+            if (mount.contains(el)) return;
+            try {
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("height", "0", "important");
+                el.style.setProperty("max-height", "0", "important");
+                el.style.setProperty("margin", "0", "important");
+                el.style.setProperty("padding", "0", "important");
+                el.style.setProperty("visibility", "hidden", "important");
+                el.style.setProperty("position", "absolute", "important");
+                el.style.setProperty("left", "-99999px", "important");
+                el.style.setProperty("width", "0", "important");
+            } catch (e) {}
+        };
+        rows.forEach(hide);
+    };
+
+    /* translateY 당김은 배너를 화면 밖으로 밀어냄 — 스크롤만 사용 */
+    pw.__sajuTranslateHomeContentToTop = function () {
+        const doc = pw.document || document;
+        if (typeof pw.__sajuClearHomeTopPull === "function") {
+            pw.__sajuClearHomeTopPull();
+        }
+        const view = doc.querySelector('[data-testid="stAppViewContainer"]');
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        const hero =
+            doc.getElementById("saju-home-hero-top") ||
+            doc.querySelector(".saju-home-hero-banner") ||
+            doc.querySelector(".st-key-saju_landing_hero");
+        const align = mount || hero;
+        if (!align) return 999;
+        if (typeof pw.__sajuSnapAllScrollRootsTop === "function") {
+            pw.__sajuSnapAllScrollRootsTop();
+        }
+        const viewTop = view ? view.getBoundingClientRect().top || 0 : 0;
+        let gap = Math.round((align.getBoundingClientRect().top || 0) - viewTop);
+        let pass = 0;
+        while (view && Math.abs(gap) > 4 && pass < 8) {
+            try {
+                view.scrollTop = Math.max(0, (view.scrollTop || 0) + gap - 2);
+            } catch (eSc) {}
+            gap = Math.round(
+                (align.getBoundingClientRect().top || 0) - viewTop
+            );
+            pass += 1;
+        }
+        try {
+            pw.scrollTo(0, 0);
+        } catch (eW) {}
+        return Math.abs(gap);
+    };
+
+    pw.__sajuHideMountUtilBlocksBeforeHero = function () {
+        const doc = pw.document || document;
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        if (!mount) return;
+        const hide = function (el) {
+            if (!el || !el.style) return;
+            if (
+                el.querySelector(".st-key-saju_landing_hero") ||
+                el.querySelector(".st-key-saju_landing_stack") ||
+                el.querySelector("#saju-home-hero-top")
+            ) {
+                return;
+            }
+            const cls = String(el.className || "");
+            if (
+                cls.indexOf("saju_landing_hero") >= 0 ||
+                cls.indexOf("saju_landing_stack") >= 0
+            ) {
+                return;
+            }
+            if (
+                cls.indexOf("saju_step_html_sync") < 0 &&
+                cls.indexOf("saju_scroll_") < 0
+            ) {
+                return;
+            }
+            try {
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("height", "0", "important");
+                el.style.setProperty("visibility", "hidden", "important");
+            } catch (e) {}
+        };
+        mount.querySelectorAll(
+            '[data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]'
+        ).forEach(hide);
+    };
+
+    pw.__sajuHomeScrollOffset = function () {
+        const doc = pw.document || document;
+        let max = 0;
+        try {
+            const main =
+                doc.querySelector('[data-testid="stAppViewContainer"]') ||
+                doc.querySelector('[data-testid="stMainBlockContainer"]') ||
+                doc.scrollingElement;
+            if (main) max = Math.max(max, main.scrollTop || 0);
+        } catch (eM) {}
+        try {
+            max = Math.max(
+                max,
+                pw.scrollY || 0,
+                doc.documentElement.scrollTop || 0,
+                doc.body.scrollTop || 0
+            );
+        } catch (eD) {}
+        return max;
+    };
+
+    /* margin/translateY 당김 비활성 — 모바일 백화·이중 스크롤 유발. 상단 정렬은 CSS만. */
+    pw.__sajuApplyHomeTopPull = function (pinEl) {
+        if (typeof pw.__sajuClearHomeTopPull === "function") {
+            pw.__sajuClearHomeTopPull();
+        }
+        if (!pinEl) return 999;
+        try {
+            return Math.ceil(pinEl.getBoundingClientRect().top || 0);
+        } catch (e) {
+            return 999;
+        }
+    };
+
+    /* 사진2 — 상단 백화 제거 + 배너 y=0 (단일 경로) */
+    pw.__sajuPhoto2SnapTop = function () {
+        const doc = pw.document || document;
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        const hero =
+            doc.getElementById("saju-home-hero-top") ||
+            doc.querySelector(".saju-home-hero-banner") ||
+            (mount && mount.querySelector(".st-key-saju_landing_hero"));
+        if (!mount || !hero) return false;
+        try {
+            const root = doc.documentElement;
+            if (root) {
+                root.classList.add("saju-home-step1");
+                root.classList.remove("saju-not-step1");
+                root.setAttribute("data-saju-step", "1");
+            }
+        } catch (eAttr) {}
+        if (typeof pw.__sajuDetectMobilePlatform === "function") {
+            try {
+                pw.__sajuDetectMobilePlatform();
+            } catch (ePlat) {}
+        }
+        if (typeof pw.__sajuEnsureHomeTopStyleTag === "function") {
+            pw.__sajuEnsureHomeTopStyleTag();
+        }
+        if (typeof pw.__sajuClearHomeTopPull === "function") {
+            pw.__sajuClearHomeTopPull();
+        }
+        if (typeof pw.__sajuHidePreMountStreamlitBlocks === "function") {
+            pw.__sajuHidePreMountStreamlitBlocks();
+        }
+        if (typeof pw.__sajuRevealHomeLandingBlocks === "function") {
+            pw.__sajuRevealHomeLandingBlocks();
+        }
+        if (typeof pw.__sajuHideMountUtilBlocksBeforeHero === "function") {
+            pw.__sajuHideMountUtilBlocksBeforeHero();
+        }
+        const pinChain = function (el, flexCol) {
+            if (!el || !el.style) return;
+            try {
+                if (flexCol) {
+                    el.style.setProperty("display", "flex", "important");
+                    el.style.setProperty("flex-direction", "column", "important");
+                } else {
+                    el.style.setProperty("display", "block", "important");
+                }
+                el.style.setProperty("justify-content", "flex-start", "important");
+                el.style.setProperty("align-items", "stretch", "important");
+                el.style.setProperty("align-content", "flex-start", "important");
+                el.style.setProperty("min-height", "0", "important");
+                el.style.setProperty("height", "auto", "important");
+                el.style.setProperty("max-height", "none", "important");
+                el.style.setProperty("margin-top", "0", "important");
+                el.style.setProperty("padding-top", "0", "important");
+                el.style.setProperty("flex", "none", "important");
+                el.style.setProperty("transform", "none", "important");
+            } catch (ePin) {}
+        };
+        const block = doc.querySelector(".main .block-container");
+        const rootVb = block
+            ? block.querySelector(
+                  ':scope > [data-testid="stVerticalBlock"], :scope > [data-testid="stVerticalBlockBorderWrapper"] > [data-testid="stVerticalBlock"]'
+              )
+            : null;
+        const rootWrap = block
+            ? block.querySelector(':scope > [data-testid="stVerticalBlockBorderWrapper"]')
+            : null;
+        [
+            doc.body,
+            doc.documentElement,
+            doc.querySelector(".stApp"),
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.querySelector('[data-testid="stAppViewContainer"] > .main'),
+            doc.querySelector("section.main"),
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            block,
+            rootWrap,
+            rootVb,
+            mount,
+        ].forEach(function (el) {
+            pinChain(el, false);
+        });
+        const vb = mount.querySelector('[data-testid="stVerticalBlock"]');
+        if (vb) pinChain(vb, true);
+        if (typeof pw.__sajuSnapAllScrollRootsTop === "function") {
+            pw.__sajuSnapAllScrollRootsTop();
+        }
+        if (typeof pw.__sajuScrollHomeTopOnce === "function") {
+            pw.__sajuScrollHomeTopOnce();
+        }
+        const view = doc.querySelector('[data-testid="stAppViewContainer"]');
+        let topGap = Math.round(hero.getBoundingClientRect().top || 0);
+        if (view && topGap > 6) {
+            try {
+                view.scrollTop = Math.max(
+                    0,
+                    (view.scrollTop || 0) + topGap - 2
+                );
+            } catch (eSc) {}
+            topGap = Math.round(hero.getBoundingClientRect().top || 0);
+        }
+        try {
+            pw.scrollTo(0, 0);
+        } catch (eW) {}
+        if (typeof pw.__sajuEnforceMobileHomePhoto2 === "function") {
+            try {
+                pw.__sajuEnforceMobileHomePhoto2();
+            } catch (eM) {}
+        }
+        return topGap <= 10;
+    };
+
+    pw.__sajuLockHomeViewportTop = function () {
+        if (typeof pw.__sajuPhoto2SnapTop === "function") {
+            return pw.__sajuPhoto2SnapTop();
+        }
+        return false;
+    };
+    pw.__sajuSnapHomeHeroToTop = function (force) {
+        const doc = pw.document || document;
+        if (!doc) return;
+        const onHome =
+            (typeof pw.__sajuIsHomeOnDom === "function" && pw.__sajuIsHomeOnDom()) ||
+            (typeof pw.__sajuIsHomeStep === "function" && pw.__sajuIsHomeStep());
+        if (!onHome && !force) return;
+        if (typeof pw.__sajuLockHomeViewportTop === "function") {
+            pw.__sajuLockHomeViewportTop();
+        }
+    };
+
+    pw.__sajuFlushHomeTopLayout = function () {
+        const doc = pw.document || document;
+        if (!doc || !pw.__sajuIsHomeStep()) return;
+        if (typeof pw.__sajuEnsureHomeTopStyleTag === "function") {
+            pw.__sajuEnsureHomeTopStyleTag();
+        }
+        if (typeof pw.__sajuHideBlocksBeforeHomeMount === "function") {
+            pw.__sajuHideBlocksBeforeHomeMount();
+        }
+        const flush = function (el) {
+            if (!el || !el.style) return;
+            try {
+                const tid = el.getAttribute && el.getAttribute("data-testid");
+                const isMount =
+                    el.classList &&
+                    el.classList.contains("st-key-saju_router_step_mount_01");
+                const isMountVb =
+                    tid === "stVerticalBlock" &&
+                    el.closest &&
+                    el.closest(".st-key-saju_router_step_mount_01");
+                if (isMount || isMountVb) {
+                    el.style.setProperty("display", "flex", "important");
+                    el.style.setProperty("flex-direction", "column", "important");
+                } else {
+                    el.style.setProperty("display", "block", "important");
+                }
+                el.style.setProperty("justify-content", "flex-start", "important");
+                el.style.setProperty("align-items", "stretch", "important");
+                el.style.setProperty("align-content", "flex-start", "important");
+                el.style.setProperty("min-height", "0", "important");
+                el.style.setProperty("height", "auto", "important");
+                el.style.setProperty("max-height", "none", "important");
+                el.style.setProperty("flex", "none", "important");
+                el.style.setProperty("margin-top", "0", "important");
+                el.style.setProperty("padding-top", "0", "important");
+                const keepFlush =
+                    el.getAttribute &&
+                    el.getAttribute("data-saju-home-flush") === "1";
+                if (
+                    !keepFlush &&
+                    (!el.getAttribute ||
+                        el.getAttribute("data-saju-home-pulled") !== "1")
+                ) {
+                    el.style.setProperty("transform", "none", "important");
+                }
+            } catch (e) {}
+        };
+        [
+            doc.querySelector(".stApp"),
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.querySelector('[data-testid="stAppViewContainer"] > .main'),
+            doc.querySelector("section.main"),
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            doc.querySelector(".main .block-container"),
+            doc.querySelector(".st-key-saju_router_step_mount_01"),
+            doc.querySelector(
+                '.st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"]'
+            ),
+            doc.querySelector(".st-key-saju_landing_hero"),
+            doc.querySelector(".st-key-saju_landing_stack"),
+        ].forEach(flush);
+        const activeTop = doc.getElementById("saju-step-active-top");
+        if (activeTop && activeTop.style) {
+            try {
+                activeTop.style.setProperty("display", "none", "important");
+                activeTop.style.setProperty("height", "0", "important");
+                activeTop.style.setProperty("margin", "0", "important");
+                activeTop.style.setProperty("padding", "0", "important");
+            } catch (eTop) {}
+        }
+        const hero = doc.getElementById("saju-home-hero-top");
+        if (hero && typeof pw.__sajuWalkParentsFlushTop === "function") {
+            pw.__sajuWalkParentsFlushTop(hero);
+        }
+    };
+
+    pw.__sajuIsHomeOnDom = function () {
+        const doc = pw.document || document;
+        if (!doc) return false;
+        return !!doc.querySelector(
+            ".st-key-saju_router_step_mount_01 .st-key-saju_landing_hero, " +
+                ".st-key-saju_router_step_mount_01 #saju-home-hero-top, " +
+                ".st-key-saju_router_step_mount_01 .saju-home-hero-banner"
+        );
+    };
+
+    pw.__sajuIsHomeStep = function () {
+        if (pw.__sajuIsHomeOnDom()) return true;
+        const doc = pw.document || document;
+        const root = doc && doc.documentElement;
+        if (!root) return false;
+        return (
+            root.classList.contains("saju-home-step1") ||
+            String(root.getAttribute("data-saju-step") || "") === "1"
+        );
+    };
+
+    pw.__sajuScrollMainToHeroTop = function (hero) {
+        const doc = pw.document || document;
+        if (!doc || !hero) return;
+        const main =
+            doc.querySelector('[data-testid="stAppViewContainer"]') ||
+            getMainScrollEl(doc);
+        if (!main) return;
+        try {
+            const mRect = main.getBoundingClientRect();
+            const hRect = hero.getBoundingClientRect();
+            const delta = Math.round(hRect.top - mRect.top);
+            if (Math.abs(delta) > 2) {
+                main.scrollTop = Math.max(0, (main.scrollTop || 0) + delta);
+            }
+        } catch (e) {}
+    };
+
+    pw.__sajuCollapseBlocksBeforeHomeMount = function () {
+        const doc = pw.document || document;
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        const block = doc.querySelector(".main .block-container");
+        if (!mount || !block) return;
+        const mountEc = mount.closest('[data-testid="stElementContainer"]');
+        const hide = function (el) {
+            if (!el || !el.style) return;
+            if (
+                el.contains(mount) ||
+                el.querySelector(".st-key-saju_global_bottom_chrome") ||
+                el.querySelector(".st-key-saju_global_prev_next")
+            ) {
+                return;
+            }
+            try {
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("height", "0", "important");
+                el.style.setProperty("max-height", "0", "important");
+                el.style.setProperty("min-height", "0", "important");
+                el.style.setProperty("margin", "0", "important");
+                el.style.setProperty("padding", "0", "important");
+                el.style.setProperty("overflow", "hidden", "important");
+                el.style.setProperty("visibility", "hidden", "important");
+                el.style.setProperty("pointer-events", "none", "important");
+            } catch (e) {}
+        };
+        if (typeof pw.__sajuHidePreMountStreamlitBlocks === "function") {
+            pw.__sajuHidePreMountStreamlitBlocks();
+            return;
+        }
+        const vb = block.querySelector(
+            ':scope > [data-testid="stVerticalBlock"]'
+        );
+        const kids = vb
+            ? vb.querySelectorAll(':scope > [data-testid="stElementContainer"]')
+            : block.querySelectorAll(':scope > [data-testid="stElementContainer"]');
+        if (mountEc) {
+            let beforeMount = true;
+            kids.forEach(function (ec) {
+                if (ec === mountEc || ec.contains(mount)) {
+                    beforeMount = false;
+                    return;
+                }
+                if (beforeMount) hide(ec);
+            });
+            return;
+        }
+        let seenMount = false;
+        kids.forEach(function (ec) {
+            if (ec.contains(mount)) {
+                seenMount = true;
+                return;
+            }
+            if (!seenMount) hide(ec);
+        });
+    };
+
+    pw.__sajuRevealHomeLandingBlocks = function () {
+        const doc = pw.document || document;
+        if (
+            typeof pw.__sajuIsHomeOnDom === "function" &&
+            !pw.__sajuIsHomeOnDom()
+        ) {
+            return;
+        }
+        const reveal = function (el) {
+            if (!el || !el.style) return;
+            try {
+                [
+                    "display",
+                    "visibility",
+                    "height",
+                    "max-height",
+                    "min-height",
+                    "overflow",
+                    "opacity",
+                    "pointer-events",
+                ].forEach(function (p) {
+                    el.style.removeProperty(p);
+                });
+            } catch (e) {}
+        };
+        [
+            ".st-key-saju_landing_hero",
+            ".st-key-saju_landing_stack",
+            ".st-key-step1_solar24",
+            ".st-key-step1_cta_row_main",
+            ".st-key-step1_cta_row_free",
+            ".st-key-saju_landing_cta",
+        ].forEach(function (sel) {
+            try {
+                doc.querySelectorAll(sel).forEach(reveal);
+            } catch (e) {}
+        });
+        try {
+            doc.querySelectorAll(
+                ".st-key-saju_landing_stack [data-testid='stElementContainer'], " +
+                    ".st-key-saju_landing_stack [data-testid='stVerticalBlock'], " +
+                    ".st-key-saju_landing_hero [data-testid='stElementContainer']"
+            ).forEach(reveal);
+        } catch (e2) {}
+        const hideUtil = function (el) {
+            if (!el || !el.style) return;
+            try {
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("height", "0", "important");
+                el.style.setProperty("visibility", "hidden", "important");
+            } catch (e) {}
+        };
+        try {
+            doc.querySelectorAll(
+                "[class*='st-key-saju_step_html_sync_'], " +
+                    ".st-key-saju_step_html_sync"
+            ).forEach(hideUtil);
+        } catch (e3) {}
+    };
+
+    pw.__sajuIsGalaxyDevice = function () {
+        const doc = pw.document || document;
+        const root = doc && doc.documentElement;
+        if (root && root.classList.contains("saju-platform-galaxy")) return true;
+        const ua = String((pw.navigator && pw.navigator.userAgent) || "").toLowerCase();
+        return (
+            /samsung|sm-[a-z0-9]|galaxy|samsungbrowser/i.test(ua) ||
+            /android.*samsung/i.test(ua)
+        );
+    };
+
+    /* 사진1(상단 빈 여백) 유발 — 자동 절기 스크롤 비활성 */
+    pw.__sajuScrollHomeSolar24Peek = function () {
+        return;
+    };
+
+    pw.__sajuEnforceMobileHomePhoto2 = function () {
+        /* 모바일 홈: 마크다운 히어로·절기 iframe 높이만 (Streamlit 블록 display 조작 금지) */
+        if (!pw.__sajuIsHomeStep()) return;
+        const doc = pw.document || document;
+        if (!doc || !isMobileView(pw, doc)) return;
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        if (!mount) return;
+        const vh = pw.innerHeight || doc.documentElement.clientHeight || 640;
+        const heroMax = Math.min(Math.round(vh * 0.38), 340);
+        const hero =
+            mount.querySelector("#saju-home-hero-top") ||
+            mount.querySelector(".saju-home-hero-banner") ||
+            mount.querySelector(".saju-landing-hero--nova") ||
+            mount.querySelector(".saju-landing-hero");
+        const heroImg =
+            mount.querySelector(".saju-home-hero-banner img") ||
+            mount.querySelector("#saju-home-hero-top img");
+        if (heroImg) {
+            try {
+                heroImg.style.setProperty("max-height", heroMax + "px", "important");
+                heroImg.style.setProperty("object-fit", "cover", "important");
+                heroImg.style.setProperty("object-position", "center top", "important");
+            } catch (e) {}
+        } else if (hero) {
+            try {
+                hero.style.setProperty("max-height", heroMax + "px", "important");
+                hero.style.setProperty("overflow", "hidden", "important");
+            } catch (e) {}
+        }
+        const iframe = mount.querySelector(".st-key-step1_solar24 iframe");
+        if (iframe) {
+            try {
+                iframe.style.setProperty("min-height", "580px", "important");
+            } catch (e) {}
+        }
+    };
+
+    pw.__sajuStopMobileHomeLayoutGuard = function () {
+        if (pw.__sajuMobileHomeGuardTimer) {
+            try {
+                pw.clearInterval(pw.__sajuMobileHomeGuardTimer);
+            } catch (e) {}
+            pw.__sajuMobileHomeGuardTimer = null;
+        }
+    };
+
+    pw.__sajuStartHomeLayoutGuard = function () {
+        /* 반복 재핀은 이중 스크롤·모바일 백화 유발 — 비활성 */
+    };
+    pw.__sajuStartMobileHomeLayoutGuard = pw.__sajuStartHomeLayoutGuard;
+
+    pw.__sajuLockMobileHomeLayout = function () {
+        if (!pw.__sajuIsHomeStep()) return;
+        const doc = pw.document || document;
+        if (!isMobileView(pw, doc)) return;
+        if (typeof pw.__sajuEnforceMobileHomePhoto2 === "function") {
+            pw.__sajuEnforceMobileHomePhoto2();
+        }
+        if (typeof pw.__sajuScheduleHomeSolar24Fit === "function") {
+            pw.__sajuScheduleHomeSolar24Fit();
+        }
+    };
+
+    pw.__sajuNavEpochFromDom = function (doc) {
+        const beacon = doc && doc.querySelector(".saju-live-step-beacon");
+        if (beacon) {
+            return String(beacon.getAttribute("data-saju-nav-epoch") || "0");
+        }
+        const root = doc && doc.documentElement;
+        return root ? String(root.getAttribute("data-saju-nav-epoch") || "0") : "0";
+    };
+
+    pw.__sajuPinHomeHeroTop = function (force) {
         const doc = pw.document || document;
         const root = doc && doc.documentElement;
         if (!root) return;
-        const onHome =
-            root.classList.contains("saju-home-step1") ||
-            String(root.getAttribute("data-saju-step") || "") === "1" ||
-            !!doc.querySelector(".st-key-saju_landing_stack");
-        if (!onHome) return;
+        if (!pw.__sajuIsHomeStep() && !pw.__sajuIsHomeOnDom()) return;
+        let heroTopGap = 999;
+        try {
+            const h0 =
+                doc.getElementById("saju-home-hero-top") ||
+                doc.querySelector(".st-key-saju_router_step_mount_01 .saju-home-hero-banner");
+            heroTopGap = h0 ? h0.getBoundingClientRect().top || 999 : 999;
+        } catch (eGap0) {}
+        const scrolled =
+            !force &&
+            heroTopGap <= 24 &&
+            (pw.__sajuUserIsScrolling ||
+                (typeof pw.__sajuHomeScrollOffset === "function" &&
+                    pw.__sajuHomeScrollOffset() > 48));
+        if (scrolled) {
+            if (typeof pw.__sajuClearHomeTopPull === "function") {
+                pw.__sajuClearHomeTopPull();
+            }
+            if (typeof pw.__sajuStopMobileHomeLayoutGuard === "function") {
+                pw.__sajuStopMobileHomeLayoutGuard();
+            }
+            return;
+        }
+        if (typeof pw.__sajuDetectMobilePlatform === "function") {
+            pw.__sajuDetectMobilePlatform();
+        }
+        const epoch =
+            typeof pw.__sajuNavEpochFromDom === "function"
+                ? pw.__sajuNavEpochFromDom(doc)
+                : String(root.getAttribute("data-saju-nav-epoch") || "0");
+        if (!force && pw.__sajuHomeHeroPinnedEpoch === epoch) {
+            try {
+                const h0 = doc.getElementById("saju-home-hero-top");
+                const top0 = h0 ? h0.getBoundingClientRect().top || 0 : 999;
+                if (top0 <= 6) return;
+            } catch (e0) {}
+        }
 
+        if (typeof pw.__sajuFlushHomeTopLayout === "function") {
+            pw.__sajuFlushHomeTopLayout();
+        }
         if (typeof pw.__sajuCollapseHomeTopChrome === "function") {
             pw.__sajuCollapseHomeTopChrome(doc);
         }
 
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
         const stack = doc.querySelector(".st-key-saju_landing_stack");
         const heroWrap = doc.querySelector(".st-key-saju_landing_hero");
+        const block = doc.querySelector(".main .block-container");
+        const heroImgEl =
+            doc.querySelector(".saju-home-hero-banner img") ||
+            doc.querySelector("#saju-home-hero-top img");
         const hero =
+            doc.getElementById("saju-home-hero-top") ||
+            doc.querySelector(".saju-home-hero-banner") ||
             doc.querySelector(".st-key-saju_landing_hero .saju-landing-hero") ||
+            doc.querySelector(".st-key-saju_router_step_mount_01 .saju-landing-hero") ||
             doc.querySelector(".saju-landing-hero--luxe, .saju-landing-hero--face");
 
+        const layoutTop = function (el) {
+            if (!el || !el.style) return;
+            try {
+                const testId = el.getAttribute && el.getAttribute("data-testid");
+                const isScrollRoot =
+                    testId === "stAppViewContainer" ||
+                    testId === "stMain" ||
+                    testId === "stMainBlockContainer" ||
+                    (el.classList &&
+                        (el.classList.contains("stApp") ||
+                            el.classList.contains("main") ||
+                            el.classList.contains("block-container")));
+                const isMountFlex =
+                    el.classList &&
+                    (el.classList.contains("st-key-saju_router_step_mount_01") ||
+                        (testId === "stVerticalBlock" &&
+                            el.closest &&
+                            el.closest(".st-key-saju_router_step_mount_01")));
+                if (isMountFlex) {
+                    el.style.setProperty("display", "flex", "important");
+                    el.style.setProperty("flex-direction", "column", "important");
+                } else {
+                    el.style.setProperty("display", "block", "important");
+                }
+                el.style.setProperty("justify-content", "flex-start", "important");
+                el.style.setProperty("align-items", "stretch", "important");
+                el.style.setProperty("align-content", "flex-start", "important");
+                el.style.setProperty("flex", "none", "important");
+                el.style.setProperty("min-height", "0", "important");
+                el.style.setProperty("height", "auto", "important");
+                el.style.setProperty("margin-top", "0", "important");
+                el.style.setProperty("padding-top", "0", "important");
+                if (
+                    !isScrollRoot &&
+                    (!el.getAttribute ||
+                        el.getAttribute("data-saju-home-pulled") !== "1")
+                ) {
+                    el.style.setProperty("transform", "none", "important");
+                }
+            } catch (eFlex) {}
+        };
+
+        [
+            doc.querySelector(".stApp"),
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.querySelector('[data-testid="stAppViewContainer"] > .main'),
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            doc.querySelector("section.main"),
+            block,
+            mount,
+            heroWrap,
+            stack,
+            mount &&
+                mount.querySelector('[data-testid="stVerticalBlock"]'),
+        ].forEach(layoutTop);
+
+        [stack, heroWrap, mount].forEach(function (el) {
+            if (!el || !el.style) return;
+            el.style.setProperty("margin-top", "0", "important");
+            el.style.setProperty("padding-top", "0", "important");
+            el.style.setProperty("transform", "none", "important");
+        });
         if (stack) {
             stack.style.setProperty("padding-top", "0", "important");
         }
@@ -244,49 +1311,104 @@ _SCROLL_MANAGER_JS = r"""
             heroWrap.style.setProperty("margin-top", "0", "important");
             heroWrap.style.setProperty("padding-top", "0", "important");
         }
+        if (block) {
+            block.style.setProperty("padding-top", "0", "important");
+        }
         if (hero) {
             hero.style.setProperty("justify-content", "flex-start", "important");
-            hero.style.setProperty("min-height", "auto", "important");
-            hero.style.setProperty("padding-top", "0", "important");
+            hero.style.setProperty("min-height", "0", "important");
+            hero.style.setProperty("margin-top", "0", "important");
+            hero.style.setProperty(
+                "padding-top",
+                "max(0.06rem, env(safe-area-inset-top, 0px))",
+                "important"
+            );
         }
         doc.querySelectorAll(
             ".st-key-saju_router_step_mount_01 [data-testid='stElementContainer'], " +
                 ".st-key-saju_landing_stack [data-testid='stElementContainer'], " +
+                ".st-key-saju_landing_stack [data-testid='stMarkdownContainer'], " +
                 ".st-key-saju_landing_hero [data-testid='stElementContainer']"
         ).forEach(function (el) {
             el.style.setProperty("padding-top", "0", "important");
             el.style.setProperty("margin-top", "0", "important");
+            el.style.setProperty("min-height", "0", "important");
         });
 
-        if (stack && hero && !isMobileView(pw, doc)) {
+        [mount, heroWrap, stack].forEach(function (el) {
+            if (!el || !el.style) return;
             try {
-                const rect = hero.getBoundingClientRect();
-                const gap = Math.ceil(rect.top || 0);
-                if (gap > 2 && gap < 120) {
-                    stack.style.setProperty("margin-top", "-" + gap + "px", "important");
+                el.style.setProperty("margin-top", "0", "important");
+                el.style.setProperty("padding-top", "0", "important");
+            } catch (eReset) {}
+        });
+
+        const pinEl = heroImgEl || hero;
+        if (pinEl && typeof pw.__sajuWalkParentsFlushTop === "function") {
+            pw.__sajuWalkParentsFlushTop(pinEl);
+        }
+        if (pinEl) {
+            try {
+                if (typeof pw.__sajuSnapAllScrollRootsTop === "function") {
+                    pw.__sajuSnapAllScrollRootsTop();
                 }
-            } catch (e) {}
-        } else if (stack) {
-            try {
-                stack.style.setProperty("margin-top", "0", "important");
+                if (typeof pw.__sajuApplyHomeTopPull === "function") {
+                    pw.__sajuApplyHomeTopPull(pinEl);
+                }
             } catch (e) {}
         }
 
-        const mainEl = getMainScrollEl(doc);
-        const mobilePin = isMobileView(pw, doc);
-        const userScrolled = !!(mainEl && mainEl.scrollTop > 48);
-        if (!mobilePin || !userScrolled) {
-            if (typeof pw.__sajuScrollHomeTopOnce === "function") {
-                pw.__sajuScrollHomeTopOnce();
-            }
+        if (typeof pw.__sajuEnforceMobileHomePhoto2 === "function") {
+            pw.__sajuEnforceMobileHomePhoto2();
         }
+
+        const userScrolled =
+            typeof pw.__sajuHomeScrollOffset === "function" &&
+            pw.__sajuHomeScrollOffset() > 24;
+        if (
+            !userScrolled &&
+            !pw.__sajuUserIsScrolling &&
+            typeof pw.__sajuScrollHomeTopOnce === "function"
+        ) {
+            pw.__sajuScrollHomeTopOnce();
+        }
+        if (typeof pw.__sajuSnapHomeHeroToTop === "function") {
+            pw.__sajuSnapHomeHeroToTop(!!force);
+        }
+        pw.__sajuHomeHeroPinnedEpoch = epoch;
+    };
+
+    pw.__sajuBindHomeLayoutObserver = function () {
+        /* MutationObserver 재핀은 모바일 백화·이중 스크롤 유발 — 비활성 */
     };
 
     const getMainScrollEl = function (doc) {
+        /* 실제로 세로 스크롤이 발생하는 요소를 우선 선택한다.
+           최신 Streamlit 은 section.main([data-testid=stMain]) 이 스크롤러이고
+           stAppViewContainer 는 스크롤되지 않는 flex 래퍼라 scrollTop=0 이 무효다.
+           overflow 가 잡혀 실제 스크롤 가능한(첫) 후보를 돌려준다. */
+        const cands = [
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector("section.main"),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.scrollingElement,
+            doc.documentElement,
+        ];
+        for (let i = 0; i < cands.length; i++) {
+            const el = cands[i];
+            if (!el) continue;
+            try {
+                if ((el.scrollHeight || 0) - (el.clientHeight || 0) > 4) {
+                    return el;
+                }
+            } catch (e) {}
+        }
         return (
-            doc.querySelector('[data-testid="stAppViewContainer"]') ||
-            doc.querySelector('[data-testid="stMainBlockContainer"]') ||
             doc.querySelector('[data-testid="stMain"]') ||
+            doc.querySelector("section.main") ||
+            doc.querySelector('[data-testid="stMainBlockContainer"]') ||
+            doc.querySelector('[data-testid="stAppViewContainer"]') ||
             doc.scrollingElement ||
             doc.documentElement
         );
@@ -298,6 +1420,7 @@ _SCROLL_MANAGER_JS = r"""
         pw.__sajuUserScrollGuardBound = true;
         const doc = pw.document || document;
         if (!doc) return;
+        const mobile = isMobileView(pw, doc);
         const markUserScroll = function () {
             if (pw.__sajuStepNavScrollActive) return;
             pw.__sajuUserIsScrolling = true;
@@ -306,88 +1429,369 @@ _SCROLL_MANAGER_JS = r"""
             }
             pw.__sajuUserScrollTimer = pw.setTimeout(function () {
                 pw.__sajuUserIsScrolling = false;
-            }, 450);
+            }, mobile ? 420 : 550);
         };
-        const mobile = isMobileView(pw, doc);
         const events = mobile
-            ? ["touchstart", "touchmove"]
-            : ["touchstart", "touchmove", "wheel"];
+            ? ["touchstart", "touchmove", "scroll"]
+            : ["touchstart", "touchmove", "wheel", "scroll"];
         events.forEach(function (ev) {
             doc.addEventListener(ev, markUserScroll, { passive: true, capture: true });
         });
-    };
-    pw.__sajuBindUserScrollGuard();
-
-    pw.__sajuForceStepScrollTop = function (epoch, lockMs) {
-        const doc = pw.document || document;
-        const mobile = isMobileView(pw, doc);
-        const epochKey = String(epoch || "0");
-
-        if (pw.__sajuLastScrollEpoch === epochKey && pw.__sajuLastScrollAt) {
-            const since = Date.now() - pw.__sajuLastScrollAt;
-            if (since < (mobile ? 900 : 400)) return;
-        }
-        pw.__sajuLastScrollEpoch = epochKey;
-        pw.__sajuLastScrollAt = Date.now();
-
-        if (typeof pw.__sajuCancelStepScroll === "function") {
-            try { pw.__sajuCancelStepScroll(); } catch (e) {}
-        }
-
-        let cancelled = false;
-        const timers = [];
-        const holdMs = mobile
-            ? 220
-            : Math.min(600, Math.max(320, Number(lockMs) || 400));
-
-        pw.__sajuStepNavScrollActive = true;
-        pw.__sajuCancelStepScroll = function () {
-            cancelled = true;
-            pw.__sajuStepNavScrollActive = false;
-            timers.forEach(function (id) {
-                try { clearTimeout(id); } catch (e) {}
-            });
-            timers.length = 0;
-            pw.__sajuCancelStepScroll = null;
-        };
-
-        const snap = function () {
-            if (cancelled) return;
-            const main = getMainScrollEl(doc);
-            if (!main) return;
-            try { main.scrollTop = 0; main.scrollLeft = 0; } catch (e) {}
-            if (!mobile) {
-                try {
-                    if (typeof main.scrollTo === "function") {
-                        main.scrollTo({ top: 0, left: 0, behavior: "auto" });
-                    }
-                } catch (e) {}
-                const anchor = doc.getElementById("saju-step-top-anchor");
-                if (anchor) {
-                    try {
-                        anchor.scrollIntoView({
-                            block: "start",
-                            inline: "nearest",
-                            behavior: "auto",
-                        });
-                    } catch (e) {}
+        const releaseHomePull = function () {
+            if (!pw.__sajuIsHomeStep || !pw.__sajuIsHomeStep()) return;
+            if (
+                typeof pw.__sajuHomeScrollOffset === "function" &&
+                pw.__sajuHomeScrollOffset() > 48
+            ) {
+                if (typeof pw.__sajuClearHomeTopPull === "function") {
+                    pw.__sajuClearHomeTopPull();
+                }
+                if (typeof pw.__sajuStopMobileHomeLayoutGuard === "function") {
+                    pw.__sajuStopMobileHomeLayoutGuard();
                 }
             }
         };
-
-        snap();
-        if (mobile) {
-            timers.push(setTimeout(snap, 96));
-        } else {
-            try { requestAnimationFrame(snap); } catch (e) { timers.push(setTimeout(snap, 16)); }
-            timers.push(setTimeout(snap, 120));
-        }
-        timers.push(setTimeout(function () {
-            pw.__sajuStepNavScrollActive = false;
-            if (typeof pw.__sajuCancelStepScroll === "function") {
-                pw.__sajuCancelStepScroll();
+        try {
+            const main = getMainScrollEl(doc);
+            if (main) {
+                main.addEventListener("scroll", markUserScroll, { passive: true });
+                main.addEventListener("scroll", releaseHomePull, { passive: true });
             }
-        }, holdMs));
+        } catch (e) {}
+        doc.addEventListener("scroll", releaseHomePull, { passive: true, capture: true });
+    };
+    pw.__sajuBindUserScrollGuard();
+
+    pw.__sajuFocusTopAnchor = function (doc) {
+        if (!doc) return;
+        let anchor = null;
+        try {
+            const root = doc.documentElement;
+            const stepRaw = root
+                ? String(root.getAttribute("data-saju-step") || "1")
+                : "1";
+            const pad = stepRaw.length < 2 ? "0" + stepRaw : stepRaw;
+            const mount = doc.querySelector(
+                ".st-key-saju_router_step_mount_" + pad
+            );
+            if (mount) {
+                anchor =
+                    mount.querySelector("#saju-step-active-top") ||
+                    mount.querySelector("#saju-step-top-anchor");
+            }
+        } catch (eMount) {}
+        if (!anchor) {
+            anchor =
+                doc.getElementById("saju-step-top-anchor") ||
+                doc.getElementById("saju-step-active-top") ||
+                doc.querySelector(".st-key-saju_step_top_anchor #saju-step-top-anchor") ||
+                doc.querySelector(".st-key-saju_step_top_anchor");
+        }
+        /* 실제 스크롤러가 무엇이든 0 으로 — 후보 전부 리셋 */
+        [
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector("section.main"),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.scrollingElement,
+            doc.documentElement,
+            doc.body,
+        ].forEach(function (el) {
+            if (!el) return;
+            try {
+                if ((el.scrollTop || 0) > 0) el.scrollTop = 0;
+                if ((el.scrollLeft || 0) > 0) el.scrollLeft = 0;
+            } catch (eEl) {}
+        });
+        try {
+            pw.scrollTo(0, 0);
+        } catch (eWin) {}
+        if (!anchor) return;
+        try {
+            if (!anchor.hasAttribute("tabindex")) {
+                anchor.setAttribute("tabindex", "-1");
+            }
+        } catch (eTab) {}
+        /* 배너가 페이지 최상단에 있으므로 앵커로 scrollIntoView 하면 배너가 화면 위로
+           밀려 가려진다. 스크롤은 scrollTop=0(맨 위)만 사용하고, 여기서는 포커스만 둔다. */
+        try {
+            if (typeof anchor.focus === "function") {
+                anchor.focus({ preventScroll: true });
+            }
+        } catch (eFocus) {}
+        try {
+            if (doc.body && typeof doc.body.focus === "function") {
+                doc.body.focus({ preventScroll: true });
+            }
+        } catch (eBody) {}
+    };
+
+    /* STEP 이동 전용 — DOM 전체 walk 없이 main+window+mount 만 (멈춤 방지) */
+    pw.__sajuSnapNavTop = function (opts) {
+        opts = opts || {};
+        const doc = pw.document || document;
+        if (!doc) return;
+        const step = String(opts.step != null ? opts.step : "1");
+        const isHome = !!opts.home || step === "1";
+        if (isHome) {
+            if (typeof pw.__sajuSnapViewportTop === "function") {
+                pw.__sajuSnapViewportTop({ force: true, home: true });
+            }
+            return;
+        }
+        try {
+            const ae = doc.activeElement;
+            const tag = ae && ae.tagName ? String(ae.tagName).toLowerCase() : "";
+            if (tag === "button" && ae && typeof ae.blur === "function") {
+                ae.blur();
+            }
+        } catch (eBtn) {}
+        const main = getMainScrollEl(doc);
+        if (main) {
+            try {
+                main.scrollTop = 0;
+                main.scrollLeft = 0;
+            } catch (eM) {}
+        }
+        try {
+            pw.scrollTo(0, 0);
+        } catch (eW) {}
+        try {
+            const pad = step.length < 2 ? "0" + step : step;
+            const mount = doc.querySelector(
+                ".st-key-saju_router_step_mount_" + pad
+            );
+            if (mount && mount.scrollTop > 0) {
+                mount.scrollTop = 0;
+            }
+        } catch (eMt) {}
+        if (opts.focus !== false && typeof pw.__sajuFocusTopAnchor === "function") {
+            pw.__sajuFocusTopAnchor(doc);
+        }
+    };
+
+    /* 이전/다음·메뉴 — 즉시+rAF+1회 보정(최대 3회 스냅, setTimeout 스택 없음) */
+    pw.__sajuNavScrollOnce = function (epoch, source, stepHint) {
+        const key = String(epoch || "0");
+        if (String(source || "") === "tail") {
+            pw.__sajuNavScrollDoneEpoch = null;
+        }
+        const now = Date.now();
+        if (
+            pw.__sajuNavScrollDoneEpoch === key &&
+            pw.__sajuNavScrollDoneAt &&
+            now - pw.__sajuNavScrollDoneAt < 500
+        ) {
+            return;
+        }
+        pw.__sajuNavScrollDoneEpoch = key;
+        pw.__sajuNavScrollDoneAt = now;
+        if (typeof pw.__sajuCancelStepScroll === "function") {
+            pw.__sajuCancelStepScroll();
+        }
+        const doc = pw.document || document;
+        let step = stepHint != null ? String(stepHint) : "1";
+        try {
+            const root = doc && doc.documentElement;
+            if (root && stepHint == null) {
+                step = String(root.getAttribute("data-saju-step") || "1");
+            }
+        } catch (eStep) {}
+        const isHome = step === "1";
+        const run = function () {
+            if (
+                isHome &&
+                typeof pw.__sajuPinHomeHeroTop === "function"
+            ) {
+                pw.__sajuPinHomeHeroTop(true);
+                return;
+            }
+            if (typeof pw.__sajuSnapNavTop === "function") {
+                pw.__sajuSnapNavTop({ step: step, home: isHome, focus: true });
+            } else if (typeof pw.__sajuSnapViewportTop === "function") {
+                pw.__sajuSnapViewportTop({ force: true, home: isHome });
+            }
+        };
+        pw.__sajuStepNavScrollActive = true;
+        run();
+        try {
+            pw.requestAnimationFrame(function () {
+                run();
+                const tid = pw.setTimeout(function () {
+                    let off = false;
+                    try {
+                        const main = getMainScrollEl(doc);
+                        off =
+                            (main && main.scrollTop > 10) ||
+                            (pw.scrollY || 0) > 10;
+                    } catch (eOff) {}
+                    if (off) {
+                        run();
+                    } else if (typeof pw.__sajuFocusTopAnchor === "function") {
+                        pw.__sajuFocusTopAnchor(doc);
+                    }
+                    pw.__sajuStepNavScrollActive = false;
+                }, 220);
+                pw.__sajuStepScrollSnapTimers.push(tid);
+                /* STEP5~11: 렌더 후 내용이 늦게 붙어 스크롤이 밀리는 케이스가 있어 1회 추가 보정 */
+                try {
+                    const s = String(step);
+                    if (s === "5" || s === "6" || s === "7" || s === "8" || s === "9" || s === "10" || s === "11") {
+                        const tid2 = pw.setTimeout(function () {
+                            try {
+                                run();
+                            } catch (eR2) {}
+                            try {
+                                if (typeof pw.__sajuFocusTopAnchor === "function") {
+                                    pw.__sajuFocusTopAnchor(doc);
+                                }
+                            } catch (eF2) {}
+                        }, s === "5" ? 620 : s === "6" ? 720 : s === "7" ? 760 : s === "8" ? 780 : s === "9" ? 820 : s === "10" ? 860 : 900);
+                        pw.__sajuStepScrollSnapTimers.push(tid2);
+                    }
+                } catch (eT2) {}
+            });
+        } catch (eRaf) {
+            pw.__sajuStepNavScrollActive = false;
+        }
+    };
+
+    pw.__sajuSnapViewportTop = function (opts) {
+        opts = opts || {};
+        const doc = pw.document || document;
+        if (!doc) return;
+        const mobile = isMobileView(pw, doc);
+        const isHome =
+            !!opts.home ||
+            (typeof pw.__sajuIsHomeStep === "function" && pw.__sajuIsHomeStep());
+        const mainQuick = getMainScrollEl(doc);
+        if (
+            !opts.force &&
+            !isHome &&
+            mainQuick &&
+            mainQuick.scrollTop <= 6 &&
+            (pw.scrollY || 0) <= 6
+        ) {
+            pw.__sajuFocusTopAnchor(doc);
+            return;
+        }
+        try {
+            const ae = doc.activeElement;
+            const tag = ae && ae.tagName ? String(ae.tagName).toLowerCase() : "";
+            const keepFocus =
+                tag === "input" || tag === "textarea" || tag === "select";
+            const isNavBtn =
+                ae &&
+                ae.tagName &&
+                String(ae.tagName).toLowerCase() === "button";
+            if (
+                !keepFocus &&
+                ae &&
+                ae !== doc.body &&
+                typeof ae.blur === "function" &&
+                (isNavBtn || opts.force)
+            ) {
+                ae.blur();
+            }
+        } catch (eBlur) {}
+        if (isHome) {
+            if (typeof pw.__sajuPinHomeHeroTop === "function") {
+                pw.__sajuPinHomeHeroTop(!!opts.force);
+            } else if (typeof pw.__sajuScrollHomeTopOnce === "function") {
+                pw.__sajuScrollHomeTopOnce();
+            }
+            const mainHome = getMainScrollEl(doc);
+            if (mainHome) {
+                try {
+                    mainHome.scrollTop = 0;
+                    mainHome.scrollLeft = 0;
+                } catch (eHome) {}
+            }
+            try {
+                pw.scrollTo(0, 0);
+            } catch (eWin) {}
+            pw.__sajuFocusTopAnchor(doc);
+            return;
+        }
+        const snapEl = function (el) {
+            if (!el) return;
+            try {
+                el.scrollTop = 0;
+                el.scrollLeft = 0;
+            } catch (e) {}
+            try {
+                if (typeof el.scrollTo === "function") {
+                    el.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                }
+            } catch (e2) {}
+        };
+        [
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector("section.main"),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            doc.scrollingElement,
+            doc.documentElement,
+            doc.body,
+        ].forEach(snapEl);
+        try {
+            pw.scrollTo(0, 0);
+        } catch (eWin2) {}
+        const resetChain = function (el) {
+            let p = el;
+            while (p) {
+                if (p.scrollTop > 0 || p.scrollLeft > 0) {
+                    try {
+                        p.scrollTop = 0;
+                        p.scrollLeft = 0;
+                    } catch (e3) {}
+                }
+                p = p.parentElement;
+            }
+        };
+        try {
+            const main0 = getMainScrollEl(doc);
+            if (main0) resetChain(main0);
+        } catch (eChain) {}
+        pw.__sajuFocusTopAnchor(doc);
+        try {
+            const root = doc.documentElement;
+            const stepRaw = root
+                ? String(root.getAttribute("data-saju-step") || "1")
+                : "1";
+            const pad = stepRaw.length < 2 ? "0" + stepRaw : stepRaw;
+            const mount = doc.querySelector(
+                ".st-key-saju_router_step_mount_" + pad
+            );
+            if (mount) {
+                resetChain(mount);
+            }
+        } catch (eMount) {}
+    };
+
+    pw.__sajuSnapStepTopFast = function () {
+        pw.__sajuSnapViewportTop({ force: false });
+    };
+
+    pw.__sajuStepScrollSnapTimers = pw.__sajuStepScrollSnapTimers || [];
+    pw.__sajuCancelStepScroll = function () {
+        (pw.__sajuStepScrollSnapTimers || []).forEach(function (tid) {
+            try {
+                pw.clearTimeout(tid);
+            } catch (e) {}
+        });
+        pw.__sajuStepScrollSnapTimers = [];
+        pw.__sajuStepNavScrollActive = false;
+    };
+
+    pw.__sajuForceStepScrollTop = function (epoch, lockMs, phase) {
+        if (typeof pw.__sajuNavScrollOnce === "function") {
+            pw.__sajuNavScrollOnce(epoch, String(phase || "main"), null);
+            return;
+        }
+        if (typeof pw.__sajuSnapViewportTop === "function") {
+            pw.__sajuSnapViewportTop({ force: true });
+        }
     };
 
     pw.__sajuApplySolar24IframeHeight = function (heightPx) {
@@ -397,8 +1801,8 @@ _SCROLL_MANAGER_JS = r"""
         const iframe = solarWrap.querySelector("iframe");
         if (!iframe) return;
         const mobile = isMobileView(pw, doc);
-        const floor = mobile ? 500 : 480;
-        const cap = mobile ? 640 : 560;
+        const floor = mobile ? 580 : 480;
+        const cap = mobile ? 860 : 560;
         const h = Math.min(cap, Math.max(floor, Math.ceil(Number(heightPx) || 0)));
 
         iframe.style.setProperty("height", h + "px", "important");
@@ -431,8 +1835,8 @@ _SCROLL_MANAGER_JS = r"""
             root &&
             (root.classList.contains("saju-platform-galaxy") ||
                 root.classList.contains("saju-platform-android"));
-        const floor = mobile ? (galaxy ? 520 : 500) : 480;
-        const cap = mobile ? (galaxy ? 680 : 640) : 560;
+        const floor = mobile ? (galaxy ? 600 : 580) : 480;
+        const cap = mobile ? (galaxy ? 880 : 860) : 560;
         let contentH = 0;
         try {
             const idoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
@@ -455,14 +1859,10 @@ _SCROLL_MANAGER_JS = r"""
 
         let budget;
         if (contentH > 0) {
-            budget = Math.min(cap, Math.max(floor, contentH + 20));
+            budget = Math.min(cap, Math.max(floor, contentH + 28));
         } else {
-            const viewH = pw.innerHeight || doc.documentElement.clientHeight || 740;
-            const hero = doc.querySelector(".saju-landing-hero");
-            const heroH = hero ? hero.getBoundingClientRect().height : 140;
-            const chrome = mobile ? 48 : 44;
-            const maxBudget = viewH - heroH - chrome - 4;
-            budget = Math.max(floor, Math.min(cap, maxBudget));
+            /* 콘텐츠 높이 미측정 시 — iframe 너무 낮으면 절기 기둥 겹침(사진3) */
+            budget = mobile ? Math.min(cap, Math.max(floor, 620)) : Math.min(cap, 520);
         }
 
         pw.__sajuApplySolar24IframeHeight(budget);
@@ -481,20 +1881,48 @@ _SCROLL_MANAGER_JS = r"""
         });
     }
 
-    /* 홈 진입 — 모바일은 1회만, PC는 보조 snap 허용 */
+    /* 홈 진입 — 갤럭시·모바일은 window/body 스크롤도 0 (삼성 인터넷은 main 이 아닌 document 를 스크롤) */
     pw.__sajuScrollHomeTopOnce = function () {
         if (pw.__sajuUserIsScrolling) return;
         const doc = pw.document || document;
         const mobile = isMobileView(pw, doc);
+        const galaxy =
+            typeof pw.__sajuIsGalaxyDevice === "function" && pw.__sajuIsGalaxyDevice();
         const main = getMainScrollEl(doc);
+        const snapEl = function (el) {
+            if (!el) return;
+            try {
+                el.scrollTop = 0;
+                el.scrollLeft = 0;
+            } catch (e) {}
+        };
         if (main) {
-            try { main.scrollTop = 0; main.scrollLeft = 0; } catch (e) {}
-            if (!mobile) {
-                try { main.scrollTo({ top: 0, left: 0, behavior: "auto" }); } catch (e) {}
+            snapEl(main);
+            if (!mobile || galaxy) {
+                try {
+                    main.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                } catch (e) {}
             }
         }
-        if (!mobile) {
-            try { pw.scrollTo(0, 0); } catch (e) {}
+        if (mobile || galaxy) {
+            [
+                doc.body,
+                doc.documentElement,
+                doc.querySelector('[data-testid="stMainBlockContainer"]'),
+                doc.querySelector("section.main"),
+            ].forEach(snapEl);
+            try {
+                pw.scrollTo(0, 0);
+            } catch (e) {}
+            try {
+                if (pw.visualViewport && pw.visualViewport.offsetTop > 0) {
+                    pw.scrollTo(0, pw.visualViewport.pageTop || 0);
+                }
+            } catch (eVv) {}
+        } else {
+            try {
+                pw.scrollTo(0, 0);
+            } catch (e) {}
         }
     };
 
@@ -514,25 +1942,23 @@ _SCROLL_MANAGER_JS = r"""
         if (typeof pw.__sajuSyncStepToHtml === "function") {
             pw.__sajuSyncStepToHtml(1);
         }
-        if (typeof pw.__sajuPinHomeHeroTop === "function") {
-            pw.__sajuPinHomeHeroTop();
+        if (typeof pw.__sajuSnapHomeHeroToTop === "function") {
+            pw.__sajuSnapHomeHeroToTop(true);
+        } else if (typeof pw.__sajuPinHomeHeroTop === "function") {
+            pw.__sajuPinHomeHeroTop(true);
         }
-        pw.__sajuFitHomeSolar24Iframe();
+        if (typeof pw.__sajuScheduleHomeSolar24Fit === "function") {
+            pw.__sajuScheduleHomeSolar24Fit();
+        } else {
+            pw.__sajuFitHomeSolar24Iframe();
+        }
         if (!pw.__sajuUserIsScrolling) {
-            pw.__sajuScrollHomeTopOnce();
+            if (typeof pw.__sajuScrollHomeTopOnce === "function") {
+                pw.__sajuScrollHomeTopOnce();
+            }
         }
-        if (mobile) return;
-        try {
-            [80, 240].forEach(function (ms) {
-                pw.setTimeout(function () {
-                    if (pw.__sajuUserIsScrolling) return;
-                    if (typeof pw.__sajuPinHomeHeroTop === "function") {
-                        pw.__sajuPinHomeHeroTop();
-                    }
-                }, ms);
-            });
-        } catch (e) {}
     };
+
 })();
 """
 
@@ -542,48 +1968,60 @@ _ST_JS_CALL_MANAGER = """
     const doc = pw.document || document;
     const epoch = __NAV_EPOCH__;
     const lockMs = __LOCK_MS__;
+    const phase = __SCROLL_PHASE__;
 
     if (typeof pw.__sajuForceStepScrollTop === "function") {
-        pw.__sajuForceStepScrollTop(epoch, lockMs);
+        pw.__sajuForceStepScrollTop(epoch, lockMs, phase);
     }
-
-    const main =
-        doc.querySelector('[data-testid="stAppViewContainer"]') ||
-        doc.querySelector('[data-testid="stMainBlockContainer"]');
-    if (main) {
-        try { main.scrollTop = 0; } catch (e) {}
-        try { main.scrollTo({ top: 0, left: 0, behavior: "auto" }); } catch (e) {}
-    }
-    try { pw.scrollTo(0, 0); } catch (e) {}
-
-    return main ? (main.scrollTop || 0) : 0;
 })()
 """
 
-_LOCK_MS = 400
-_LOCK_MS_MOBILE = 220
+def inject_live_step_beacon() -> None:
+    """현재 STEP·nav epoch — 페이지 맨 끝 비콘(중복 id 방지: class 사용)."""
+    try:
+        step = max(1, min(12, int(st.session_state.get("step", 1))))
+    except Exception:
+        step = 1
+    try:
+        epoch = int(st.session_state.get("saju_nav_epoch", 0))
+    except Exception:
+        epoch = 0
+    st.markdown(
+        f'<div class="saju-live-step-beacon" data-saju-step="{step}" '
+        f'data-saju-nav-epoch="{epoch}" '
+        'style="position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;'
+        'opacity:0;pointer-events:none;" aria-hidden="true"></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _step_nav_scroll_lock_ms(*, step: int | None = None) -> int:
+    """모바일 멈춤 방지 — 스크롤 잠금 없음(0). PC만 짧은 보조."""
+    _ = step
+    return 0
+
+
+def inject_step_scroll_engine_every_run() -> None:
+    """레거시 no-op — 스크롤은 ``inject_step_scroll_manager_once`` + finalize 1회만."""
+
+
+def sync_step_nav_scroll_at_page_tail() -> None:
+    """레거시 no-op — 중복 스크롤 주입 방지."""
 
 
 def inject_step_scroll_manager_once() -> None:
-    """parent 창 전역 스크롤 매니저 — 세션당 1회."""
-    if st.session_state.get("_saju_scroll_mgr_v21"):
+    """parent 창 전역 스크롤 매니저 — JS 버전(_SCROLL_MGR_JS_VER)당 1회."""
+    ver_key = f"_saju_scroll_mgr_js_{_SCROLL_MGR_JS_VER}"
+    if st.session_state.get(ver_key):
         return
-    st.session_state["_saju_scroll_mgr_v21"] = True
-    st.session_state.pop("_saju_scroll_mgr_v20", None)
-    st.session_state.pop("_saju_scroll_mgr_v19", None)
-    st.session_state.pop("_saju_scroll_mgr_v18", None)
-    st.session_state.pop("_saju_scroll_mgr_v17", None)
-    st.session_state.pop("_saju_scroll_mgr_v16", None)
-    st.session_state.pop("_saju_scroll_mgr_v15", None)
-    st.session_state.pop("_saju_scroll_mgr_v8", None)
-    st.session_state.pop("_saju_scroll_mgr_v7", None)
-    st.session_state.pop("_saju_scroll_mgr_v6", None)
-    html = (
-        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
-        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
-        f"<script>{_SCROLL_MANAGER_JS}</script></body></html>"
-    )
-    components.html(html, height=1, scrolling=False)
+    st.session_state[ver_key] = True
+    for key in list(st.session_state.keys()):
+        sk = str(key)
+        if sk.startswith("_saju_scroll_mgr_js_") or sk.startswith("_saju_scroll_mgr_v"):
+            st.session_state.pop(key, None)
+    # st.markdown("<script>") 은 Streamlit 이 script 를 제거해 실행되지 않는 죽은 코드다.
+    # 게다가 빈 element-container 가 세로 flex gap 슬롯을 차지해 본문 상단 공백을 키운다.
+    # 스크롤은 inject_nav_scroll_tail_once(components.html iframe)가 담당하므로 주입하지 않는다.
 
 
 _CALENDAR_LOCALE_NUDGE_JS = r"""
@@ -608,7 +2046,7 @@ _CALENDAR_LOCALE_NUDGE_JS = r"""
 _CALENDAR_LOCALE_INSTALL_JS = r"""
 (function () {
     const pw = window.parent || window;
-    const VERSION = 14;
+    const VERSION = 22;
     const BIRTH_TIME_LABELS = [
         "모름",
         "자(23:30~01:29)",
@@ -938,9 +2376,46 @@ li[data-baseweb="option"][data-saju-month-num]::before {
         });
     }
 
+    function isBdateTextInput(el) {
+        if (!el || String(el.tagName || "").toUpperCase() !== "INPUT") return false;
+        try {
+            return !!el.closest(
+                ".st-key-step2_u_bdate_wrap, .st-key-step2_p_bdate_wrap, " +
+                    '[class*="step2_u_bdate_text"], [class*="step2_p_bdate_text"], ' +
+                    '[class*="st-key-step2_u_bdate"], [class*="st-key-step2_p_bdate"]'
+            );
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function bdateInputFocused() {
+        if (pw.__sajuBdateFocusLock) return true;
+        const ae = doc.activeElement;
+        return isBdateTextInput(ae);
+    }
+
     function safeToPatchMonths() {
-        if (onStep2BirthPage() && !step2HasCalendar()) return false;
+        /* STEP2는 생년월일 직접입력·시간 select만 있음 — 월 패치가 시간 드롭다운을 망가뜨림 */
+        if (onStep2BirthPage()) return false;
         return true;
+    }
+
+    function birthTimeSelectMenuOpen() {
+        return getDocs().some(function (d) {
+            if (d.querySelector(
+                '.st-key-step2_u_time_wrap [data-baseweb="popover"], ' +
+                    '.st-key-step2_p_time_wrap [data-baseweb="popover"], ' +
+                    '.st-key-step2_u_time_wrap [data-baseweb="select-dropdown"], ' +
+                    '.st-key-step2_p_time_wrap [data-baseweb="select-dropdown"]'
+            )) {
+                return true;
+            }
+            return !!d.querySelector(
+                '.st-key-step2_u_time_wrap [data-baseweb="select"] [aria-expanded="true"], ' +
+                    '.st-key-step2_p_time_wrap [data-baseweb="select"] [aria-expanded="true"]'
+            );
+        });
     }
 
     function markBirthTimeSelects() {
@@ -954,38 +2429,21 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     }
 
     function restoreBirthTimeSelectLabels() {
+        /* 드롭다운 열림·터치 선택 중 DOM 변경 시 재선택 불가 → 닫힌 칩만 월 깨짐 복구 */
+        if (birthTimeSelectMenuOpen()) return;
         getDocs().forEach(function (d) {
             d.querySelectorAll(
                 ".st-key-step2_u_time_wrap, .st-key-step2_p_time_wrap"
             ).forEach(function (wrap) {
-                const options = wrap.querySelectorAll(
-                    '[data-baseweb="popover"] [role="option"], ' +
-                        '[data-baseweb="select-dropdown"] [role="option"], ' +
-                        '[data-baseweb="menu"] [role="option"], ' +
-                        '[role="listbox"] [role="option"]'
-                );
-                options.forEach(function (el, idx) {
-                    if (idx >= BIRTH_TIME_LABELS.length) return;
-                    const label = BIRTH_TIME_LABELS[idx];
-                    el.setAttribute("data-saju-birth-time", "1");
-                    el.removeAttribute("data-saju-month-num");
-                    try {
-                        setPlainText(el, label);
-                        el.style.removeProperty("font-size");
-                        el.style.removeProperty("color");
-                    } catch (e) {}
-                });
                 wrap.querySelectorAll(
                     '[data-baseweb="select-value"], [class*="SelectValue"], [class*="select__single-value"]'
                 ).forEach(function (node) {
                     const t = String(node.textContent || "").trim();
-                    if (/^\d{1,2}\.?$/.test(t)) return;
-                    for (let i = 0; i < BIRTH_TIME_LABELS.length; i++) {
-                        const lab = BIRTH_TIME_LABELS[i];
-                        if (t === lab || (t && lab.indexOf(t) === 0)) {
-                            try { setPlainText(node, lab); } catch (e2) {}
-                            break;
-                        }
+                    if (!/^\d{1,2}\s*월\.?$/.test(t)) return;
+                    const sel = wrap.querySelector('[data-baseweb="select"]');
+                    const cur = sel && sel.getAttribute("data-saju-last-label");
+                    if (cur && BIRTH_TIME_LABELS.indexOf(cur) >= 0) {
+                        try { setPlainText(node, cur); } catch (eFix) {}
                     }
                 });
             });
@@ -1057,7 +2515,15 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     function scanAllMonthOptions(d) {
         d.querySelectorAll(MONTH_OPTION_SEL).forEach(function (el) {
             if (el.closest('[role="grid"]')) return;
+            if (el.closest(".st-key-step2_u_time_wrap, .st-key-step2_p_time_wrap")) return;
             if (shouldSkipMonthPatchRoot(el)) return;
+            const listRoot = el.closest(
+                '[role="listbox"], [data-baseweb="menu"], [data-baseweb="popover"], [data-baseweb="select-dropdown"]'
+            );
+            if (listRoot) {
+                const siblings = listRoot.querySelectorAll(MONTH_OPTION_SEL);
+                if (siblings.length && isSajuBirthTimeOptionList(siblings)) return;
+            }
             const num = parseMonthNumber(el.textContent);
             if (num) paintMonthLabel(el, num);
         });
@@ -1231,7 +2697,6 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     function patchAll() {
         injectStyle();
         markBirthTimeSelects();
-        restoreBirthTimeSelectLabels();
         if (onStep2BirthPage() && !step2HasCalendar()) {
             fixStep2FormRows();
             return;
@@ -1245,6 +2710,7 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     pw.__sajuCalendarPatchNow = patchAll;
     pw.__sajuMarkBirthTimeSelects = markBirthTimeSelects;
     pw.__sajuRestoreBirthTimeSelectLabels = restoreBirthTimeSelectLabels;
+    pw.__sajuBirthTimeSelectMenuOpen = birthTimeSelectMenuOpen;
     pw.__sajuCalendarLocaleVersion = VERSION;
 
     if (pw.__sajuCalendarMo) {
@@ -1287,6 +2753,7 @@ li[data-baseweb="option"][data-saju-month-num]::before {
     let calMoTimer = null;
     function schedulePatch() {
         if (!onStep2BirthPage()) return;
+        if (bdateInputFocused()) return;
         const mobile = pw.matchMedia && pw.matchMedia("(max-width: 768px)").matches;
         if (calMoTimer) clearTimeout(calMoTimer);
         calMoTimer = setTimeout(function () {
@@ -1313,10 +2780,11 @@ li[data-baseweb="option"][data-saju-month-num]::before {
             getDocs().forEach(function (d) {
             d.addEventListener(
                 ev,
-                function () {
+                function (e) {
+                    if (isBdateTextInput(e && e.target)) return;
                     schedulePatch();
                     if (onStep2BirthPage() && !step2HasCalendar()) {
-                        fixStep2FormRows();
+                        if (!bdateInputFocused()) fixStep2FormRows();
                         return;
                     }
                     if (!safeToPatchMonths()) return;
@@ -1383,10 +2851,16 @@ _CALENDAR_WEEKDAY_EN_JS = _CALENDAR_LOCALE_INSTALL_JS
 
 
 def inject_calendar_locale_installer_once() -> None:
-    """parent 창에 달력 locale v14 설치(세션당 1회)."""
-    if st.session_state.get("_saju_calendar_install_v14"):
+    """parent 창에 달력 locale v21 설치(세션당 1회)."""
+    if st.session_state.get("_saju_calendar_install_v22"):
         return
-    st.session_state["_saju_calendar_install_v14"] = True
+    st.session_state["_saju_calendar_install_v22"] = True
+    st.session_state.pop("_saju_calendar_install_v21", None)
+    st.session_state.pop("_saju_calendar_install_v20", None)
+    st.session_state.pop("_saju_calendar_install_v19", None)
+    st.session_state.pop("_saju_calendar_install_v17", None)
+    st.session_state.pop("_saju_calendar_install_v15", None)
+    st.session_state.pop("_saju_calendar_install_v14", None)
     st.session_state.pop("_saju_calendar_install_v13", None)
     st.session_state.pop("_saju_calendar_install_v12", None)
     st.session_state.pop("_saju_calendar_install_v11", None)
@@ -1402,7 +2876,7 @@ def inject_calendar_locale_installer_once() -> None:
         "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
         f"<script>{_CALENDAR_LOCALE_INSTALL_JS}</script></body></html>"
     )
-    with st.container(key="saju_calendar_locale_install_v14"):
+    with st.container(key="saju_calendar_locale_install_v22"):
         components.html(html, height=1, scrolling=False)
 
 
@@ -1418,15 +2892,100 @@ def ensure_calendar_locale_on_step2() -> None:
     nudge_calendar_locale_patch(slot="step2_boot")
 
 
+def inject_step2_bdate_input_focus_guard_once() -> None:
+    """STEP2 생년월일 text_input — 첫 포커스 시 DOM 패치·tabIndex 재배치로 커서가 튕기는 현상 방지."""
+    if st.session_state.get("_saju_step2_bdate_focus_guard_v2"):
+        return
+    st.session_state["_saju_step2_bdate_focus_guard_v2"] = True
+    trigger_js = r"""
+(function () {
+  const pw = window.parent !== window ? window.parent : window;
+  const doc = pw.document;
+  if (!doc) return;
+
+  function isBdateInput(el) {
+    if (!el || String(el.tagName || "").toUpperCase() !== "INPUT") return false;
+    try {
+      return !!el.closest(
+        ".st-key-step2_u_bdate_wrap, .st-key-step2_p_bdate_wrap, " +
+          '[class*="step2_u_bdate_text"], [class*="step2_p_bdate_text"], ' +
+          '[class*="st-key-step2_u_bdate"], [class*="st-key-step2_p_bdate"]'
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function lock(on) {
+    pw.__sajuBdateFocusLock = !!on;
+  }
+
+  function bindOne(input) {
+    if (!input || input.dataset.sajuBdateFocusGuard === "1") return;
+    input.dataset.sajuBdateFocusGuard = "1";
+    input.setAttribute("data-saju-bdate-field", "1");
+    input.addEventListener(
+      "focus",
+      function () {
+        lock(true);
+        try {
+          input.removeAttribute("readonly");
+        } catch (e) {}
+      },
+      true
+    );
+    input.addEventListener(
+      "blur",
+      function () {
+        pw.setTimeout(function () {
+          if (!isBdateInput(doc.activeElement)) lock(false);
+        }, 160);
+      },
+      true
+    );
+  }
+
+  function scan() {
+    doc.querySelectorAll("input").forEach(function (el) {
+      if (isBdateInput(el)) bindOne(el);
+    });
+  }
+
+  scan();
+  try {
+    pw.requestAnimationFrame(scan);
+  } catch (e) {}
+  [80, 240, 520].forEach(function (ms) {
+    pw.setTimeout(scan, ms);
+  });
+  try {
+    const root = doc.body || doc.documentElement;
+    if (root && pw.MutationObserver) {
+      new pw.MutationObserver(function () {
+        scan();
+      }).observe(root, { childList: true, subtree: true });
+    }
+  } catch (e) {}
+})();
+"""
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"<script>{trigger_js}</script></body></html>"
+    )
+    with st.container(key="saju_step2_bdate_focus_guard"):
+        components.html(html, height=1, scrolling=False)
+
+
 def protect_step2_birth_time_selects() -> None:
     """STEP2 태어난 시간 selectbox — 달력 월 패치가 건드리지 않도록 보호."""
     inject_calendar_locale_installer_once()
+    nonce = int(st.session_state.get("_saju_step2_time_protect_nonce", 0)) + 1
+    st.session_state["_saju_step2_time_protect_nonce"] = nonce
     trigger_js = (
         "(function(){"
         "const pw=window.parent||window;"
         "if(typeof pw.__sajuMarkBirthTimeSelects==='function'){pw.__sajuMarkBirthTimeSelects();}"
-        "if(typeof pw.__sajuRestoreBirthTimeSelectLabels==='function'){pw.__sajuRestoreBirthTimeSelectLabels();}"
-        "if(typeof pw.__sajuCalendarPatchNow==='function'){pw.__sajuCalendarPatchNow();}"
         "})();"
     )
     html = (
@@ -1434,7 +2993,7 @@ def protect_step2_birth_time_selects() -> None:
         "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
         f"<script>{trigger_js}</script></body></html>"
     )
-    with st.container(key="saju_step2_time_protect"):
+    with st.container(key=f"saju_step2_time_protect_{nonce % 100000}"):
         components.html(html, height=1, scrolling=False)
 
 
@@ -1454,42 +3013,205 @@ def nudge_calendar_locale_patch(*, slot: str = "page") -> None:
 
 
 def render_step_top_anchor() -> None:
-    st.markdown(
-        (
-            '<mtop id="saju-step-top-anchor" '
-            'style="position:relative;width:1px;height:1px;margin:0;padding:0;'
-            'overflow:hidden;scroll-margin-top:0;" aria-hidden="true"></mtop>'
-        ).replace("mtop", "div"),
-        unsafe_allow_html=True,
-    )
+    """페이지 최상단 앵커 — ``st.container`` + ``st.empty`` 로 스크롤 기준점을 고정합니다.
 
+    STEP 전환 후 스크롤은 ``finalize_scroll_to_top_if_needed`` 에서
+    ``force_scroll_to_top()`` 로 실행합니다 (rerun 직후 1회).
 
-def _fire_step_scroll_to_top(nav_epoch: int, *, phase: str = "late") -> None:
-    """STEP 전환 — 전역 매니저 호출(early=본문 전, late=본문 후 재시도)."""
-    epoch = int(nav_epoch)
-    phase_tag = f"{epoch}:{phase}"
-    if st.session_state.get("_saju_scroll_phase_fired") == phase_tag:
+    STEP1(홈)에서는 앵커 컨테이너가 모바일에서 상단 빈 여백을 만들 수 있어 생략합니다.
+
+    수동 패턴::
+
+        render_step_top_anchor()
+        schedule_force_scroll_after_nav(delay_ms=150, strength="strong")
+        rerun_full_app()
+    """
+    if int(st.session_state.get("step", 1)) == 1:
         return
-    st.session_state["_saju_scroll_phase_fired"] = phase_tag
-    st.session_state["_saju_scroll_widgets_fired"] = epoch
+    top_anchor = st.container(key="saju_step_top_anchor")
+    with top_anchor:
+        st.markdown(
+            (
+                '<div id="saju-step-top-anchor" tabindex="-1" '
+                'style="position:relative;width:1px;height:1px;margin:0;padding:0;'
+                'overflow:hidden;scroll-margin-top:0;outline:none;" '
+                'aria-hidden="true"></div>'
+            ),
+            unsafe_allow_html=True,
+        )
+        st.empty()
 
-    lock_ms = int(st.session_state.get("_saju_step_scroll_lock_ms", _LOCK_MS))
 
+def render_step_top_anchor_and_force_scroll(
+    *,
+    delay_ms: int = 150,
+    strength: str = "strong",
+) -> None:
+    """최상단 앵커 + 즉시 ``force_scroll_to_top`` (페이지 tail·finalize 용)."""
+    render_step_top_anchor()
+    force_scroll_to_top(delay_ms=delay_ms, strength=strength)
+
+
+def inject_nav_scroll_tail_once(
+    *, nav_epoch: int | None = None, from_step: int | None = None
+) -> None:
+    """페이지 tail 1회 — STEP 이동 후 화면 최상단(scrollTop=0)으로 고정.
+
+    🔒 잠금(회귀 금지) — 이 동작은 검증 완료됐다. 아래 계약을 깨지 말 것:
+      1. 반드시 ``components.html``(iframe)로 주입한다.
+         ``st.markdown("<script>...")`` 는 브라우저가 실행하지 않으므로(innerHTML
+         script 미실행) 절대 그 방식으로 되돌리지 말 것.
+      2. iframe 스크립트는 ``window.parent``(메인 문서)의 스크롤러를 0 으로 만든다.
+         매니저 함수(``pw.__saju*``)에 의존하지 않는 자립형으로 유지한다.
+      3. 배너가 페이지 최상단에 있으므로 STEP 앵커로 ``scrollIntoView`` 하지 말 것
+         (배너가 가려진다). scrollTop=0(맨 위)만 사용한다.
+      4. 단계 A(강제)에서는 사용자 개입을 무시, 단계 B에서는 사용자 클릭/휠/터치/키
+         감지 시 즉시 중단(사용자 방해 금지).
+    """
+    epoch = int(
+        nav_epoch
+        if nav_epoch is not None
+        else st.session_state.get("saju_nav_epoch", 0)
+    )
+    if st.session_state.get("_saju_nav_scroll_tail_epoch") == epoch:
+        return
+    st.session_state["_saju_nav_scroll_tail_epoch"] = epoch
+    try:
+        step = max(1, min(12, int(st.session_state.get("step", 1))))
+    except Exception:
+        step = 1
+    try:
+        nav_from = (
+            max(1, min(12, int(from_step)))
+            if from_step is not None
+            else 0
+        )
+    except Exception:
+        nav_from = 0
+    if nav_from == step:
+        nav_from = 0
+    # 중요: st.markdown("<script>") 은 브라우저가 실행하지 않는다(innerHTML script).
+    # 실제 실행을 위해 components.html(iframe) 로 주입하고, iframe 안 스크립트가
+    # window.parent(메인 문서)를 스크롤한다. 매니저(pw.__saju*)에 의존하지 않는 자립형.
     trigger_js = (
-        f"(function(){{"
-        f"const pw=window.parent||window;"
-        f"if(typeof pw.__sajuCancelStepScroll==='function'){{pw.__sajuCancelStepScroll();}}"
-        f"if(typeof pw.__sajuForceStepScrollTop==='function'){{"
-        f"pw.__sajuForceStepScrollTop({epoch},{lock_ms});"
-        f"}}}})();"
+        "(function(){"
+        "var pw=(window.parent&&window.parent!==window)?window.parent:window;"
+        f"var epoch={epoch};var step={step};var navFrom={nav_from};var isHome=step===1;"
+        "var doc=pw.document||document;"
+        "pw.__sajuNavLatestEpoch=epoch;"
+        # 중요: <html data-saju-step>/클래스는 그동안 st.markdown('<script>')(Streamlit 이
+        # script 를 제거 → 실행 안 됨)로만 설정돼, 홈에서 '1' 로 박힌 뒤 비홈 스텝에서도
+        # '1' 로 고정됐다. 그 결과 html[data-saju-step='1'] 홈 전용 규칙이 모든 스텝에 적용되고
+        # 빈 홈 마운트가 강제 노출돼 상단 공백을 만들었다. 여기(실행되는 iframe)에서 매 네비마다
+        # 실제 step 으로 세팅한다. <html> 속성은 rerun 에도 유지되므로 위젯 클릭에도 안정적.
+        # STEP 이동 직후에는 새 마운트가 DOM 에 붙기 전 data-saju-step 만 바꾸면
+        # bootstrap CSS 가 이전 마운트를 숨겨 본문이 비고 하단 네비만 남는다(빈 화면 버그).
+        "var applyHtmlStep=function(n){"
+        "var sn=Math.max(1,Math.min(12,parseInt(String(n),10)||1));"
+        "var home=sn===1;"
+        "try{var de=doc.documentElement;if(de){"
+        "de.setAttribute('data-saju-step',String(sn));"
+        "de.classList.remove('saju-home-step1','saju-not-step1');"
+        "de.classList.add(home?'saju-home-step1':'saju-not-step1');"
+        "if(typeof pw.__sajuHideStaleStepMounts==='function'){pw.__sajuHideStaleStepMounts(sn);}"
+        "}}catch(e){}"
+        "return sn;};"
+        "var setNavPending=function(on){"
+        "try{var de=doc.documentElement;if(!de)return;"
+        "if(on){de.setAttribute('data-saju-nav-pending','1');}"
+        "else{de.removeAttribute('data-saju-nav-pending');}}catch(e){}};"
+        "var mountReady=function(n){"
+        "var sn=Math.max(1,Math.min(12,parseInt(String(n),10)||1));"
+        "var pad=sn<10?('0'+sn):String(sn);"
+        "var el=doc.querySelector('.st-key-saju_router_step_mount_'+pad);"
+        "if(!el)return false;"
+        "var vb=el.querySelector('[data-testid=\"stVerticalBlock\"]');"
+        "if(!vb)return false;"
+        "var kids=vb.querySelectorAll('[data-testid=\"stElementContainer\"]');"
+        "if(!kids||kids.length<1)return false;"
+        "var h=el.offsetHeight||0;"
+        "var txt=(el.innerText||'').replace(/\\s+/g,'');"
+        "if(h<120&&txt.length<16)return false;"
+        "if(txt.length<6&&h<220)return false;"
+        "return true;};"
+        "var scrollers=function(){return ["
+        "doc.querySelector('[data-testid=\"stMain\"]'),"
+        "doc.querySelector('section.main'),"
+        "doc.querySelector('[data-testid=\"stMainBlockContainer\"]'),"
+        "doc.querySelector('[data-testid=\"stAppViewContainer\"]'),"
+        "doc.scrollingElement,doc.documentElement,doc.body];};"
+        "var offTop=function(){var off=false;scrollers().forEach(function(el){"
+        "if(el&&(el.scrollTop||0)>2)off=true;});"
+        "if((pw.scrollY||0)>2)off=true;return off;};"
+        # snap: 포커스된 버튼/라디오 등은 blur(포커스-스크롤로 중간 멈춤 방지),
+        # 입력 중인 input/textarea/select 는 건드리지 않음. 모든 스크롤러를 0(맨 위)으로.
+        "var snap=function(){"
+        "try{var ae=doc.activeElement;var tg=ae&&ae.tagName?String(ae.tagName).toLowerCase():'';"
+        "if(ae&&ae!==doc.body&&tg!=='input'&&tg!=='textarea'&&tg!=='select'&&typeof ae.blur==='function'){ae.blur();}}catch(e){}"
+        "scrollers().forEach(function(el){if(!el)return;try{if((el.scrollTop||0)>0)el.scrollTop=0;}catch(e){}});"
+        "try{pw.scrollTo(0,0);}catch(e){}"
+        "};"
+        # 자체 사용자 상호작용 감지(매니저 가드에 의존하지 않음).
+        # scroll·휠·터치·클릭·키 — 사용자 스크롤 시작 시 즉시 스냅 중단.
+        "var userActed=false;"
+        "var onUser=function(){userActed=true;};"
+        "var evs=['wheel','touchmove','touchstart','keydown','pointerdown','scroll'];"
+        "try{evs.forEach(function(ev){doc.addEventListener(ev,onUser,{passive:true,capture:true});});}catch(e){}"
+        "var cleanup=function(){try{evs.forEach(function(ev){doc.removeEventListener(ev,onUser,{capture:true});});}catch(e){}};"
+        "var runNavTail=function(){"
+        # 홈: 배너가 곧 최상단이므로 동일하게 맨 위로 몇 번 맞춘다.
+        "if(isHome){snap();try{pw.requestAnimationFrame(snap);}catch(e){}[60,200,420].forEach(function(ms){pw.setTimeout(snap,ms);});cleanup();return;}"
+        # STEP 전환 직후만 짧게 보정 — 사용자 스크롤 감지 시 즉시 중단.
+        "var t0=Date.now();var settleEnd=180;var hardEnd=900;"
+        "var tick=function(){"
+        "if(pw.__sajuNavLatestEpoch!==epoch){cleanup();return;}"
+        "if(userActed){cleanup();return;}"
+        "var dt=Date.now()-t0;"
+        "if(dt<settleEnd){snap();}"
+        "else{if(offTop())snap();}"
+        "if(dt<hardEnd){pw.setTimeout(tick,dt<settleEnd?60:220);}else{cleanup();}"
+        "};"
+        "snap();try{pw.requestAnimationFrame(snap);}catch(e){}pw.setTimeout(tick,60);"
+        "};"
+        "var commitTargetStep=function(){setNavPending(false);if(typeof pw.__sajuClearStepNavPending==='function'){pw.__sajuClearStepNavPending();}applyHtmlStep(step);if(navFrom>0&&navFrom!==step){runNavTail();}};"
+        "if(navFrom>0&&navFrom!==step){"
+        "setNavPending(true);"
+        "if(typeof pw.__sajuArmStepNavPending==='function'){pw.__sajuArmStepNavPending(navFrom);}else{applyHtmlStep(navFrom);}"
+        "var tries=0;var waitMax=160;var minWait=3;"
+        "var wait=function(){"
+        "if(pw.__sajuNavLatestEpoch!==epoch){setNavPending(false);return;}"
+        "tries+=1;"
+        "if(mountReady(step)&&tries>=minWait){commitTargetStep();return;}"
+        "if(tries>=waitMax){commitTargetStep();return;}"
+        "if(typeof pw.__sajuArmStepNavPending==='function'){pw.__sajuArmStepNavPending(navFrom);}else{applyHtmlStep(navFrom);}"
+        "try{pw.setTimeout(wait,36);}catch(e){commitTargetStep();}"
+        "};"
+        "try{pw.requestAnimationFrame(function(){wait();});}catch(e){wait();}"
+        "}else{commitTargetStep();}"
+        "})();"
     )
     html = (
         "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
-        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
         f"<script>{trigger_js}</script></body></html>"
     )
-    with st.container(key=f"saju_scroll_fire_{epoch}_{phase}"):
-        components.html(html, height=1, scrolling=False)
+    with st.container(key=f"saju_nav_scroll_tail_{epoch}"):
+        components.html(html, height=0, scrolling=False)
+
+
+def scroll_step_top_now(
+    *, nav_epoch: int | None = None, slot: str = "main", force: bool = False
+) -> None:
+    """레거시 래퍼 — ``inject_nav_scroll_tail_once`` 로 위임."""
+    _ = slot
+    if not force and not step_scroll_is_pending():
+        return
+    inject_nav_scroll_tail_once(nav_epoch=nav_epoch)
+
+
+def _fire_step_scroll_to_top(nav_epoch: int, *, phase: str = "late") -> None:
+    """STEP 전환 후 최상단 스크롤(1회)."""
+    scroll_step_top_now(nav_epoch=nav_epoch)
 
 
 _SCROLL_PENDING_KEY = "_saju_pending_scroll_top"
@@ -1512,6 +3234,38 @@ def step_scroll_is_pending() -> bool:
     return False
 
 
+def arm_step_navigation_scroll(*, step: int | None = None) -> None:
+    """이전/다음·메뉴 STEP 이동 직후 — 다음 rerun 에서 최상단 스크롤 예약."""
+    st.session_state["_saju_pending_scroll_top"] = True
+    st.session_state["_force_scroll_to_top_after_rerun"] = True
+    st.session_state["_saju_must_scroll_top"] = True
+    st.session_state["_saju_nav_from_prepare"] = True
+    st.session_state.pop("_saju_scrolled_nav_epoch", None)
+    st.session_state["_saju_scroll_fired_slots"] = []
+    st.session_state.pop("_saju_scroll_top_tag", None)
+    if step is not None:
+        st.session_state["_saju_scroll_target_step"] = int(step)
+
+
+def prime_step_nav_scroll_before_render() -> None:
+    """라우터 본문 렌더 전 — 스크롤 매니저·STEP 속성·1차 스냅."""
+    if int(st.session_state.get("step", 1)) == 1:
+        return
+    inject_step_scroll_manager_once()
+    if not step_scroll_is_pending():
+        return
+    try:
+        step = int(
+            st.session_state.get(
+                "_saju_scroll_target_step", st.session_state.get("step", 1)
+            )
+        )
+    except Exception:
+        step = 1
+    step = max(1, min(12, step))
+    inject_step_html_attrs_immediate(step, scroll_top=False)
+
+
 def mark_scroll_completed_for_current_nav() -> None:
     try:
         st.session_state["_saju_scrolled_nav_epoch"] = int(
@@ -1531,6 +3285,8 @@ def should_scroll_to_top_after_step_change(
 ) -> bool:
     if st.session_state.pop("_saju_nav_preserve_scroll", False):
         return False
+    if st.session_state.pop("_saju_nav_from_prepare", False):
+        return True
     if step_scroll_is_pending():
         return True
     if navigated:
@@ -1643,13 +3399,20 @@ def _step2_tab_order_json() -> str:
 
 
 def inject_step2_tab_manager_global_once() -> None:
-    """STEP2 Tab 순서 — parent 문서에 1회 설치 (st.markdown, iframe 우회)."""
-    if st.session_state.get("_saju_step2_tab_mgr_v11"):
+    """STEP2 Tab 순서 — parent 문서에 1회 설치 (components.html iframe)."""
+    if st.session_state.get("_saju_step2_tab_mgr_v12"):
         return
-    st.session_state["_saju_step2_tab_mgr_v11"] = True
+    st.session_state["_saju_step2_tab_mgr_v12"] = True
+    st.session_state.pop("_saju_step2_tab_mgr_v11", None)
     order_js = _step2_tab_order_json()
     mgr_js = _STEP2_TAB_MANAGER_JS.replace("__ORDER_JSON__", order_js)
-    st.markdown(f"<script>{mgr_js}</script>", unsafe_allow_html=True)
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"<script>{mgr_js}</script></body></html>"
+    )
+    with st.container(key="saju_step2_tab_mgr_v12"):
+        components.html(html, height=1, scrolling=False)
 
 
 _STEP2_TAB_MANAGER_JS = r"""
@@ -1661,10 +3424,11 @@ _STEP2_TAB_MANAGER_JS = r"""
 
   pw.__sajuStep2TabOrder = ORDER;
 
-  if (pw.__sajuStep2TabMgrV11) {
+  if (pw.__sajuStep2TabMgrV12) {
     if (typeof pw.__sajuStep2TabRefresh === "function") pw.__sajuStep2TabRefresh();
     return;
   }
+  pw.__sajuStep2TabMgrV12 = true;
   pw.__sajuStep2TabMgrV11 = true;
 
   let chainCache = [];
@@ -1946,6 +3710,9 @@ _STEP2_TAB_MANAGER_JS = r"""
   }
 
   function demoteScopeTabStops() {
+    if (typeof pw.__sajuBirthTimeSelectMenuOpen === "function" && pw.__sajuBirthTimeSelectMenuOpen()) {
+      return;
+    }
     forEachDoc((doc) => {
       doc.querySelectorAll(SCOPE_SEL).forEach((scope) => {
         scope
@@ -1954,6 +3721,13 @@ _STEP2_TAB_MANAGER_JS = r"""
           )
           .forEach((el) => {
             if (chainCache.indexOf(el) >= 0) return;
+            if (
+              el.closest(
+                '[data-baseweb="popover"], [data-baseweb="select-dropdown"], [data-baseweb="menu"], [role="listbox"]'
+              )
+            ) {
+              return;
+            }
             if (el.closest('[data-testid="stNumberInput"]') && el.tagName === "BUTTON") {
               el.tabIndex = -1;
               return;
@@ -1982,7 +3756,10 @@ _STEP2_TAB_MANAGER_JS = r"""
     const run = function () {
       refreshQueued = false;
       if (!step2Active()) return;
-      if (isEditingInScope()) return;
+      if (pw.__sajuBdateFocusLock || isEditingInScope()) return;
+      if (typeof pw.__sajuBirthTimeSelectMenuOpen === "function" && pw.__sajuBirthTimeSelectMenuOpen()) {
+        return;
+      }
       buildChain();
       demoteScopeTabStops();
       bindScopeHandlers();
@@ -2213,25 +3990,14 @@ def inject_cancel_step_scroll_lock_once() -> None:
     )
 
 
-def _home_viewport_is_pending() -> bool:
-    """홈 최상단 스크롤 — 홈으로 이동·새로고침 시에만(매 rerun 반복 금지)."""
-    if int(st.session_state.get("step", 1)) != 1:
-        return False
-    return bool(st.session_state.get("_saju_apply_home_viewport"))
-
-
-def _next_home_viewport_token() -> int:
-    n = int(st.session_state.get("_saju_home_viewport_token", 0)) + 1
-    st.session_state["_saju_home_viewport_token"] = n
-    return n
-
-
 def _trigger_home_solar_iframe_fit_js() -> None:
     """24절기 iframe 높이만 조정 — 스크롤 위치는 변경하지 않습니다."""
     trigger_js = (
         "(function(){"
         "const pw=window.parent||window;"
-        "if(typeof pw.__sajuFitHomeSolar24Iframe==='function'){"
+        "if(typeof pw.__sajuScheduleHomeSolar24Fit==='function'){"
+        "pw.__sajuScheduleHomeSolar24Fit();"
+        "}else if(typeof pw.__sajuFitHomeSolar24Iframe==='function'){"
         "pw.__sajuFitHomeSolar24Iframe();"
         "}"
         "})();"
@@ -2245,51 +4011,292 @@ def _trigger_home_solar_iframe_fit_js() -> None:
         components.html(html, height=1, scrolling=False)
 
 
-def _fire_step1_home_viewport() -> None:
-    """STEP1 홈 진입 시 1회 — 최상단으로만 이동(스크롤 잠금 없음)."""
-    token = _next_home_viewport_token()
-    if st.session_state.get("_saju_home_scroll_widgets_fired") == token:
-        return
-    st.session_state["_saju_home_scroll_widgets_fired"] = token
+def inject_step_dom_boot_once() -> None:
+    """앱 기동 직후 — (구) STEP 동기화 스크립트 주입 지점. 현재는 no-op.
 
+    data-saju-step 세팅·스크롤은 inject_nav_scroll_tail_once(실행되는 iframe)가 담당한다.
+    여기서 st.markdown("<script>") 을 쓰면 Streamlit 이 script 를 제거해 실행도 안 되고,
+    빈 element-container 가 본문 상단 공백(flex gap)만 키우므로 더 이상 주입하지 않는다.
+    """
+    st.session_state["_saju_step_dom_boot_v1"] = True
+    return
+
+
+def reset_step_dom_sync_slots_for_run() -> None:
+    """라우터 rerun 시작 시 호출 — ``sync_step_dom_now`` slot 중복 key 방지."""
+    st.session_state["_saju_html_sync_slots"] = []
+
+
+_STEP_NAV_CLICK_GUARD_JS = r"""
+(function () {
+  const pw = window.parent !== window ? window.parent : window;
+  const doc = pw.document;
+  if (!doc || pw.__sajuStepNavClickGuardV2) return;
+  pw.__sajuStepNavClickGuardV2 = true;
+
+  function readStep() {
+    const de = doc.documentElement;
+    const n = parseInt(String(de.getAttribute("data-saju-step") || "1"), 10);
+    return Math.max(1, Math.min(12, n || 1));
+  }
+
+  function applyFromStep(n) {
+    const de = doc.documentElement;
+    if (!de) return;
+    const sn = Math.max(1, Math.min(12, parseInt(String(n), 10) || 1));
+    de.setAttribute("data-saju-step", String(sn));
+    de.setAttribute("data-saju-nav-from", String(sn));
+    de.classList.remove("saju-home-step1", "saju-not-step1");
+    de.classList.add(sn === 1 ? "saju-home-step1" : "saju-not-step1");
+  }
+
+  function setPending(on) {
+    const de = doc.documentElement;
+    if (!de) return;
+    if (on) de.setAttribute("data-saju-nav-pending", "1");
+    else de.removeAttribute("data-saju-nav-pending");
+  }
+
+  pw.__sajuArmStepNavPending = function (fromStep) {
+    const fs =
+      fromStep != null
+        ? Math.max(1, Math.min(12, parseInt(String(fromStep), 10) || 1))
+        : readStep();
+    applyFromStep(fs);
+    setPending(true);
+  };
+
+  pw.__sajuClearStepNavPending = function () {
+    setPending(false);
+  };
+
+  function isStepNavControl(el) {
+    if (!el) return false;
+    try {
+      if (
+        el.closest(
+          ".st-key-saju_global_bottom_chrome, " +
+            ".st-key-saju_bottom_quick_menu_panel, " +
+            ".st-key-saju_bottom_prev_next_row, " +
+            ".st-key-step11_inline_nav_row"
+        )
+      ) {
+        return !!el.closest("button");
+      }
+      const root = el.closest('[class*="st-key-"]');
+      if (!root || !root.classList) return false;
+      for (let i = 0; i < root.classList.length; i++) {
+        const c = root.classList[i];
+        if (
+          c.indexOf("st-key-saju_bottom_nav_") === 0 ||
+          c.indexOf("st-key-saju_dock_nav_") === 0
+        ) {
+          return !!el.closest("button");
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function onNavPointer(e) {
+    if (!isStepNavControl(e.target)) return;
+    pw.__sajuArmStepNavPending(readStep());
+  }
+
+  ["pointerdown", "touchstart", "mousedown"].forEach(function (ev) {
+    try {
+      doc.addEventListener(ev, onNavPointer, { capture: true, passive: true });
+    } catch (e) {}
+  });
+})();
+"""
+
+
+def inject_step_nav_click_guard_once() -> None:
+    """STEP 이동 버튼 클릭 직후( rerun 대기 전) pending·출발 STEP 고정 — 빈 하단 네비 방지."""
+    if st.session_state.get("_saju_step_nav_click_guard_v2"):
+        return
+    st.session_state["_saju_step_nav_click_guard_v2"] = True
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
+        f"<script>{_STEP_NAV_CLICK_GUARD_JS}</script></body></html>"
+    )
+    with st.container(key="saju_step_nav_click_guard_v2"):
+        components.html(html, height=0, scrolling=False)
+
+
+def get_step_nav_from_step(*, target_step: int | None = None) -> int | None:
+    """STEP 이동 직후 run — 전환 출발 STEP(이전 STEP) 번호. 없으면 ``None``."""
+    try:
+        step = max(1, min(12, int(target_step if target_step is not None else st.session_state.get("step", 1))))
+    except Exception:
+        step = 1
+    try:
+        fs = int(st.session_state.get("_saju_nav_from_step") or 0)
+        if 1 <= fs <= 12 and fs != step:
+            return fs
+    except Exception:
+        pass
+    try:
+        last = st.session_state.get("_router_last_step")
+        if last is not None:
+            li = max(1, min(12, int(last)))
+            if li != step:
+                return li
+    except Exception:
+        pass
+    return None
+
+
+def inject_step_nav_transition_early(*, target_step: int, from_step: int) -> None:
+    """STEP 이동 run — 라우터·푸터보다 먼저 pending·마운트 CSS 를 주입해 빈 화면을 막습니다."""
+    fs = max(1, min(12, int(from_step)))
+    ts = max(1, min(12, int(target_step)))
+    if fs == ts:
+        return
+    inject_step_nav_pending_flag(from_step=fs)
+    inject_router_step_mount_visibility_css(ts, also_show_step=fs)
+
+
+def inject_step_nav_pending_flag(*, from_step: int) -> None:
+    """STEP 이동 run 시작 — 전환 중 ``data-saju-nav-pending``·이전 ``data-saju-step`` 즉시 고정.
+
+    bootstrap CSS 가 새 step 으로 바뀌어 이전 마운트를 숨기기 전에 실행되어,
+    하단 네비만 남는 빈 화면(1~2초)을 막습니다.
+    """
+    fs = max(1, min(12, int(from_step)))
+    nav_epoch = int(st.session_state.get("saju_nav_epoch", 0))
+    if st.session_state.get("_saju_nav_pending_flag_epoch") == nav_epoch:
+        return
+    st.session_state["_saju_nav_pending_flag_epoch"] = nav_epoch
+    home_cls = "saju-home-step1" if fs == 1 else "saju-not-step1"
     trigger_js = (
         "(function(){"
-        "const pw=window.parent||window;"
-        "if(typeof pw.__sajuForceHomeViewport==='function'){"
-        f"pw.__sajuForceHomeViewport({token},0);"
-        "}else{"
-        "if(typeof pw.__sajuScrollHomeTopOnce==='function'){pw.__sajuScrollHomeTopOnce();}"
-        "if(typeof pw.__sajuFitHomeSolar24Iframe==='function'){pw.__sajuFitHomeSolar24Iframe();}"
-        "}"
+        "var pw=(window.parent&&window.parent!==window)?window.parent:window;"
+        "var doc=pw.document||document;"
+        "var de=doc.documentElement;if(!de)return;"
+        f"if(typeof pw.__sajuArmStepNavPending==='function'){{pw.__sajuArmStepNavPending({fs});return;}}"
+        "de.setAttribute('data-saju-nav-pending','1');"
+        f"de.setAttribute('data-saju-step','{fs}');"
+        f"de.setAttribute('data-saju-nav-from','{fs}');"
+        "de.classList.remove('saju-home-step1','saju-not-step1');"
+        f"de.classList.add('{home_cls}');"
         "})();"
     )
     html = (
         "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
-        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
         f"<script>{trigger_js}</script></body></html>"
     )
-    with st.container(key=f"saju_home_viewport_{token}"):
-        components.html(html, height=1, scrolling=False)
-
-    st.session_state["_saju_home_viewport_done"] = True
-    st.session_state.pop("_saju_apply_home_viewport", None)
+    with st.container(key=f"saju_nav_pending_flag_{nav_epoch}"):
+        components.html(html, height=0, scrolling=False)
 
 
-def inject_step_dom_boot_once() -> None:
-    """앱 기동 직후 — STEP·본문 표시(모바일 빈 화면 방지)."""
-    if st.session_state.get("_saju_step_dom_boot_v1"):
-        return
-    st.session_state["_saju_step_dom_boot_v1"] = True
-    inject_step_scroll_manager_once()
-    step = max(1, min(12, int(st.session_state.get("step", 1))))
-    boot_js = (
-        "(function(){"
-        "const pw=window.parent||window;"
-        f"if(typeof pw.__sajuSyncStepToHtml==='function'){{pw.__sajuSyncStepToHtml({step});}}"
-        "if(typeof pw.__sajuRevealMainContent==='function'){pw.__sajuRevealMainContent(true);}"
-        "})();"
+def inject_router_step_mount_visibility_css(
+    step: int, *, also_show_step: int | None = None
+) -> None:
+    """현재 STEP 마운트만 표시 — ``data-saju-step`` JS 지연 시에도 세션 STEP 기준으로 즉시 적용.
+
+    ``also_show_step``(이전 STEP)을 함께 넘기면 STEP 이동 직후 전환 구간에서
+    새 마운트가 DOM 에 채워지기 전에 이전 마운트를 숨기지 않아 '빈 화면'을 막습니다.
+    """
+    s = max(1, min(12, int(step)))
+    visible: set[int] = {s}
+    if also_show_step is not None:
+        try:
+            a = max(1, min(12, int(also_show_step)))
+        except Exception:
+            a = 0
+        if a and a != s:
+            visible.add(a)
+    # 캐시 가드 금지: 스텝이 안 바뀐 rerun(위젯 클릭 등)에서 재주입을 건너뛰면
+    # Streamlit 이 이전 run 의 <style> 요소를 DOM 에서 제거해, 숨겨두던 잔존 마운트
+    # (특히 홈 mount_01)가 다시 노출된다. 매 렌더마다 반드시 다시 주입한다.
+    st.session_state["_saju_router_mount_css_step"] = s
+
+    # specificity 강화: bootstrap 의 html[data-saju-step]:not(...) 숨김 규칙(0,3,1)보다
+    # 높게 잡아, also_show_step 전환 구간에서 inject <style> 이 항상 이기게 한다.
+    def _mount_hide_sel(i: int) -> str:
+        c = f"st-key-saju_router_step_mount_{i:02d}"
+        dup = f".{c}.{c}.{c}.{c}"
+        return f"html[data-saju-step] body {dup}, html[data-saju-nav-pending=\"1\"] body {dup}"
+
+    def _mount_show_sel(i: int) -> str:
+        return _mount_hide_sel(i)
+
+    hide_sel = ",\n".join(_mount_hide_sel(i) for i in range(1, 13) if i not in visible)
+    show_blocks = "\n".join(
+        f"""{_mount_show_sel(i)} {{
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+    position: relative !important;
+}}"""
+        for i in sorted(visible)
     )
-    st.markdown(f"<script>{boot_js}</script>", unsafe_allow_html=True)
+    transition_shell_css = ""
+    if len(visible) > 1:
+        # 전환 중 pending 해제 전 — 하단 안내(푸터)만 남는 빈 화면 방지
+        transition_shell_css = """
+html[data-saju-nav-pending="1"] .st-key-saju_global_bottom_chrome,
+html[data-saju-nav-pending="1"] .st-key-saju_bottom_prev_next_row,
+html[data-saju-nav-pending="1"] .st-key-saju_bottom_quick_menu_panel,
+html[data-saju-nav-pending="1"] .st-key-saju_policy_footer {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+}
+"""
+    style_id = f"saju-router-mount-visibility-{s}"
+    if len(visible) > 1:
+        also_only = sorted(visible - {s})
+        if also_only:
+            style_id += f"-also-{also_only[0]:02d}"
+    st.markdown(
+        f"""
+<style id="{style_id}">
+{hide_sel} {{
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+}}
+{show_blocks}
+{transition_shell_css}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def inject_step_html_attrs_immediate(step: int, *, scroll_top: bool = False) -> None:
+    """(구) 라우터 본문 렌더 전 ``<html data-saju-step>`` 주입 지점. 현재는 no-op.
+
+    이 함수는 ``st.markdown("<script>")`` 로 동작했는데, Streamlit 이 script 를 제거해
+    실행되지 않았고(그래서 data-saju-step 이 갱신되지 않아 홈 전용 CSS 가 모든 STEP 에
+    적용되는 버그가 있었다), 빈 element-container 가 본문 상단 공백(flex gap)만 키웠다.
+    data-saju-step/클래스 세팅과 스크롤은 ``inject_nav_scroll_tail_once``(실행되는
+    components.html iframe)가 담당하므로 여기서는 아무것도 렌더하지 않는다.
+    """
+    return
 
 
 def sync_step_dom_now(
@@ -2301,95 +4308,553 @@ def sync_step_dom_now(
     """
     s = max(1, min(12, int(step if step is not None else st.session_state.get("step", 1))))
     safe_slot = re.sub(r"[^a-zA-Z0-9_]", "_", str(slot or "main"))[:48]
-    reveal_js = (
-        "if(typeof pw.__sajuRevealMainContent==='function'){pw.__sajuRevealMainContent(true);}"
-        if reveal
-        else ""
+    used: list[str] = list(st.session_state.get("_saju_html_sync_slots") or [])
+    if safe_slot in used:
+        return
+    used.append(safe_slot)
+    st.session_state["_saju_html_sync_slots"] = used
+    hide_js = (
+        f"if(typeof pw.__sajuHideStaleStepMounts==='function'){{pw.__sajuHideStaleStepMounts({s});}}"
     )
     trigger_js = (
         "(function(){"
         "const pw=window.parent||window;"
         f"if(typeof pw.__sajuSyncStepToHtml==='function'){{pw.__sajuSyncStepToHtml({s});}}"
-        f"{reveal_js}"
+        f"{hide_js}"
         "})();"
     )
-    html = (
-        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
-        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
-        f"<script>{trigger_js}</script></body></html>"
-    )
-    with st.container(key=f"saju_step_html_sync_{safe_slot}"):
-        components.html(html, height=1, scrolling=False)
-
-
-def prime_step_navigation_viewport(*, step: int) -> None:
-    """STEP 본문 렌더 전 — 모바일 깜박임 방지를 위해 스크롤은 finalize 1회만."""
-    return
-
-
-def _inject_home_chrome_tail_once() -> None:
-    """STEP1 홈 진입 1회 — 히어로 정렬(매 rerun 호출 시 모바일 깜박임)."""
-    if st.session_state.get("_saju_home_chrome_tail_done"):
+    # STEP1 라우터 tail — container 없이 script 만 (상단 빈 EC 방지)
+    if int(s) == 1 and safe_slot == "router_after_mount":
+        st.markdown(f"<script>{trigger_js}</script>", unsafe_allow_html=True)
         return
-    st.session_state["_saju_home_chrome_tail_done"] = True
-    home_nav = True
-    scroll_home_js = (
-        "if(!pw.__sajuUserIsScrolling&&typeof pw.__sajuScrollHomeTopOnce==='function')"
-        "{pw.__sajuScrollHomeTopOnce();}"
-        if home_nav
-        else ""
-    )
-    trigger_js = (
-        "(function(){"
-        "const pw=window.parent||window;"
-        "const doc=pw.document||document;"
-        "if(typeof pw.__sajuCollapseHomeTopChrome==='function'){"
-        "pw.__sajuCollapseHomeTopChrome(doc);"
-        "}"
-        "if(typeof pw.__sajuPinHomeHeroTop==='function'){pw.__sajuPinHomeHeroTop();}"
-        f"{scroll_home_js}"
-        "})();"
-    )
-    html = (
-        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
-        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
-        f"<script>{trigger_js}</script></body></html>"
-    )
-    with st.container(key="saju_step_home_tail_sync"):
-        components.html(html, height=1, scrolling=False)
+    with st.container(key=f"saju_step_html_sync_{safe_slot}"):
+        st.markdown(f"<script>{trigger_js}</script>", unsafe_allow_html=True)
 
 
-def inject_sync_step_to_html() -> None:
-    """레거시 호환 — 홈 크롬 보정만 필요 시 호출."""
-    if int(st.session_state.get("step", 1)) == 1 and _home_viewport_is_pending():
-        _inject_home_chrome_tail_once()
+_HOME_TOP_SNAP_JS = (
+    "(function(){"
+    "const pw=window.parent&&window.parent!==window?window.parent:window;"
+    "const e=pw.document&&pw.document.documentElement;"
+    "if(e){e.classList.add('saju-home-step1');e.setAttribute('data-saju-step','1');}"
+    "const run=function(){"
+    "if(typeof pw.__sajuPhoto2SnapTop==='function'){pw.__sajuPhoto2SnapTop();}"
+    "else if(typeof pw.__sajuLockHomeViewportTop==='function'){pw.__sajuLockHomeViewportTop();}"
+    "};"
+    "run();"
+    "try{pw.requestAnimationFrame(run);}catch(e0){}"
+    "[40,120,280,560,1100,2000].forEach(function(ms){try{pw.setTimeout(run,ms);}catch(e1){}});"
+    "})();"
+)
+
+
+def inject_home_hero_pin_once(*, slot: str = "tail") -> None:
+    """STEP1 홈 — 히어로 배너를 뷰포트 최상단에 고정.
+
+    ``finalize``·rerun 마다 tail 슬롯은 항상 재주입(상단 빈 여백 복구).
+    """
+    if int(st.session_state.get("step", 1)) != 1:
+        return
+    safe = re.sub(r"[^a-zA-Z0-9_]", "_", str(slot or "tail"))[:24]
+    if safe != "tail":
+        used: list[str] = list(st.session_state.get("_saju_hero_pin_slots") or [])
+        if safe in used:
+            return
+        used.append(safe)
+        st.session_state["_saju_hero_pin_slots"] = used
+    st.markdown(f"<script>{_HOME_TOP_SNAP_JS}</script>", unsafe_allow_html=True)
+
+
+_HOME_LAYOUT_FIX_HTML = """
+<script>
+(function () {
+    const pw =
+        window.parent && window.parent !== window ? window.parent : window;
+    const doc = pw.document;
+    if (!doc) return;
+    const root = doc.documentElement;
+    // IMPORTANT: 절대 STEP을 강제로 1로 설정하지 않습니다.
+    // 홈(STEP1)에서만 동작하도록 가드하고, 다른 STEP에서는 즉시 종료합니다.
+    const isHomeNow = function () {
+        try {
+            if (doc.querySelector(".st-key-saju_router_step_mount_02")) return false;
+            if (
+                doc.querySelector(
+                    ".st-key-saju_router_step_mount_01 .st-key-saju_landing_hero, " +
+                        "#saju-home-hero-top"
+                )
+            ) {
+                return true;
+            }
+            const r = doc.documentElement;
+            const stepAttr = r ? String(r.getAttribute("data-saju-step") || "") : "";
+            if (stepAttr && stepAttr !== "1") return false;
+            if (r && r.classList && r.classList.contains("saju-not-step1")) return false;
+            return !!doc.querySelector(".st-key-saju_router_step_mount_01");
+        } catch (e) {
+            return false;
+        }
+    };
+    if (!isHomeNow()) return;
+
+    // 이전 홈 보정 타이머가 남아있으면 정리
+    try {
+        (pw.__sajuHomeLayoutFixTimers || []).forEach(function (t) {
+            try { pw.clearTimeout(t); } catch (e) {}
+        });
+    } catch (eClr) {}
+    pw.__sajuHomeLayoutFixTimers = [];
+    const setTopLayout = function (el, opts) {
+        if (!el || !el.style) return;
+        try {
+            const display = opts && opts.display ? opts.display : "block";
+            el.style.setProperty("display", display, "important");
+            if (display === "flex") {
+                el.style.setProperty("flex-direction", "column", "important");
+            }
+            el.style.setProperty("justify-content", "flex-start", "important");
+            el.style.setProperty("align-items", "stretch", "important");
+            el.style.setProperty("align-content", "flex-start", "important");
+            el.style.setProperty("min-height", "0", "important");
+            el.style.setProperty("height", "auto", "important");
+            el.style.setProperty("max-height", "none", "important");
+            el.style.setProperty("margin-top", "0", "important");
+            el.style.setProperty("padding-top", "0", "important");
+            el.style.setProperty("transform", "none", "important");
+        } catch (e) {}
+    };
+    const snapScrollTop = function () {
+        [
+            doc.querySelector('[data-testid="stAppViewContainer"]'),
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector('[data-testid="stMainBlockContainer"]'),
+            doc.querySelector("section.main"),
+            doc.body,
+            doc.scrollingElement,
+            doc.documentElement,
+        ].forEach(function (el) {
+            if (!el) return;
+            try {
+                el.scrollTop = 0;
+                el.scrollLeft = 0;
+            } catch (e) {}
+        });
+        try {
+            pw.scrollTo(0, 0);
+        } catch (eWin) {}
+    };
+    const run = function () {
+        if (!isHomeNow()) return;
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        const hero = doc.getElementById("saju-home-hero-top");
+        const block = doc.querySelector(".main .block-container");
+        // 핵심: flex center를 만드는 부모들을 직접 top 정렬로 덮어쓰기
+        setTopLayout(doc.querySelector(".stApp"));
+        setTopLayout(doc.querySelector('[data-testid="stAppViewContainer"]'));
+        setTopLayout(doc.querySelector('[data-testid="stAppViewContainer"] > .main'));
+        setTopLayout(doc.querySelector("section.main"));
+        setTopLayout(doc.querySelector('[data-testid="stMain"]'));
+        setTopLayout(doc.querySelector('[data-testid="stMainBlockContainer"]'));
+        if (block) setTopLayout(block);
+        if (mount) setTopLayout(mount);
+        if (mount) {
+            const vb = mount.querySelector('[data-testid="stVerticalBlock"]');
+            if (vb) setTopLayout(vb, { display: "flex" });
+        }
+        snapScrollTop();
+        if (typeof pw.__sajuHidePreMountStreamlitBlocks === "function") {
+            pw.__sajuHidePreMountStreamlitBlocks();
+        }
+        if (typeof pw.__sajuLockHomeViewportTop === "function") {
+            try {
+                pw.__sajuLockHomeViewportTop();
+            } catch (eLock) {}
+        }
+        if (typeof pw.__sajuTranslateHomeContentToTop === "function") {
+            try {
+                pw.__sajuTranslateHomeContentToTop();
+            } catch (eTr) {}
+        } else if (typeof pw.__sajuSnapHomeHeroToTop === "function") {
+            try {
+                pw.__sajuSnapHomeHeroToTop(true);
+            } catch (eSnap) {}
+        }
+        snapScrollTop();
+    };
+    let needRun = true;
+    try {
+        const heroProbe = doc.getElementById("saju-home-hero-top");
+        const topGap = heroProbe
+            ? heroProbe.getBoundingClientRect().top || 0
+            : 0;
+        if (pw.__sajuHomeLayoutFixApplied && topGap <= 12) {
+            needRun = false;
+        }
+    } catch (eProbe) {}
+    if (!needRun) return;
+    pw.__sajuHomeLayoutFixApplied = true;
+    run();
+    try {
+        pw.requestAnimationFrame(run);
+    } catch (e) {}
+    [80, 280, 720].forEach(function (ms) {
+        try {
+            pw.__sajuHomeLayoutFixTimers.push(
+                pw.setTimeout(run, ms)
+            );
+        } catch (e2) {}
+    });
+})();
+</script>
+"""
+
+
+def inject_home_layout_fix_component() -> None:
+    """모바일 WebView — parent DOM 레이아웃 보정(legacy)."""
+    inject_home_viewport_lock_component()
+
+
+def inject_home_photo2_layout_css() -> None:
+    """STEP1 mount 안 — 사진2: 배너·24절기·버튼 상단 밀착(매 rerun)."""
+    if int(st.session_state.get("step", 1)) != 1:
+        return
+    st.markdown(
+        """
+<style id="saju-home-photo2-layout-v8">
+/* 사진2 최종 — 사진1 상단 백화(100vh·세로 가운데) 차단 */
+html:has(.st-key-saju_router_step_mount_01),
+html:has(.st-key-saju_router_step_mount_01) body,
+html:has(.st-key-saju_router_step_mount_01) .stApp,
+html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
+html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] > .main,
+html:has(.st-key-saju_router_step_mount_01) section.main,
+html:has(.st-key-saju_router_step_mount_01) [data-testid="stMain"],
+html:has(.st-key-saju_router_step_mount_01) [data-testid="stMainBlockContainer"],
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container,
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container > [data-testid="stVerticalBlock"],
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container > [data-testid="stVerticalBlockBorderWrapper"] {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  display: block !important;
+  flex: none !important;
+  flex-grow: 0 !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  align-content: flex-start !important;
+  align-self: stretch !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container > [data-testid="stVerticalBlock"],
+.st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"] {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+  row-gap: 0 !important;
+}
+/* mount 이전 유틸 행만 숨김 (:has — mount 래퍼 EC 는 유지) */
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container > [data-testid="stVerticalBlock"] {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  min-height: 0 !important;
+  height: auto !important;
+  gap: 0 !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container
+  > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:not(:has(.st-key-saju_router_step_mount_01)):not(:has(.st-key-saju_global_bottom_chrome)) {
+  display: none !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  left: -99999px !important;
+  width: 0 !important;
+}
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container
+  > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has(.st-key-saju_router_step_mount_01) {
+  display: block !important;
+  visibility: visible !important;
+  height: auto !important;
+  max-height: none !important;
+  position: relative !important;
+  left: auto !important;
+  width: 100% !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
+.stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] > .main,
+.stApp:has(.st-key-saju_router_step_mount_01) section.main,
+.stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stMain"],
+.stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stMainBlockContainer"],
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container,
+.st-key-saju_router_step_mount_01 {
+  display: block !important;
+  flex: none !important;
+  flex-grow: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  align-content: flex-start !important;
+}
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container [data-testid="stVerticalBlockBorderWrapper"] {
+  display: block !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex: none !important;
+}
+.st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"] {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  min-height: 0 !important;
+  gap: 0 !important;
+}
+.st-key-saju_landing_hero,
+.st-key-saju_landing_stack,
+.st-key-step1_solar24,
+.st-key-step1_cta_row_main,
+.st-key-step1_cta_row_free,
+.st-key-saju_landing_cta {
+  display: block !important;
+  visibility: visible !important;
+  height: auto !important;
+  max-height: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  overflow: visible !important;
+}
+.st-key-saju_router_step_mount_01 .st-key-saju_landing_hero {
+  order: 0 !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+.st-key-saju_router_step_mount_01 .st-key-saju_landing_stack {
+  order: 1 !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-left: clamp(0.55rem, 3vw, 1.1rem) !important;
+  padding-right: clamp(0.55rem, 3vw, 1.1rem) !important;
+}
+.st-key-saju_router_step_mount_01 .st-key-saju_landing_hero {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+.st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+  row-gap: 0 !important;
+}
+html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
+html:has(.st-key-saju_router_step_mount_01) body,
+html:has(.st-key-saju_router_step_mount_01) .stApp {
+  min-height: 0 !important;
+  height: auto !important;
+}
+html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] {
+  display: block !important;
+  flex: none !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+}
+.st-key-step1_solar24 iframe {
+  display: block !important;
+  min-height: 520px !important;
+  height: auto !important;
+}
+.saju-home-hero-banner,
+#saju-home-hero-top.saju-home-hero-banner {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.saju-home-hero-banner img,
+#saju-home-hero-top.saju-home-hero-banner img {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  vertical-align: top !important;
+}
+@media (max-width: 768px) {
+  .stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] {
+    display: block !important;
+    overflow-y: auto !important;
+  }
+  .saju-home-hero-banner img,
+  #saju-home-hero-top.saju-home-hero-banner img {
+    max-height: min(36vh, 220px) !important;
+    object-fit: cover !important;
+    object-position: center top !important;
+  }
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def inject_home_critical_css_head() -> None:
+    """레거시 별칭."""
+    inject_home_photo2_layout_css()
+
+
+def inject_home_viewport_lock_component() -> None:
+    """홈 — parent 창에서 배너를 뷰포트 최상단에 고정(모바일 WebView)."""
+    if int(st.session_state.get("step", 1)) != 1:
+        return
+    import streamlit.components.v1 as components
+
+    inject_step_scroll_manager_once()
+    nonce = int(st.session_state.get("_saju_home_viewport_lock_nonce", 0)) + 1
+    st.session_state["_saju_home_viewport_lock_nonce"] = nonce
+    with st.container(key=f"saju_home_viewport_lock_{nonce % 100000}"):
+        components.html(_HOME_VIEWPORT_LOCK_HTML, height=0, scrolling=False)
+
+
+def inject_home_hero_pin_tail() -> None:
+    """페이지 tail — 홈 배너·24절기 상단 스냅(모바일 WebView 포함)."""
+    inject_home_hero_pin_once(slot="tail")
+
+
+_HOME_VIEWPORT_LOCK_HTML = """
+<script>
+(function () {
+    const pw =
+        window.parent && window.parent !== window ? window.parent : window;
+    const doc = pw.document;
+    if (!doc) return;
+    const run = function () {
+        if (typeof pw.__sajuLockHomeViewportTop === "function") {
+            return pw.__sajuLockHomeViewportTop();
+        }
+        if (typeof pw.__sajuSnapHomeHeroToTop === "function") {
+            pw.__sajuSnapHomeHeroToTop(true);
+        }
+        return false;
+    };
+    let tries = 0;
+    const tick = function () {
+        tries += 1;
+        const ok = run();
+        if (ok || tries >= 12) {
+            try {
+                if (pw.__sajuHomeViewportLockObs) {
+                    pw.__sajuHomeViewportLockObs.disconnect();
+                    pw.__sajuHomeViewportLockObs = null;
+                }
+            } catch (eDisc) {}
+            return;
+        }
+        pw.setTimeout(tick, tries < 4 ? 80 : 160);
+    };
+    tick();
+    try {
+        const mount = doc.querySelector(".st-key-saju_router_step_mount_01");
+        if (mount && typeof ResizeObserver !== "undefined") {
+            if (pw.__sajuHomeViewportLockObs) {
+                try {
+                    pw.__sajuHomeViewportLockObs.disconnect();
+                } catch (e0) {}
+            }
+            pw.__sajuHomeViewportLockObs = new ResizeObserver(function () {
+                run();
+            });
+            pw.__sajuHomeViewportLockObs.observe(mount);
+            pw.setTimeout(function () {
+                try {
+                    if (pw.__sajuHomeViewportLockObs) {
+                        pw.__sajuHomeViewportLockObs.disconnect();
+                        pw.__sajuHomeViewportLockObs = null;
+                    }
+                } catch (e1) {}
+            }, 4000);
+        }
+    } catch (eObs) {}
+})();
+</script>
+"""
+
+
+def inject_home_top_snap_head() -> None:
+    """홈 렌더 직후 — 배너·24절기 DOM 붙은 뒤 상단 고정."""
+    if int(st.session_state.get("step", 1)) != 1:
+        return
+    inject_step_scroll_manager_once()
+    st.markdown(f"<script>{_HOME_TOP_SNAP_JS}</script>", unsafe_allow_html=True)
+
+
+def inject_home_top_snap_tail_force() -> None:
+    """finalize — 매 rerun 홈 상단 스냅(early-return 이전에도 tail에서 1회 호출)."""
+    if int(st.session_state.get("step", 1)) != 1:
+        return
+    inject_step_scroll_manager_once()
+    st.markdown(f"<script>{_HOME_TOP_SNAP_JS}</script>", unsafe_allow_html=True)
 
 
 def finalize_scroll_to_top_if_needed() -> None:
-    """페이지 최하단 — STEP1 홈 뷰포트 또는 STEP 전환 후 최상단 스크롤."""
-    if st.session_state.pop("_saju_cancel_active_scroll_lock", False):
-        inject_cancel_step_scroll_lock_once()
-
-    step = int(st.session_state.get("step", 1))
-    if step == 1:
-        if _home_viewport_is_pending():
-            sync_step_dom_now(step, slot="finalize_home")
-            _inject_home_chrome_tail_once()
-            _fire_step1_home_viewport()
-        return
-
-    if not step_scroll_is_pending():
-        return
-
+    """페이지 최하단 — STEP 본문·하단 네비 렌더 후 최상단 스크롤(레이아웃 안정화)."""
+    if int(st.session_state.get("step", 1)) == 1:
+        inject_step_scroll_manager_once()
     nav_epoch = int(st.session_state.get("saju_nav_epoch", 0))
     try:
-        if int(st.session_state.get("_saju_scrolled_nav_epoch", -1)) == nav_epoch:
-            _clear_step_scroll_pending()
-            return
+        scrolled_epoch = int(st.session_state.get("_saju_scrolled_nav_epoch", -1))
     except Exception:
-        pass
+        scrolled_epoch = -1
+    pending = step_scroll_is_pending()
+    step = int(st.session_state.get("step", 1))
 
-    _fire_step_scroll_to_top(nav_epoch, phase="late")
+    if int(step) == 1:
+        inject_home_top_snap_tail_force()
+        st.session_state.pop("_saju_nav_from_step", None)
+        _pop_force_scroll_nav_opts()
+        sync_step_nav_scroll_at_page_tail()
+        if not pending and scrolled_epoch == nav_epoch:
+            mark_scroll_completed_for_current_nav()
+            return
+        if pending or scrolled_epoch != nav_epoch:
+            inject_nav_scroll_tail_once(nav_epoch=nav_epoch)
+        mark_scroll_completed_for_current_nav()
+        return
+
+    if not pending and scrolled_epoch == nav_epoch:
+        return
+
+    if not pending:
+        if scrolled_epoch != nav_epoch:
+            mark_scroll_completed_for_current_nav()
+        return
+
+    nav_from_step: int | None = None
+    try:
+        fs = int(st.session_state.get("_saju_nav_from_step") or 0)
+        if 1 <= fs <= 12 and fs != int(step):
+            nav_from_step = fs
+    except Exception:
+        nav_from_step = None
+    st.session_state.pop("_saju_nav_from_step", None)
+    _pop_force_scroll_nav_opts()
+    sync_step_nav_scroll_at_page_tail()
+    inject_nav_scroll_tail_once(nav_epoch=nav_epoch, from_step=nav_from_step)
     mark_scroll_completed_for_current_nav()
 
 

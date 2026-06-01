@@ -200,31 +200,31 @@ def _health_fortune_html(
     risk_label_e = html.escape(risk_label)
     age_html = ""
     if age_band:
-        age_html = f'<div style="font-size:0.88rem;color:#94A3B8;margin-bottom:8px;">{html.escape(age_band)}</div>'
+        age_html = f'<div class="saju-step10-health-sub" style="margin-bottom:8px;">{html.escape(age_band)}</div>'
 
     return f"""
-<div class="saju-card saju-step10-health-card" style="border:2px solid #F472B6;">
+<div class="saju-card saju-step10-health-card">
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
         <div style="font-size:3.5rem;" aria-hidden="true">🫀</div>
         <div>
-            <div style="font-size:1.4rem;font-weight:700;color:#F472B6;">원국 건강 취약점</div>
-            <div style="color:#E0E7FF;">{de} 일간 · {stg} 체질</div>
+            <div class="saju-step10-health-head">원국 건강 취약점</div>
+            <div class="saju-step10-health-sub">{de} 일간 · {stg} 체질</div>
         </div>
     </div>
-    <div style="background:rgba(244,114,182,0.09);padding:18px;border-radius:16px;margin-bottom:20px;">
-        <b style="color:#F472B6;">용신 <span>{ys}</span> 기준으로 삼아 보강하면 좋은 건강 포인트</b>
+    <div class="saju-step10-health-yong">
+        <b>용신 <span>{ys}</span> 기준으로 삼아 보강하면 좋은 건강 포인트</b>
     </div>
-    <div style="background:#1F2937;padding:18px;border-radius:14px;line-height:1.75;margin-bottom:20px;color:#E5E7EB;font-size:0.98rem;">
+    <div class="saju-step10-health-weak">
         {weak_block}
     </div>
-    <div class="saju-step10-risk-block" style="margin-bottom:20px;color:#E0E7FF;">
+    <div class="saju-step10-risk-block" style="margin-bottom:20px;">
         {age_html}
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;flex-wrap:wrap;gap:8px;color:#E0E7FF;">
-            <span style="color:#E0E7FF;">📍 현재 대운 컨디션 관리 주의도</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;flex-wrap:wrap;gap:8px;">
+            <span>📍 현재 대운 컨디션 관리 주의도</span>
             <span class="saju-step10-risk-score" style="color:{risk_color};">{int(risk_score)}% {risk_label_e}</span>
         </div>
     </div>
-    <div class="saju-health-tips" style="color:#F1F5F9;">
+    <div class="saju-health-tips">
         💡 <b>생활 속 실천 포인트</b><br>
         • 용신 <b>{ys}</b> 기운을 매일 챙기세요 (색상, 음식, 운동)<br>
         • 약한 오행({mn}) 관련 부위는 정기 검진·가벼운 점검을 검토해 보세요<br>

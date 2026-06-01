@@ -196,13 +196,13 @@ def render() -> None:
 
     if not u_gapja or len(u_gapja) < 3:
         st.error("사주 정보가 없습니다. 먼저 정보 입력을 진행해주세요.")
-        if st.button(
+        st.button(
             "← 정보 입력으로",
             help="정보 입력(STEP2) 화면으로 돌아가 생년월일을 수정합니다.",
-        ):
-            M.prepare_step_change_ui()
-            st.session_state.step = 2
-            M.rerun_full_app()
+            use_container_width=True,
+            on_click=M.navigate_to_step,
+            args=(2,),
+        )
         st.stop()
 
     engine, core = M.ensure_engine_and_core(u_gapja)

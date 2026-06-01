@@ -527,7 +527,7 @@ def solar_term_frame_html(
     cur = current or resolve_current_solar_term()
     t = cur.term
     frame_id = cid or f"s24_{uuid.uuid4().hex[:10]}"
-    accent, accent_soft, season = _season_meta(t.key)
+    accent, accent_soft, _season = _season_meta(t.key)
     han = t.name_hanja
     g_top = han[0] if han else "節"
     g_bot = han[1] if len(han) > 1 else (t.name_ko[:1] if t.name_ko else "氣")
@@ -605,10 +605,7 @@ def solar_term_frame_html(
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap" media="print" onload="this.media='all'" />
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap" /></noscript>
 <div id="{_hx(frame_id)}" class="saju-solar24-master" data-theme="hanji" role="region" aria-label="{_hx(t.name_ko)} 절기">
-  <div class="s24-toolbar">
-    <span class="s24-toolbar-badge" style="--s24-accent:{_hx(accent)};">한지 · {season}</span>
-  </div>
-  <p class="s24-flow-title">절기 에너지 흐름</p>
+  <p class="s24-flow-title">24절기 에너지 흐름</p>
   <div class="s24-stage">
     {ring_svg}
     <div class="s24-center" style="--s24-accent:{_hx(accent)};">
@@ -666,8 +663,8 @@ def solar_term_frame_html(
   border: 1px solid var(--s24-border); background: rgba(255,255,255,0.55); font-weight: 700;
 }}
 #{frame_id} .s24-flow-title {{
-  text-align: center; margin: 0; font-size: 9px; letter-spacing: 0.12em;
-  color: var(--s24-muted); font-weight: 700;
+  text-align: center; margin: 10px 0 2px; font-size: 13px; letter-spacing: 0.1em;
+  color: var(--s24-text); font-weight: 800;
 }}
 #{frame_id} .s24-stage {{
   position: relative; z-index: 2; flex: 1 1 auto;
@@ -815,15 +812,15 @@ def solar_term_frame_html(
 }}
 @media (max-width: 520px) {{
   #{frame_id}.saju-solar24-master {{
-    min-height: 460px; height: auto; overflow: visible;
+    min-height: 500px; height: auto; overflow: visible;
     padding-top: 6px; box-sizing: border-box;
   }}
   #{frame_id} .s24-stage {{
-    min-height: 268px; padding: 6px 0 8px;
+    min-height: 300px; padding: 8px 0 10px;
     align-items: flex-end; justify-content: center;
   }}
-  #{frame_id} .s24-ring {{ top: 14%; width: 88%; max-width: 340px; opacity: 0.75; }}
-  #{frame_id} .s24-center {{ top: 50%; }}
+  #{frame_id} .s24-ring {{ top: 10%; width: 88%; max-width: 340px; opacity: 0.75; }}
+  #{frame_id} .s24-center {{ top: 44%; }}
   #{frame_id} .s24-pillars {{ width: 94%; padding-bottom: 2px; }}
   #{frame_id} .s24-slot {{ font-size: clamp(9px, 2.6vw, 11px); line-height: 1.2; }}
   #{frame_id} .s24-han {{ margin-bottom: 0.08rem; }}

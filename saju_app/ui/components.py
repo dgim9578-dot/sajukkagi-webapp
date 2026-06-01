@@ -20,6 +20,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from saju_app.persistence import storage as saju_storage
 from saju_app.ui.execution import (
@@ -30,6 +31,7 @@ from saju_app.ui.execution import (
     queue_widget_focus,
     rerun_full_app,
     report_exception_to_streamlit,
+    schedule_force_scroll_after_nav,
 )
 from saju_app.utils import (
     hx as _hx,
@@ -122,15 +124,62 @@ def clear_partner_analysis_state() -> None:
     st.session_state.pop("_step2_self_snap", None)
 
 
+def _partner_visit_owner() -> str:
+    """상대방 등록 시점 visit — 비어 있으면 본인 정보입력 visit 으로 보정."""
+    owner = str(st.session_state.get("_partner_registered_visit") or "").strip()
+    if owner:
+        return owner
+    return str(st.session_state.get("_personal_input_visit_id") or "").strip()
+
+
+def _partner_session_data_ready() -> bool:
+    """이름 + 생년월일(간지·p_data·STEP4 번들)이 세션에 있는지."""
+    if not _partner_name_from_session():
+        return False
+    if _gapja_pillars_valid(st.session_state.get("p_gapja"), min_pillars=3):
+        return True
+    bundle = st.session_state.get("_step4_partner_bundle")
+    if isinstance(bundle, dict):
+        gj = bundle.get("gapja")
+        if isinstance(gj, (list, tuple)) and _gapja_pillars_valid(gj, min_pillars=3):
+            return True
+    p_data = st.session_state.get("p_data")
+    if p_data and isinstance(p_data, (list, tuple)) and len(p_data) >= 6:
+        try:
+            py, pm, pd = int(p_data[0]), int(p_data[1]), int(p_data[2])
+        except (TypeError, ValueError):
+            return False
+        if 1900 <= py <= 2100 and 1 <= pm <= 12:
+            last_d = calendar.monthrange(py, pm)[1]
+            if 1 <= pd <= last_d:
+                return True
+    return False
+
+
+def reconcile_partner_registration() -> bool:
+    """저장 직후 visit 불일치·플래그 누락 시 상대방 등록 상태를 복구합니다."""
+    if not personal_input_owner_matches():
+        return False
+    if not _partner_session_data_ready():
+        return False
+    mark_partner_registered(active=True)
+    return True
+
+
 def partner_is_registered() -> bool:
     """STEP2에서 상대방 이름·생년월일을 저장한 경우에만 True."""
+    if not _partner_name_from_session():
+        return False
     if not bool(st.session_state.get("_partner_registered")):
-        return False
-    owner_visit = str(st.session_state.get("_partner_registered_visit") or "").strip()
+        return reconcile_partner_registration()
+    owner_visit = _partner_visit_owner()
     cur_visit = str(st.session_state.get("visit_id") or "").strip()
-    if not owner_visit or not cur_visit or owner_visit != cur_visit:
-        return False
-    return bool(_partner_name_from_session())
+    if owner_visit and cur_visit and owner_visit == cur_visit:
+        return True
+    if personal_input_owner_matches() and _partner_session_data_ready():
+        mark_partner_registered(active=True)
+        return True
+    return False
 
 
 def personal_input_owner_matches() -> bool:
@@ -143,9 +192,17 @@ def personal_input_owner_matches() -> bool:
 def mark_partner_registered(*, active: bool) -> None:
     st.session_state["_partner_registered"] = bool(active)
     if active:
-        st.session_state["_partner_registered_visit"] = str(
-            st.session_state.get("visit_id") or ""
-        ).strip()
+        vid = str(st.session_state.get("visit_id") or "").strip()
+        if not vid:
+            try:
+                from saju_app.persistence.prefill import ensure_visit_id
+
+                vid = ensure_visit_id()
+            except Exception:
+                vid = str(st.session_state.get("visit_id") or "").strip()
+        if not vid:
+            vid = str(st.session_state.get("_personal_input_visit_id") or "").strip()
+        st.session_state["_partner_registered_visit"] = vid
     else:
         st.session_state.pop("_partner_registered_visit", None)
 
@@ -371,8 +428,10 @@ def _session_has_foreign_personal_leak() -> bool:
             return True
         if str(st.session_state.get("p_name") or st.session_state.get("partner_name_snapshot") or "").strip():
             return True
-    if partner_is_registered() is False and (
-        st.session_state.get("p_gapja") or st.session_state.get("p_data")
+    if (
+        not partner_is_registered()
+        and _partner_session_data_ready()
+        and not personal_input_owner_matches()
     ):
         return True
     return False
@@ -681,8 +740,8 @@ def reset_app_to_home_after_browser_reload() -> None:
     st.session_state.pop("_force_scroll_to_top_after_rerun", None)
     st.session_state.pop("_saju_must_scroll_top", None)
     st.session_state.pop("_saju_pending_scroll_top", None)
-    st.session_state.pop("_saju_home_viewport_done", None)
-    st.session_state["_saju_apply_home_viewport"] = True
+    st.session_state["_saju_pending_scroll_top"] = True
+    st.session_state["_force_scroll_to_top_after_rerun"] = True
     clear_feature_ephemeral_state()
     hard_reset_personal_input_state(clear_analysis=True)
     try:
@@ -700,11 +759,20 @@ def detect_browser_reload() -> bool | None:
 
     ``st_javascript`` 가 첫 런에서 ``None`` 을 반환할 수 있어, 그때는 ``None`` 을 돌려
     호출 측에서 STEP draft 복원을 미루고 홈(STEP1)을 유지합니다.
+
+    한 브라우저 세션에서 새로고침 여부는 **1회만** 판정합니다. 실제 F5 새로고침은
+    Streamlit 세션 자체를 새로 만들어 이 플래그가 사라지므로, 한번 판정한 뒤에는
+    버튼/메뉴 rerun 으로 간주합니다. (매 rerun 마다 ``st_javascript`` 를 재호출하면
+    본문 뒤 iframe 이 재마운트되며 추가 rerun 이 발생해 STEP 전환이 멈칫거립니다.)
     """
+    if st.session_state.get("_saju_browser_reload_resolved"):
+        st.session_state.pop("_saju_reload_check_pending", None)
+        return False
     try:
         from streamlit_javascript import st_javascript
     except ImportError:
         st.session_state.pop("_saju_reload_check_pending", None)
+        st.session_state["_saju_browser_reload_resolved"] = True
         return False
 
     raw = st_javascript(
@@ -739,9 +807,11 @@ def detect_browser_reload() -> bool | None:
     prev = st.session_state.get("_saju_page_load_origin")
     if prev is not None and abs(float(prev) - origin) < 0.001:
         st.session_state.pop("_saju_reload_check_pending", None)
+        st.session_state["_saju_browser_reload_resolved"] = True
         return False
     st.session_state["_saju_page_load_origin"] = origin
     st.session_state.pop("_saju_reload_check_pending", None)
+    st.session_state["_saju_browser_reload_resolved"] = True
     return is_reload
 
 
@@ -761,9 +831,15 @@ def guard_feature_step_without_explicit_nav() -> None:
     """타로·챗봇 등 기능 STEP은 메뉴로 연 경우만 유지(새로고침·재진입 시 홈)."""
     if "goto" in st.query_params:
         return
+    # 관리자 패널(STEP12)은 별도 인증으로 보호되므로, '명시적 이동' 플래그가 누락돼도 홈으로 튕기지 않게 합니다.
+    # (STEP11에서 '관리자 이동 →' 클릭 시 간헐적으로 _explicit_feature_step 이 누락되면 사용자가 홈으로 돌아가는 문제가 있었음)
     try:
         cur = int(st.session_state.get("step", 1))
     except Exception:
+        return
+    if cur == 12 and admin_panel_enabled():
+        return
+    if step11_admin_preview_mode():
         return
     if cur not in _FEATURE_STEPS:
         return
@@ -1278,6 +1354,15 @@ def admin_panel_enabled() -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def admin_session_authenticated() -> bool:
+    return bool(st.session_state.get("saju_admin_authenticated"))
+
+
+def step11_admin_preview_mode() -> bool:
+    """8502 관리자 앱에서 STEP11은 고객 사주 세션 없이 채팅만 확인합니다."""
+    return admin_panel_enabled() and admin_session_authenticated()
+
+
 def _visible_step_dock_items():
     if admin_panel_enabled():
         return STEP_DOCK_ITEMS
@@ -1358,27 +1443,59 @@ STEP2_TIME_OPTIONS = (
     "해(21:30~23:29)",
 )
 def coerce_step2_time_option(raw: object) -> str:
-    """태어난 시간 selectbox — 깨진·축약 라벨을 정식 옵션으로 복원."""
+    """태어난 시간 selectbox — 깨진·축약·인덱스 라벨을 정식 옵션으로 복원."""
+    opts = STEP2_TIME_OPTIONS
+    if isinstance(raw, bool):
+        return "모름"
+    if isinstance(raw, int):
+        if 0 <= raw < len(opts):
+            return opts[raw]
+        return "모름"
+    if isinstance(raw, float) and raw == int(raw):
+        idx = int(raw)
+        if 0 <= idx < len(opts):
+            return opts[idx]
+        return "모름"
     val = str(raw or "").strip()
-    if val in STEP2_TIME_OPTIONS:
+    if val in opts:
         return val
     if not val:
         return "모름"
-    for opt in STEP2_TIME_OPTIONS:
-        if opt.startswith(val) or val.startswith(opt.split("(")[0]):
+    if val.isdigit():
+        idx = int(val)
+        if 0 <= idx < len(opts):
+            return opts[idx]
+    for opt in opts:
+        if opt.startswith(val):
             return opt
-    m = re.match(r"^(\d{1,2})\.?$", val)
-    if m:
-        idx = int(m.group(1))
-        if 0 <= idx < len(STEP2_TIME_OPTIONS):
-            return STEP2_TIME_OPTIONS[idx]
+        if len(val) >= 2 and val in opt:
+            return opt
+        head = opt.split("(")[0]
+        if head and (val.startswith(head) or head.startswith(val)):
+            return opt
+    # 달력 월 패치가 "5월" / "5." 로 바꾼 값 — 시간 옵션이 아님
+    if re.match(r"^\d{1,2}\s*월\.?$", val):
+        return "모름"
     branch = re.match(r"^([자축인묘진사오미신유술해])", val)
     if branch:
         b = branch.group(1)
-        for opt in STEP2_TIME_OPTIONS[1:]:
+        for opt in opts[1:]:
             if opt.startswith(f"{b}("):
                 return opt
     return "모름"
+
+
+def step2_time_option_index(raw: object) -> int:
+    """``u_time`` / ``p_time`` 문자열 또는 인덱스 → selectbox용 0~12."""
+    if isinstance(raw, int):
+        return max(0, min(len(STEP2_TIME_OPTIONS) - 1, raw))
+    if isinstance(raw, str) and raw.strip().isdigit():
+        return max(0, min(len(STEP2_TIME_OPTIONS) - 1, int(raw.strip())))
+    label = coerce_step2_time_option(raw)
+    try:
+        return STEP2_TIME_OPTIONS.index(label)
+    except ValueError:
+        return 0
 
 
 # -------------------- STEP2 prefill persistence (persistence로 위임) --------------------
@@ -1397,14 +1514,14 @@ _AUTOCOMPLETE_TEXT = "one-time-code"
 _AUTOCOMPLETE_OFF = "one-time-code"
 _AUTOCOMPLETE_PASSWORD = "new-password"
 _AUTOCOMPLETE_REVISIT_PIN = "one-time-code"
-_AUTOFILL_GUARD_VERSION = "v6"
+_AUTOFILL_GUARD_VERSION = "v9"
 _REVISIT_PIN_RULE_TEXT = "비밀번호는 숫자 특수문자 포함 6자 이상 설정 하세요"
 _REVISIT_PIN_RULE_TEXT_HOME = "비밀번호는 특수문자 포함 6자 이상 설정 하세요"
 
 _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
 <script>
 (() => {{
-    const GUARD_VER = "v5";
+    const GUARD_VER = "v9";
     const pw = window.parent !== window ? window.parent : window;
     const doc = pw.document;
     if (!doc) return;
@@ -1419,6 +1536,17 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
                 ".st-key-step1_cta_row_main, .st-key-step1_revisit_pin_in, " +
                     "[class*='st-key-step2_revisit_pin'], " +
                     ".st-key-step2_revisit_pin, .st-key-step2_revisit_pin_confirm"
+            );
+        }} catch (_) {{
+            return false;
+        }}
+    }};
+    const isBirthDateTextField = (el) => {{
+        if (!el) return false;
+        try {{
+            return !!el.closest(
+                "[class*='step2_u_bdate_text'], [class*='step2_p_bdate_text'], " +
+                    "[class*='st-key-step2_u_bdate'], [class*='st-key-step2_p_bdate']"
             );
         }} catch (_) {{
             return false;
@@ -1480,11 +1608,31 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
         el.addEventListener("pointerdown", unlock, {{ passive: true }});
         el.addEventListener("click", unlock, {{ passive: true }});
     }};
+    const patchBirthDateOnly = (el) => {{
+        if (!el || el.nodeType !== 1) return;
+        stripEnterApplyHint(el);
+        el.setAttribute("autocomplete", "one-time-code");
+        el.setAttribute("autocorrect", "off");
+        el.setAttribute("autocapitalize", "off");
+        el.setAttribute("spellcheck", "false");
+        el.setAttribute("aria-autocomplete", "none");
+        el.setAttribute("data-1p-ignore", "true");
+        el.setAttribute("data-lpignore", "true");
+        el.setAttribute("data-form-type", "other");
+        el.setAttribute("data-saju-no-credential", "1");
+        el.setAttribute("data-saju-bdate-field", "1");
+        try {{ el.removeAttribute("readonly"); }} catch (_) {{}}
+    }};
     const patchOne = (el) => {{
         if (!el || el.nodeType !== 1) return;
         const tag = String(el.tagName || "").toLowerCase();
         if (tag !== "input" && tag !== "textarea") return;
         stripEnterApplyHint(el);
+        if (isBirthDateTextField(el)) {{
+            if (doc.activeElement === el) return;
+            patchBirthDateOnly(el);
+            return;
+        }}
         const type = String(el.type || "text").toLowerCase();
         if (
             type === "hidden" ||
@@ -1522,7 +1670,9 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
             }} catch (_) {{}}
         }}
         if (sensitiveText || revisit) {{
-            bindReadonlyUnlock(el);
+            if (!isBirthDateTextField(el)) {{
+                bindReadonlyUnlock(el);
+            }}
         }}
     }};
     const patchForms = () => {{
@@ -1558,6 +1708,7 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
         }}
         debounceTimer = pw.setTimeout(function () {{
             debounceTimer = null;
+            if (pw.__sajuBdateFocusLock) return;
             if (queued) return;
             queued = true;
             try {{ pw.requestAnimationFrame(patchAll); }} catch (_) {{ patchAll(); }}
@@ -1728,7 +1879,13 @@ def inject_global_input_autofill_guard() -> None:
     if st.session_state.get(guard_key):
         return
     st.session_state[guard_key] = True
-    st.markdown(_GLOBAL_AUTOFILL_GUARD_SCRIPT, unsafe_allow_html=True)
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"{_GLOBAL_AUTOFILL_GUARD_SCRIPT}</body></html>"
+    )
+    with st.container(key=f"saju_autofill_guard_{_AUTOFILL_GUARD_VERSION}"):
+        components.html(html, height=1, scrolling=False)
 
 
 def number_input_optimized(label: str, value: int, min_value: int, max_value: int, key: str, suffix: str):
@@ -1774,7 +1931,6 @@ def clear_goto_query_and_reset_nav_tracking():
 
 def try_restore_step2_from_disk_prefill_if_needed() -> None:
     """비활성 — STEP2 개인정보는 서버 prefill/draft에 저장·복원하지 않습니다."""
-    purge_all_step2_prefill_from_server()
     return
 
 
@@ -1793,25 +1949,42 @@ def prepare_step_change_ui(*, dest: int | None = None) -> None:
     st.session_state[QUICK_MENU_NAV_EPOCH_KEY] = int(
         st.session_state.get(QUICK_MENU_NAV_EPOCH_KEY, 0)
     ) + 1
+    st.session_state.pop("_saju_nav_scroll_tail_epoch", None)
+    st.session_state.pop("_saju_nav_scroll_followup_epoch", None)
+    st.session_state.pop("_saju_router_mount_css_step", None)
+    st.session_state.pop("_saju_nav_pending_flag_epoch", None)
+    try:
+        st.session_state["_saju_nav_from_step"] = int(st.session_state.get("step", 1))
+    except (TypeError, ValueError):
+        st.session_state["_saju_nav_from_step"] = 1
 
     preserve_scroll = bool(st.session_state.get("_saju_nav_preserve_scroll"))
     st.session_state.pop("_saju_scroll_phase_fired", None)
-    if int(dest or 0) == 1:
-        st.session_state["_saju_apply_home_viewport"] = True
-        st.session_state.pop("_saju_home_viewport_done", None)
-        st.session_state.pop("_saju_home_chrome_tail_done", None)
-    else:
-        st.session_state.pop("_saju_home_chrome_tail_done", None)
+    st.session_state.pop("_saju_hero_pin_slots", None)
+    st.session_state.pop("_saju_scroll_top_tag", None)
+    st.session_state.pop("_saju_scrolled_nav_epoch", None)
+    st.session_state["_saju_scroll_fired_slots"] = []
+    for key in list(st.session_state.keys()):
+        if isinstance(key, str) and key.startswith("_saju_scroll_engine_injected_"):
+            st.session_state.pop(key, None)
     if preserve_scroll:
         st.session_state.pop("_saju_pending_scroll_top", None)
-        st.session_state.pop("_saju_step_scroll_lock_ms", None)
-        st.session_state["_saju_cancel_active_scroll_lock"] = True
+        st.session_state.pop("_force_scroll_to_top_after_rerun", None)
+        st.session_state.pop("_saju_must_scroll_top", None)
     else:
         st.session_state["_saju_pending_scroll_top"] = True
         st.session_state["_force_scroll_to_top_after_rerun"] = True
-        st.session_state["_saju_step_scroll_lock_ms"] = 220
-        st.session_state["_saju_cancel_active_scroll_lock"] = True
+        st.session_state["_saju_must_scroll_top"] = True
     st.session_state["_saju_nav_from_prepare"] = True
+    if not preserve_scroll:
+        try:
+            from saju_app.ui.execution import arm_step_navigation_scroll
+
+            arm_step_navigation_scroll(
+                step=int(dest) if dest is not None else int(st.session_state.get("step", 1))
+            )
+        except Exception:
+            pass
     legacy = "saju_bottom_quick_menu_expander"
     st.session_state.pop(legacy, None)
     for key in list(st.session_state.keys()):
@@ -1826,8 +1999,19 @@ def queue_step2_save_and_analyze() -> None:
     st.session_state["_step2_queue_save"] = True
 
 
-def assign_step_and_rerun(dest: int) -> None:
-    """``on_click`` 이 아닌 버튼/로직에서 STEP 이동 + 전체 rerun."""
+def assign_step_and_rerun(
+    dest: int,
+    *,
+    delay_ms: int = 150,
+    strength: str = "strong",
+) -> None:
+    """``on_click`` 이 아닌 버튼/로직에서 STEP 이동 + 최상단 스크롤 예약 + rerun.
+
+    예시::
+
+        assign_step_and_rerun(3)
+        # 내부: navigate_to_step → rerun_full_app → finalize_scroll_to_top_if_needed
+    """
     d = max(STEP_NAV_MIN, min(STEP_NAV_MAX, int(dest)))
     try:
         cur = int(st.session_state.get("step", 1))
@@ -1841,7 +2025,16 @@ def assign_step_and_rerun(dest: int) -> None:
 
 
 def navigate_to_step(dest: int) -> None:
-    """STEP 이동(``on_click`` 콜백용). Streamlit 이 이후 자동 rerun 하므로 ``rerun`` 은 호출하지 않습니다."""
+    """STEP 이동(``on_click`` 콜백용). Streamlit 이 이후 자동 rerun 하므로 ``rerun`` 은 호출하지 않습니다.
+
+    최상단 스크롤·포커스는 rerun 다음 run 의 ``finalize_scroll_to_top_if_needed`` 에서
+    1회만 실행됩니다.
+
+    수동 rerun 이 필요하면::
+
+        navigate_to_step(3)
+        rerun_full_app()
+    """
     d = max(STEP_NAV_MIN, min(STEP_NAV_MAX, int(dest)))
     st.session_state.pop("_saju_nav_preserve_scroll", None)
     try:
@@ -1888,11 +2081,42 @@ def _toggle_quick_menu() -> None:
     )
 
 
+def render_step11_inline_step_nav() -> None:
+    """STEP11 챗봇 본문 하단 — 상담 연결 아래 ``← 총평`` / ``관리자 이동 →``."""
+    reset_id = int(st.session_state.get("reset_id", 0))
+    # ``saju_bottom_prev_next_row`` 키 — 모바일 WebView 가로 2열 CSS 재사용
+    with st.container(key="saju_bottom_prev_next_row"):
+        try:
+            nav_cols = st.columns([1, 1], gap="small")
+        except TypeError:
+            nav_cols = st.columns([1, 1])
+        with nav_cols[0]:
+            st.button(
+                "← 총평",
+                use_container_width=True,
+                key=f"step11_inline_prev_{reset_id}",
+                on_click=navigate_to_step,
+                args=(10,),
+            )
+        with nav_cols[1]:
+            if admin_panel_enabled():
+                st.button(
+                    "관리자 이동 →",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"step11_inline_next_{reset_id}",
+                    on_click=navigate_to_step,
+                    args=(12,),
+                )
+            else:
+                st.empty()
+
+
 def render_bottom_step_nav(*, current_step: int | None = None) -> None:
     """모바일 인앱 하단 네비: (STEP2~) ``← 이전`` / ``다음 →`` , 그 아래 접이식 ``st.expander`` 안에 12단계 그리드.
 
     - **STEP1(홈)**: 이전/다음 행 없음 — ``기능 바로가기`` expander 만 표시합니다.
-    - **STEP2~10**: ``← 이전`` / ``다음 →`` 2열 · **STEP11**: ``← 총평`` / ``관리자 이동 →`` · **STEP12**: 생략.
+    - **STEP2~10**: ``← 이전`` / ``다음 →`` 2열 · **STEP11**: 본문 inline(``render_step11_inline_step_nav``) · **STEP12**: 생략.
 
     하단 크롬에서는 ``st.divider``/``---`` 를 쓰지 않습니다(CSS 여백으로 본문과 구분). 인앱 WebView에서
     이중 실선·이전/다음 행이 두 번 보이는 현상을 줄입니다.
@@ -1903,33 +2127,6 @@ def render_bottom_step_nav(*, current_step: int | None = None) -> None:
         step = int(current_step)
     step = max(STEP_NAV_MIN, min(STEP_NAV_MAX, step))
     reset_id = int(st.session_state.get("reset_id", 0))
-
-    if step == 11:
-        with st.container(key="saju_bottom_prev_next_row"):
-            try:
-                nav_cols = st.columns([1, 1], gap="small")
-            except TypeError:
-                nav_cols = st.columns([1, 1])
-            with nav_cols[0]:
-                st.button(
-                    "← 총평",
-                    use_container_width=True,
-                    key=f"saju_step11_prev_{reset_id}",
-                    on_click=navigate_to_step,
-                    args=(10,),
-                )
-            with nav_cols[1]:
-                if admin_panel_enabled():
-                    st.button(
-                        "관리자 이동 →",
-                        type="primary",
-                        use_container_width=True,
-                        key=f"saju_step11_next_{reset_id}",
-                        on_click=navigate_to_step,
-                        args=(12,),
-                    )
-                else:
-                    st.empty()
 
     # STEP12(관리자): 상단 UI로 이동 — 하단 이전/다음 생략
     if step > STEP_NAV_MIN and step not in (11, 12):
@@ -1976,9 +2173,9 @@ def render_bottom_step_nav(*, current_step: int | None = None) -> None:
         ("📊", "사주분석", 3),
         ("❤️", "궁합", 4),
         ("🧿", "살풀이", 5),
-        ("☀️", "오늘의운세", 6),
-        ("☯️", "주역", 7),
-        ("🃏", "AI타로", 8),
+        ("☀️", "오늘의 운세", 6),
+        ("☯️", "주역점", 7),
+        ("🃏", "타로", 8),
         ("📈", "대운", 9),
         ("📋", "총평", 10),
         ("💬", "AI챗봇", 11),
@@ -2408,7 +2605,7 @@ def _require_saju_engine_or_build() -> dict:
 # -------------------- STEP2 submit handler --------------------
 def _step2_fail(msg: str) -> bool:
     st.session_state["_step2_apply_error"] = str(msg)
-    st.warning(str(msg))
+    st.session_state["_step2_top_alert"] = str(msg)
     return False
 
 
@@ -2601,14 +2798,18 @@ def apply_step2_next_from_payload() -> bool:
         try:
             from saju_app.persistence.prefill import ensure_visit_id
 
-            st.session_state["_personal_input_visit_id"] = ensure_visit_id()
+            visit_id = ensure_visit_id()
+            st.session_state["_personal_input_visit_id"] = visit_id
         except Exception:
-            st.session_state["_personal_input_visit_id"] = str(
-                st.session_state.get("visit_id") or ""
-            )
+            visit_id = str(st.session_state.get("visit_id") or "").strip()
+            st.session_state["_personal_input_visit_id"] = visit_id
+        if bool(st.session_state.get("_partner_registered")):
+            st.session_state["_partner_registered_visit"] = str(
+                st.session_state.get("_personal_input_visit_id") or visit_id or ""
+            ).strip()
         st.session_state["_personal_input_saved"] = True
-        # 저장 직후에는 항상 STEP3(사주분석)으로 이동
-        assign_step_and_rerun(3)
+        # 저장 직후 STEP3(사주분석)으로 이동 — prepare_step_change_ui 가 스크롤 플래그를 설정합니다.
+        navigate_to_step(3)
     except Exception as e:
         report_exception_to_streamlit(e, prefix="처리 중 오류")
         return False

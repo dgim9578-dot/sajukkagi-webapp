@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import mimetypes
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import streamlit as st
@@ -12,6 +15,9 @@ from saju_app.utils import html_br
 
 if TYPE_CHECKING:
     from saju_app.ui.interpretation_types import StructuredInterpretation
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_STEP3_MBTI_BANNER = _PROJECT_ROOT / "images" / "사주+MBTI.png"
 
 MBTI_CHOICES: tuple[str, ...] = (
     "선택 안 함",
@@ -137,6 +143,36 @@ _SAJU_MBTI_MAPPINGS: dict[str, dict[str, str]] = {
 }
 
 
+def _step3_mbti_banner_data_uri() -> str | None:
+    """images/사주+MBTI.png → data URI (Streamlit 경로 이슈 회피)."""
+    path = _STEP3_MBTI_BANNER
+    if not path.is_file():
+        return None
+    try:
+        mime, _ = mimetypes.guess_type(path.name)
+        mime = mime or "image/png"
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{data}"
+    except OSError:
+        return None
+
+
+def _render_step3_mbti_banner() -> None:
+    """사주+MBTI 분석 제목 아래 배너."""
+    uri = _step3_mbti_banner_data_uri()
+    if uri:
+        st.markdown(
+            f'<figure class="saju-mood-mid step3-mbti-banner" aria-hidden="false">'
+            f'<img src="{uri}" alt="사주 MBTI" loading="lazy" decoding="async" />'
+            f"</figure>",
+            unsafe_allow_html=True,
+        )
+        return
+    if M.render_mood_image("step03_mbti", variant="mid", alt="사주 MBTI"):
+        return
+    st.caption("배너 이미지를 찾을 수 없습니다. images/사주+MBTI.png 를 확인해 주세요.")
+
+
 def analyze_saju_mbti_aptitude(
     gapja: list[str],
     mbti: str,
@@ -191,39 +227,24 @@ def render_step3_aptitude_mbti_block(
         '<div class="saju-section-title-badge">사주+MBTI 분석</div>',
         unsafe_allow_html=True,
     )
+    _render_step3_mbti_banner()
     st.caption("MBTI 4자 입력 (예: ENTJ, ISFP) 후 **엔터**를 누르면 분석합니다.")
 
-    with st.container(key="step3_mbti_input_row"):
-        try:
-            c_mbti_in, c_mbti_ent = st.columns(
-                [0.62, 0.38], gap="small", vertical_alignment="bottom"
-            )
-        except TypeError:
-            c_mbti_in, c_mbti_ent = st.columns([0.62, 0.38], gap="small")
-        with c_mbti_in:
-            st.markdown('<p class="step3-mbti-field-label">입력</p>', unsafe_allow_html=True)
-            M.text_input_no_autofill(
-                "MBTI 입력",
-                max_chars=4,
-                key="step3_mbti_text_input",
-                placeholder="ENTJ",
-                label_visibility="collapsed",
-                help="영문 4자 (예: INTJ). 모르면 비워 두셔도 됩니다.",
-            )
-        with c_mbti_ent:
-            st.markdown('<p class="step3-mbti-field-label">엔터</p>', unsafe_allow_html=True)
-            mbti_enter = st.button(
-                "엔터",
-                type="primary",
-                use_container_width=True,
-                key="step3_mbti_enter_btn",
-            )
-
-    if mbti_enter:
+    def _commit_step3_mbti_input() -> None:
         draft = str(st.session_state.get("step3_mbti_text_input") or "").strip().upper()[:4]
         st.session_state.user_mbti = draft
-        if draft and len(draft) == 4 and draft not in MBTI_16_TYPES:
-            st.warning("MBTI는 INTJ, ENFP처럼 **알려진 16유형 코드**만 입력해 주세요.")
+
+    with st.container(key="step3_mbti_input_row"):
+        st.markdown('<p class="step3-mbti-field-label">입력</p>', unsafe_allow_html=True)
+        M.text_input_no_autofill(
+            "MBTI 입력",
+            max_chars=4,
+            key="step3_mbti_text_input",
+            placeholder="ENTJ",
+            label_visibility="collapsed",
+            help="영문 4자 (예: INTJ). 모르면 비워 두셔도 됩니다.",
+            on_change=_commit_step3_mbti_input,
+        )
 
     mbti = str(st.session_state.get("user_mbti") or "").strip().upper()[:4]
 

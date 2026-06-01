@@ -8,7 +8,7 @@
    (확장자만 .webp / .png / .jpg 중 하나)
 
    권장 10장 (현재 배치 기준):
-   - step01_hero.webp          STEP1 홈 상단
+   - step01_hero.webp / .png   STEP1 홈 상단 (사진1 배너: 명상·수정구·사주까기)
    - step03_hero.webp          STEP3 사주분석 상단
    - step03_mid_pillars.webp   STEP3 사주 원국(팔자) 위
    - step04_hero.webp          STEP4 궁합 상단

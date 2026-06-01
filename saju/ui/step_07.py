@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
+import mimetypes
 import re
 import time
+from pathlib import Path
 
 import streamlit as st
 
@@ -16,6 +19,9 @@ from saju.core.iching_64 import get_hexagram
 from saju_app.ui import analysis_favorite_memo as AFM
 from saju_app.ui import consulting_knowledge as K
 from saju_app.ui import components as M
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_STEP7_ICHING_BANNER = _PROJECT_ROOT / "images" / "주역점.png"
 
 WAIT_TIME = 180
 
@@ -455,6 +461,36 @@ def _juyeok_storytelling(hx, user_question: str) -> str:
     return "".join(parts)
 
 
+def _step7_iching_banner_data_uri() -> str | None:
+    """images/주역점.png → data URI."""
+    path = _STEP7_ICHING_BANNER
+    if not path.is_file():
+        return None
+    try:
+        mime, _ = mimetypes.guess_type(path.name)
+        mime = mime or "image/png"
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{data}"
+    except OSError:
+        return None
+
+
+def _render_step7_iching_banner() -> None:
+    """주역점 상단 배너."""
+    uri = _step7_iching_banner_data_uri()
+    if uri:
+        st.markdown(
+            f'<figure class="saju-mood-hero step7-iching-banner" aria-hidden="false">'
+            f'<img src="{uri}" alt="오늘의 주역점" loading="eager" decoding="async" />'
+            f"</figure>",
+            unsafe_allow_html=True,
+        )
+        return
+    if M.render_mood_image("step07_hero", variant="hero", alt="오늘의 주역"):
+        return
+    st.caption("배너 이미지를 찾을 수 없습니다. images/주역점.png 를 확인해 주세요.")
+
+
 def _iching_remain_seconds() -> float:
     last = st.session_state.get("last_iching_time")
     if last is None:
@@ -492,7 +528,7 @@ def render() -> None:
     with M.premium_analysis_shell(7):
         if not revealed:
             AFM.render_analysis_favorite_memo_band(step=7)
-            M.render_mood_image("step07_hero", variant="hero", alt="오늘의 주역")
+        _render_step7_iching_banner()
         st.markdown("## ☯️ 오늘의 주역점")
         if revealed:
             st.caption("다시뽑기는 3분 후에 하세요.")
@@ -558,7 +594,6 @@ def render() -> None:
                 st.info("이미 오늘의 괘를 확인하셨습니다. **다시뽑기**를 이용해 주세요.")
             else:
                 _commit_iching_draw(u_name=u_name)
-                M.rerun_full_app()
 
         if draw_again:
             if remain > 0:
@@ -567,7 +602,6 @@ def render() -> None:
                 st.info("먼저 **오늘의 괘 뽑기**를 눌러 주세요.")
             else:
                 _commit_iching_draw(u_name=u_name)
-                M.rerun_full_app()
 
         if revealed:
             u_key, l_key = _upper_lower_bagua(hx.names_hanja)

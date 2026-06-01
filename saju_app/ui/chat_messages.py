@@ -5,6 +5,8 @@ from __future__ import annotations
 import html
 from typing import Any
 
+import streamlit as st
+
 from saju_app.utils import match_body_html
 
 
@@ -91,6 +93,24 @@ def chat_viewport_html(inner: str) -> str:
     """채팅 본문 — 고정 높이·내부 스크롤(STEP11/12)."""
     body = str(inner or "")
     return f'<div class="saju-chat-viewport">{body}</div>'
+
+
+def render_conversation_chat_ui(
+    messages: list[dict],
+    *,
+    customer_label: str = "고객",
+    empty_text: str = "현재 수신된 고객 메시지가 없습니다.",
+) -> None:
+    """채팅 전체를 **한 번의** ``st.markdown`` 으로 렌더(``st.chat_message`` N개는 rerun 시 removeChild 유발)."""
+    empty_html = (
+        f'<p style="margin:0;color:#6b7280;">{html.escape(empty_text)}</p>'
+    )
+    body = conversation_html(
+        messages,
+        empty_html=empty_html,
+        customer_label=customer_label,
+    )
+    st.markdown(body, unsafe_allow_html=True)
 
 
 def conversation_html(

@@ -9,6 +9,10 @@ from saju_app.ui import components as M
 from saju_app.ui import revisit_auth as Revisit
 from saju_app.ui import solar_terms_24 as ST24
 from saju_app.ui import webapp_launch as W
+from saju.ui.home_hero_banner import (
+    ensure_step01_hero_banner_file,
+    step01_hero_banner_html,
+)
 from saju_app.ui.execution import inject_home_scroll_after_solar24
 
 
@@ -84,8 +88,11 @@ def _hero_html() -> str:
 <span class="saju-landing-corner saju-landing-corner-bl" aria-hidden="true"></span>
 <span class="saju-landing-corner saju-landing-corner-br" aria-hidden="true"></span>
 """.strip()
+    # 홈 히어로 핀 고정 JS는 `inject_home_hero_pin_tail()`에서만 주입합니다.
+    # (여기서 또 주입하면 중복 실행으로 인해 모바일 레이아웃이 흔들릴 수 있습니다.)
+    _pin_script = ""
     return f"""
-<div class="saju-landing-hero saju-landing-hero--intense saju-landing-hero--face saju-landing-hero--luxe saju-landing-hero--nova">
+<div id="saju-home-hero-top" class="saju-landing-hero saju-landing-hero--intense saju-landing-hero--face saju-landing-hero--luxe saju-landing-hero--nova">
   <div class="saju-landing-hero-aurora" aria-hidden="true"></div>
   <div class="saju-landing-hero-mesh" aria-hidden="true"></div>
   <div class="saju-landing-hero-rays" aria-hidden="true"></div>
@@ -112,6 +119,7 @@ def _hero_html() -> str:
     </div>
   </div>
 </div>
+{_pin_script}
 """.strip()
 
 
@@ -123,23 +131,28 @@ def render() -> None:
         st.session_state["_step2_need_fresh_form"] = True
         M.navigate_to_step(2)
 
-    with st.container(key="saju_landing_stack"):
-        with st.container(key="saju_landing_hero"):
-            st.markdown(_hero_html(), unsafe_allow_html=True)
+    ensure_step01_hero_banner_file(force=True)
 
+    with st.container(key="saju_landing_hero"):
+        banner_html = step01_hero_banner_html()
+        st.markdown(
+            banner_html if banner_html else _hero_html(),
+            unsafe_allow_html=True,
+        )
+
+    with st.container(key="saju_landing_stack"):
         with st.container(key="step1_solar24"):
             components.html(
                 ST24.solar_term_frame_html(),
-                height=520,
+                height=600,
                 scrolling=False,
             )
             inject_home_scroll_after_solar24()
 
         Revisit.render_revisit_home_header()
 
-        # 비밀번호 입력 포커스 상태에서 일반 버튼을 누르면 첫 클릭이 blur만 처리되는 경우가 있어 form으로 묶습니다.
-        with st.form("step1_revisit_login_form", clear_on_submit=False, border=False):
-            with st.container(key="step1_cta_row_main"):
+        with st.container(key="step1_cta_row_main"):
+            with st.form("step1_revisit_login_form", clear_on_submit=False, border=False):
                 try:
                     c_pin, c_load = st.columns(
                         2, gap="small", vertical_alignment="bottom"

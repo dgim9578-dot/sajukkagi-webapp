@@ -38,14 +38,13 @@ def render() -> None:
 
     if not u_gapja or len(u_gapja) < 3:
         st.warning("⚠️ 사주 정보가 없습니다. 먼저 사주 분석을 진행해주세요.")
-        if st.button(
+        st.button(
             "← 사주 분석 결과로",
             use_container_width=True,
             help="STEP3 사주 분석 결과 화면으로 이동합니다.",
-        ):
-            M.prepare_step_change_ui()
-            st.session_state.step = 3
-            M.rerun_full_app()
+            on_click=M.navigate_to_step,
+            args=(3,),
+        )
         st.stop()
 
     engine, core = M.ensure_engine_and_core(u_gapja)

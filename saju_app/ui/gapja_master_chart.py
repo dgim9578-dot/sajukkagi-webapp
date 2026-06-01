@@ -720,8 +720,16 @@ def build_gapja_master_chart_html(
   #{cid} .saju-mc-pillar .saju-mc-popover {{
     display: none !important;
   }}
+  /* 기둥 상세(dock)는 차트 내부를 '오버레이'한다.
+     예전엔 padding-bottom 으로 차트 높이를 키워(최대 +300px) 기둥 상세를 아래에 펼쳤으나,
+     이 경우 모바일(iOS Safari·WebView)에서 iframe 이 콘텐츠 높이만큼 자동 확장되며
+     고정 높이(620px) 레이아웃 박스를 넘어서서 아래의 「나의 인생 핵심 운세」 제목을 덮었다.
+     차트 높이를 키우지 않고 하단을 오버레이하면 iframe 이 넘치지 않아 제목 가림이 사라진다. */
   #{cid}.has-mobile-dock-open {{
-    padding-bottom: min(46vh, 300px);
+    padding-bottom: 0;
+  }}
+  #{cid} .saju-mc-mobile-dock {{
+    max-height: min(42vh, 260px);
   }}
   #{cid} .saju-mc-pop-hidden li {{
     grid-template-columns: 1.1em minmax(0, 1fr);

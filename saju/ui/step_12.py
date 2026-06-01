@@ -8,69 +8,88 @@ import os
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from saju_app.persistence import storage as saju_storage
 from saju_app.ui import components as M
 from saju_app.ui.execution import report_exception_to_streamlit
 from saju.ui.step_11 import filter_conversation_messages
-from saju_app.ui.chat_messages import conversation_html, dedupe_chat_messages
+from saju_app.ui.chat_messages import dedupe_chat_messages, render_conversation_chat_ui
 
 _ADMIN_REPLY_SENT_FP_KEY = "admin_step12_last_sent_fp"
+_ADMIN_REPLY_PENDING_KEY = "admin_step12_pending_reply"
+_ADMIN_REPLY_ROOM_GUARD_KEY = "admin_step12_reply_room_guard"
+
+
+def _sync_admin_reply_room_guard(room_key: str) -> None:
+    """상담 방이 바뀌면 답변 중복 방지·대기 상태를 초기화합니다."""
+    rk = str(room_key or "").strip()
+    last = str(st.session_state.get(_ADMIN_REPLY_ROOM_GUARD_KEY) or "").strip()
+    if last == rk:
+        return
+    st.session_state[_ADMIN_REPLY_ROOM_GUARD_KEY] = rk
+    st.session_state.pop(_ADMIN_REPLY_SENT_FP_KEY, None)
+    st.session_state.pop(_ADMIN_REPLY_PENDING_KEY, None)
+
+
+def _flush_admin_pending_reply(room_key: str) -> None:
+    """이전 run에서 제출된 관리자 답변을 저장소에 반영(채팅 렌더 전)."""
+    txt = str(st.session_state.pop(_ADMIN_REPLY_PENDING_KEY, "") or "").strip()
+    if not txt:
+        return
+    _admin_append_manual_reply(room_key, txt)
 
 
 def _room_btn_key(prefix: str, room_key: str) -> str:
     return f"{prefix}_{hashlib.md5(room_key.encode('utf-8')).hexdigest()}"
 
 
-def _admin_render_msg(msg: dict, *, customer_name: str) -> None:
-    role = str(msg.get("role") or "assistant")
-    body = str(msg.get("msg") or "")
-    is_manual = bool(msg.get("is_manual", False))
-    if role == "user":
-        safe = html.escape(body).replace("\n", "<br>")
-        st.markdown(
-            f"""
-<div style="background:#1e3a8a; padding:18px; border-radius:14px; margin:12px 0;
-            border-left:6px solid #60a5fa; color:white;">
-  <strong style="color:#93c5fd;">👤 고객님 질문:</strong><br>
-  {safe}
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-        return
-    if is_manual:
-        safe = html.escape(body).replace("\n", "<br>")
-        st.markdown(
-            f"""
-<div class="saju-chat-msg">
-  <div class="saju-chat-bubble saju-chat-bubble--expert" style="background:#4c1d95;padding:14px 18px;
-            border-radius:14px;border-left:6px solid #c4b5fd;color:white;max-width:100%;box-sizing:border-box;">
-    <strong style="color:#ddd6fe;">⭐ 사주까기 전문가 답변:</strong><br>
-    {safe}
-  </div>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-        return
-    else:
-        st.markdown(
-            f"""
-<div class="saju-chat-msg">
-  <div class="saju-chat-bubble saju-chat-bubble--ai" style="background:#1f2937;padding:16px 18px;
-            border-radius:14px;border-left:6px solid #facc15;color:#e2e8f0;line-height:1.65;
-            max-width:100%;box-sizing:border-box;">
-  <strong style="color:#fcd34d;">🤖 AI 자동 분석 내용:</strong><br><br>
-  {body}
-  </div>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-
-
 _ADMIN_AUTH_SESSION_KEY = "saju_admin_authenticated"
+_ADMIN_LOGIN_FAIL_KEY = "step12_admin_login_failed"
+
+
+def _attempt_admin_login(expected_password: str) -> None:
+    """관리자 비밀번호 입력 후 Enter(또는 포커스 이동) 시 로그인 시도."""
+    entered = _normalize_admin_secret(st.session_state.get("step12_admin_pwd_input", ""))
+    if not entered:
+        return
+    if entered == _normalize_admin_secret(expected_password):
+        st.session_state[_ADMIN_AUTH_SESSION_KEY] = True
+        st.session_state.pop(_ADMIN_LOGIN_FAIL_KEY, None)
+    else:
+        st.session_state[_ADMIN_LOGIN_FAIL_KEY] = True
+
+
+def _inject_step12_admin_login_enter_once() -> None:
+    """관리자 비밀번호 — Enter 시 값 커밋(on_change) 유도(인앱 WebView 보완)."""
+    if st.session_state.get("_step12_admin_login_enter_v1"):
+        return
+    st.session_state["_step12_admin_login_enter_v1"] = True
+    js = (
+        "(function(){"
+        "var pw=(window.parent&&window.parent!==window)?window.parent:window;"
+        "var doc=pw.document;if(!doc||pw.__sajuStep12AdminLoginEnterV1)return;"
+        "pw.__sajuStep12AdminLoginEnterV1=true;"
+        "doc.addEventListener('keydown',function(e){"
+        "if(e.key!=='Enter'||e.isComposing)return;"
+        "var panel=doc.querySelector('.st-key-step12_admin_login_panel');"
+        "if(!panel)return;"
+        "var inp=panel.querySelector('input[type=\"password\"]');"
+        "if(!inp||doc.activeElement!==inp)return;"
+        "e.preventDefault();"
+        "try{inp.dispatchEvent(new Event('input',{bubbles:true}));}catch(err){}"
+        "try{inp.dispatchEvent(new Event('change',{bubbles:true}));}catch(err2){}"
+        "try{inp.blur();}catch(err3){}"
+        "},true);"
+        "})();"
+    )
+    html_doc = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
+        f"<script>{js}</script></body></html>"
+    )
+    with st.container(key="step12_admin_login_enter_guard"):
+        components.html(html_doc, height=0, scrolling=False)
 
 
 def _admin_append_manual_reply(room_key: str, txt: str) -> bool:
@@ -93,7 +112,6 @@ def _admin_append_manual_reply(room_key: str, txt: str) -> bool:
         and bool(tail.get("is_manual", False))
         and str(tail.get("msg") or "").strip() == txt
     ):
-        st.session_state[_ADMIN_REPLY_SENT_FP_KEY] = fp
         return False
     msgs.append({"role": "assistant", "msg": txt, "is_manual": True})
     lab_out = dict(lab) if isinstance(lab, dict) else {}
@@ -143,10 +161,7 @@ def _load_admin_password() -> tuple[str, str]:
 
 
 def _render_step12_room_messages() -> None:
-    """관리자 모니터: 방 키는 세션 `admin_selected_room`에서 읽어 저장소와 표시합니다.
-
-    ``@st.fragment``·``st.chat_input`` 조합은 동일 메시지가 두 번 그려지거나 저장될 수 있어 사용하지 않습니다.
-    """
+    """관리자 모니터: 방 키는 세션 `admin_selected_room`에서 읽어 저장소와 표시합니다."""
     rk = str(st.session_state.get("admin_selected_room") or "").strip()
     if not rk:
         return
@@ -163,20 +178,11 @@ def _render_step12_room_messages() -> None:
     except TypeError:
         chat_container = st.container(border=True)
     with chat_container:
-        empty = (
-            '<p style="margin:0;color:#6b7280;">현재 수신된 고객 메시지가 없습니다.</p>'
-            if not conv
-            else ""
-        )
-        st.markdown(
-            conversation_html(conv, empty_html=empty, customer_label=_cn or "고객"),
-            unsafe_allow_html=True,
-        )
+        render_conversation_chat_ui(conv, customer_label=_cn or "고객")
 
 
 def render() -> None:
-    st.title("🛠️ 관리자 전용 공간")
-    st.markdown("### Administrator Exclusive Panel")
+    st.header("🛠️ 관리자 전용 공간")
 
     if not M.admin_panel_enabled():
         st.warning("관리자 기능은 공개 앱 빌드에서 비활성화되어 있습니다.")
@@ -215,25 +221,29 @@ def render() -> None:
             "`setup-streamlit-secrets` 로 만든 로컬 기본값은 **`saju-admin-local`** 입니다. "
             "이미 바꿨다면 `secrets.toml` 에 적어 둔 문자열을 그대로 입력하세요."
         )
-        with st.form("step12_admin_login", clear_on_submit=False):
-            admin_pwd_input = M.password_input_no_autofill(
-                "🔑 관리자 비밀번호",
-                help="관리자 비밀번호는 `.streamlit/secrets.toml` 또는 환경변수에서 읽습니다.",
-            )
-            submitted = st.form_submit_button("로그인", type="primary", use_container_width=True)
-
-        if not submitted:
-            return
-        if _normalize_admin_secret(admin_pwd_input) != admin_password:
+        st.caption("비밀번호 입력 후 **Enter**를 누르면 로그인됩니다.")
+        if st.session_state.get(_ADMIN_LOGIN_FAIL_KEY):
             st.error("❌ 관리자 비밀번호가 일치하지 않습니다.")
             st.caption(
                 f"현재 앱이 읽은 설정: **{pwd_source}** · **{len(admin_password)}자**. "
                 "다른 터미널(8501 일반 앱)만 켜 두었거나 `secrets.toml` 수정 후 재시작하지 않았을 수 있습니다."
             )
-            return
-        st.session_state[_ADMIN_AUTH_SESSION_KEY] = True
-        st.rerun()
+        with st.container(key="step12_admin_login_panel"):
+            M.password_input_no_autofill(
+                "🔑 관리자 비밀번호",
+                key="step12_admin_pwd_input",
+                help="`.streamlit/secrets.toml` 또는 환경변수에 설정한 비밀번호를 입력하세요.",
+                on_change=_attempt_admin_login,
+                args=(admin_password,),
+            )
+        _inject_step12_admin_login_enter_once()
+        return
 
+    with st.container(key="step12_admin_panel"):
+        _render_step12_admin_panel()
+
+
+def _render_step12_admin_panel() -> None:
     st.success("✅ 관리자 인증 완료")
     st.divider()
 
@@ -342,8 +352,10 @@ def render() -> None:
         with col_o1:
             if st.button("STEP11로 이 방 열기", use_container_width=True, key="admin_open_step11_room"):
                 st.session_state.step11_chat_room_key = selected
+                st.session_state.admin_selected_room = selected
                 st.session_state["_navigated_to_chat_this_run"] = True
-                M.assign_step_and_rerun(11)
+                st.session_state["_explicit_feature_step"] = 11
+                M.navigate_to_step(11)
         with col_o2:
             if st.button(
                 "이 방 기록 삭제",
@@ -356,10 +368,9 @@ def render() -> None:
                 except Exception as e:
                     report_exception_to_streamlit(e, prefix="방 삭제")
                 st.session_state.pop("admin_selected_room", None)
-                M.rerun_full_app()
         with col_o3:
             if st.button("목록 새로고침", use_container_width=True, key="admin_room_list_refresh"):
-                M.rerun_full_app()
+                pass
 
     st.divider()
 
@@ -381,13 +392,14 @@ def render() -> None:
                 f"고민유형: **{html.escape(str(_peek_lab.get('consultation_type') or '미분류'))}** · "
                 f"연락처: {html.escape(str(_peek_lab.get('contact', '-') or '-'))}"
             )
+        st.caption(f"상담 방 ID: `{html.escape(selected_room)}` — 고객 앱(8501) STEP11과 **동일 ID** 여야 합니다.")
 
-        _frag_col, _refresh_col = st.columns([4, 1])
-        with _refresh_col:
-            if st.button("채팅 새로고침", use_container_width=True, key="admin_chat_refresh"):
-                M.rerun_full_app()
-        with _frag_col:
-            _render_step12_room_messages()
+        if st.button("채팅 새로고침", use_container_width=True, key="admin_chat_refresh"):
+            pass
+
+        _sync_admin_reply_room_guard(selected_room)
+        _flush_admin_pending_reply(selected_room)
+        _render_step12_room_messages()
 
         st.divider()
         current_name = str(_peek_lab.get("u_name") or "").strip() if isinstance(_peek_lab, dict) else ""
@@ -414,7 +426,6 @@ def render() -> None:
                     ac.append(new_cust)
                     st.session_state.all_customers = ac
                     st.success(f"✅ {html.escape(current_name)} 고객 정보가 등록되었습니다.")
-                    M.rerun_full_app()
                 else:
                     st.info("이미 등록된 고객입니다.")
 
@@ -423,9 +434,8 @@ def render() -> None:
             key="admin_step12_chat_reply",
         )
         if admin_reply and str(admin_reply).strip():
-            txt = str(admin_reply).strip()
-            if _admin_append_manual_reply(selected_room, txt):
-                M.rerun_full_app()
+            st.session_state[_ADMIN_REPLY_PENDING_KEY] = str(admin_reply).strip()
+            st.rerun()
 
         err = st.session_state.pop("_shared_chat_persist_error", None)
         if err:
@@ -461,7 +471,6 @@ def render() -> None:
                         for c in list(st.session_state.all_customers or [])
                         if _cust_uid(c) != uid
                     ]
-                    M.rerun_full_app()
     else:
         st.info("등록된 고객 데이터가 없습니다.")
 
@@ -479,7 +488,6 @@ def render() -> None:
                 st.success("선택한 방의 채팅 기록을 비웠습니다.")
             else:
                 st.warning("선택된 방이 없습니다.")
-            M.rerun_full_app()
     with col2:
         confirm = st.checkbox("모든 고객 DB 삭제 승인", key="admin_wipe_customers_ack")
         if st.button(
@@ -491,4 +499,3 @@ def render() -> None:
         ):
             st.session_state.all_customers = []
             st.success("모든 고객 데이터가 삭제되었습니다.")
-            M.rerun_full_app()

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+import base64
 import html
 import hashlib
+import io
 import math
 import os
 import random
 import re
 import time
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 import streamlit as st
@@ -26,7 +29,7 @@ from saju_app.ui import consulting_knowledge as K
 from saju_app.ui import components as M
 from saju_app.ui import tarot_consulting as T
 from saju_app.ui.execution import rerun_full_app
-from tarot_assets import resolve_card_back_path, resolve_card_image_path
+from tarot_assets import UNIVERSAL_DIR, resolve_card_back_path, resolve_card_image_path
 from tarot_data import SPREADS, TAROT_CARDS, draw_cards, reading_signature
 
 
@@ -200,16 +203,62 @@ def _render_card_image(selected_card: dict[str, str], card_direction: str = "정
         st.image(_generated_tarot_image(selected_card, card_direction), width=280)
 
 
-def _render_card_back_image() -> None:
+def _render_card_back_image(*, width: int = 200) -> None:
     back_path = resolve_card_back_path()
     if back_path:
         try:
-            st.image(Image.open(back_path), width=200)
+            st.image(Image.open(back_path), width=width)
             return
         except Exception:
             pass
     placeholder = {"name": "Card Back", "keyword": "뒷면"}
-    st.image(_generated_tarot_image(placeholder, "정방향"), width=200)
+    st.image(_generated_tarot_image(placeholder, "정방향"), width=width)
+
+
+_STEP8_PREVIEW_CARDS: tuple[tuple[str, str], ...] = (
+    ("The Fool", "0thefool.png"),
+    ("The Hierophant", "5thehierophant.png"),
+    ("The World", "21theworld.png"),
+)
+
+
+def _preview_card_data_uri(card_name: str, filename: str) -> str:
+    """상단 배너용 카드 앞면 → data URI."""
+    direct_path = UNIVERSAL_DIR / filename
+    if direct_path.is_file():
+        try:
+            data = base64.b64encode(direct_path.read_bytes()).decode("ascii")
+            return f"data:image/png;base64,{data}"
+        except OSError:
+            pass
+    resolved = resolve_card_image_path(card_name)
+    if resolved:
+        try:
+            data = base64.b64encode(Path(resolved).read_bytes()).decode("ascii")
+            return f"data:image/png;base64,{data}"
+        except OSError:
+            pass
+    buf = io.BytesIO()
+    _generated_tarot_image({"name": card_name, "keyword": ""}, "정방향").save(buf, format="PNG")
+    data = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{data}"
+
+
+def _render_step8_tarot_banner() -> None:
+    """상단 배너: 타로 카드 앞면 3장 가로 배치."""
+    cards_html = "".join(
+        f'<img src="{_preview_card_data_uri(name, filename)}" '
+        f'alt="{html.escape(name)}" loading="eager" decoding="async" />'
+        for name, filename in _STEP8_PREVIEW_CARDS
+    )
+    st.markdown(
+        f"""
+<figure class="step8-tarot-banner" aria-label="조선 스피릿 타로">
+  <div class="step8-tarot-banner__row">{cards_html}</div>
+</figure>
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def _saju_context_text() -> str:
@@ -458,14 +507,16 @@ def _render_reading() -> None:
             with cols[col_idx % len(cols)]:
                 st.caption(position)
                 _render_card_back_image()
-                if st.button(
-                    "카드 선택",
+                def _pick_card(idx: int = card_idx) -> None:
+                    _reveal_card(reading, idx)
+
+                st.button(
+                    "카드 보기",
                     key=f"step8_pick_{sig}_{card_idx}",
                     use_container_width=True,
                     type="primary",
-                ):
-                    _reveal_card(reading, card_idx)
-                    rerun_full_app()
+                    on_click=_pick_card,
+                )
 
     # 공개된 카드 + 해석
     for idx in range(count):
@@ -574,11 +625,11 @@ img {
             unsafe_allow_html=True,
         )
 
-        M.render_mood_image("step08_hero", variant="hero", alt="AI 타로")
+        _render_step8_tarot_banner()
         st.markdown(
             """
 <div class="saju-section-title-badge saju-section-title-badge--center">
-  🌙 사주+미스틱 플로우 타로 🔮
+  🌙 사주+조선 스피릿 타로 🔮
 </div>
 <div style='text-align:center;font-size:18px;margin-bottom:30px;'>
 당신의 감정과 운명의 흐름을 카드에 담아보세요.
@@ -601,7 +652,6 @@ img {
             st.caption("질문 입력후 카드 숫자를 선택 하세요")
 
             st.markdown("---")
-            M.render_mood_image("step08_mid_spread", variant="mid", alt="타로 스프레드")
             question = M.text_area_no_autofill(
                 "궁금 사항 입력",
                 key=_QUESTION_KEY,
@@ -618,17 +668,25 @@ img {
                 help="1장: 핵심만 · 3장: 현재·흐름·조언(권장) · 5장: 현재·막힘·도움·가까운 흐름·실천",
             )
 
-            if st.button("🔮 카드 섞기", type="primary", use_container_width=True):
-                if not str(question or "").strip():
-                    st.warning("질문을 먼저 입력해 주세요.")
-                else:
-                    with st.spinner(random.choice(loading_messages)):
-                        time.sleep(0.9)
-                    _prepare_reading(str(question), str(spread_name))
-                    rerun_full_app()
+            def _shuffle_cards() -> None:
+                q = str(st.session_state.get(_QUESTION_KEY) or "").strip()
+                sp = str(st.session_state.get(_SPREAD_KEY) or "3카드").strip()
+                if not q:
+                    st.session_state["_step8_top_alert"] = "질문을 먼저 입력해 주세요."
+                    return
+                with st.spinner(random.choice(loading_messages)):
+                    time.sleep(0.9)
+                _prepare_reading(q, sp)
+
+            alert = st.session_state.pop("_step8_top_alert", None)
+            if alert:
+                st.warning(str(alert))
+            st.button("🔮 카드 뽑기", type="primary", use_container_width=True, on_click=_shuffle_cards)
         else:
-            if st.button("↩ 새 질문으로 다시하기", use_container_width=True):
-                _clear_reading()
-                rerun_full_app()
+            st.button(
+                "↩ 새 질문으로 다시하기",
+                use_container_width=True,
+                on_click=_clear_reading,
+            )
 
         _render_reading()

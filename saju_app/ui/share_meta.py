@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import html
+import json
 import os
+
 import streamlit as st
 
 # GitHub raw — Streamlit Cloud 스크린샷 대신 카카오가 직접 가져올 수 있는 배너
@@ -38,8 +40,43 @@ def _og_image_url() -> str:
     return _DEFAULT_GITHUB_RAW_OG
 
 
+MOBILE_VIEWPORT_CONTENT = (
+    "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, "
+    "viewport-fit=cover"
+)
+
+
+def inject_mobile_viewport_meta() -> None:
+    """모바일 줌·레이아웃 고정 — ``<head>`` 에 viewport 메타를 보장합니다."""
+    content = html.escape(MOBILE_VIEWPORT_CONTENT, quote=True)
+    st.markdown(
+        f'<meta name="viewport" content="{content}" />',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"""
+<script>
+(function () {{
+    const doc = document;
+    if (!doc || !doc.head) return;
+    const desired = {json.dumps(MOBILE_VIEWPORT_CONTENT)};
+    let meta = doc.querySelector('meta[name="viewport"]');
+    if (!meta) {{
+        meta = doc.createElement("meta");
+        meta.setAttribute("name", "viewport");
+        doc.head.insertBefore(meta, doc.head.firstChild);
+    }}
+    meta.setAttribute("content", desired);
+}})();
+</script>
+""".strip(),
+        unsafe_allow_html=True,
+    )
+
+
 def inject_link_share_meta(*, description: str | None = None) -> None:
     """og:image·설명 메타를 주입합니다."""
+    inject_mobile_viewport_meta()
     base = _public_app_base_url()
     image = _og_image_url()
     title = "사주까기 · 무료 사주풀이"
@@ -55,7 +92,7 @@ def inject_link_share_meta(*, description: str | None = None) -> None:
         og_url_line = f'<meta property="og:url" content="{html.escape(page_url, quote=True)}" />'
 
     block = f"""
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="{html.escape(MOBILE_VIEWPORT_CONTENT, quote=True)}" />
 <meta name="description" content="{html.escape(desc, quote=True)}" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="사주까기" />

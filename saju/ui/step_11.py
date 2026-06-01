@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import html
 import re
-
 import streamlit as st
 
 from saju_app.persistence import storage as saju_storage
@@ -13,8 +12,8 @@ from saju_app.ui import components as M
 from saju_app.ui import consulting_knowledge as K
 from saju_app.ui import webapp_launch as W
 from saju_app.ui.chat_messages import (
-    conversation_html,
     dedupe_chat_messages,
+    render_conversation_chat_ui,
     tail_matches_assistant,
     tail_matches_user,
 )
@@ -24,6 +23,11 @@ def _step11_ensure_room_key() -> str:
     rk = str(st.session_state.get("step11_chat_room_key") or "").strip()
     if rk:
         return rk
+    if M.step11_admin_preview_mode():
+        admin_rk = str(st.session_state.get("admin_selected_room") or "").strip()
+        if admin_rk:
+            st.session_state.step11_chat_room_key = admin_rk
+            return admin_rk
     u_nm = str(st.session_state.get("u_name", "익명") or "익명").strip()
     u_data = st.session_state.get("u_data")
     if isinstance(u_data, (list, tuple)) and len(u_data) >= 3:
@@ -58,6 +62,38 @@ def _classify_consultation_type(text: str) -> str:
     if any(k in t for k in ("이사", "이동", "이민", "계약", "소송", "법", "관재")):
         return "이동·문서"
     return "일반상담"
+
+
+def _hydrate_customer_label_from_room(room_key: str) -> dict[str, str]:
+    """저장소 라벨에서 고객 표시명·연락처만 세션에 반영(관리자 미리보기)."""
+    rk = str(room_key or "").strip()
+    out: dict[str, str] = {}
+    if not rk:
+        return out
+    try:
+        _, lab = saju_storage.get_shared_chat_room(rk)
+    except Exception:
+        lab = None
+    if not isinstance(lab, dict):
+        return out
+    nm = str(lab.get("u_name") or "").strip()
+    if nm:
+        st.session_state.u_name = nm
+        out["u_name"] = nm
+    contact = str(lab.get("contact") or "").strip()
+    if contact:
+        st.session_state.contact_value = contact
+        out["contact"] = contact
+    return out
+
+
+def _admin_preview_engine_stub() -> dict[str, str]:
+    return {
+        "day_stem": "—",
+        "day_el": "관리자 확인",
+        "yongshin": "—",
+        "strength": "—",
+    }
 
 
 def _step11_chat_label(u_name: str, consultation_type: str = "미분류") -> dict:
@@ -378,6 +414,17 @@ def _storytelling_guidance_html(
     )
 
 
+def _pull_step11_chat_from_storage(room_key: str) -> None:
+    """저장소(SAJU 공유 방)의 최신 채팅을 세션·화면에 반영합니다. 관리자 답변 수신용."""
+    rk = str(room_key or "").strip()
+    if not rk:
+        return
+    try:
+        M.sync_shared_chat_room_into_session(rk)
+    except Exception:
+        pass
+
+
 def _clear_step11_chat_history(room_key: str, label: dict | None = None) -> None:
     """세션·저장소의 이전 상담 메시지를 비웁니다."""
     rk = str(room_key or "").strip()
@@ -613,16 +660,13 @@ def _step11_chat_empty_html(day_stem: str, day_el: str, yongshin: str) -> str:
     return ""
 
 
-def _fragment_step11_chat_messages() -> None:
-    """저장소 기준으로 상담 내용을 그립니다. DOM 안정화를 위해 HTML을 한 번만 렌더합니다."""
+def _render_step11_chat_messages() -> None:
+    """저장소 기준으로 상담 내용을 그립니다."""
     rk = str(st.session_state.get("step11_chat_room_key") or "").strip()
     if not rk:
         st.info("상담 방 키가 없습니다. 페이지를 한 번 새로고침해 주세요.")
         return
-    try:
-        M.sync_shared_chat_room_into_session(rk)
-    except Exception:
-        pass
+    _pull_step11_chat_from_storage(rk)
     try:
         msgs, _lab = saju_storage.get_shared_chat_room(rk)
     except Exception:
@@ -637,16 +681,49 @@ def _fragment_step11_chat_messages() -> None:
     except TypeError:
         chat_box = st.container(border=True)
     with chat_box:
-        html_body = conversation_html(
-            conv,
-            empty_html=_step11_chat_empty_html(ds, de, ys),
-            customer_label="고객",
+        if conv:
+            render_conversation_chat_ui(conv, customer_label="고객")
+        else:
+            _ = ds, de, ys
+            st.caption("고민을 입력하면 대화가 여기에 표시됩니다.")
+
+    # 관리자 미리보기 화면에서는 Streamlit 프론트의 간헐적 removeChild 에러 박스를 노출하지 않습니다.
+    # (대화 확인만 필요한 화면이며, 오류 박스가 있으면 사용자가 앱이 깨졌다고 오해합니다.)
+    if M.step11_admin_preview_mode():
+        st.markdown(
+            """
+<style>
+/* Streamlit 예외/스택트레이스 UI 숨김(관리자 STEP11 미리보기 전용) */
+div[data-testid="stException"], div[data-testid="stAlert"] pre, div[data-testid="stAlert"] code {
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+</style>
+""",
+            unsafe_allow_html=True,
         )
-        st.markdown(html_body, unsafe_allow_html=True)
 
 
 def render() -> None:
-    engine = M._require_saju_engine_or_build()
+    admin_view = M.step11_admin_preview_mode()
+    _chat_rk = _step11_ensure_room_key()
+
+    if admin_view:
+        if not _chat_rk:
+            st.header("💬 관리자 · 고객 채팅 확인")
+            st.info(
+                "STEP12 **실시간 고객 채팅 모니터링**에서 상담 방을 선택한 뒤 "
+                "「STEP11로 이 방 열기」를 누르세요."
+            )
+            if st.button("← 관리자(STEP12)로", use_container_width=True, key="step11_admin_back_no_room"):
+                M.navigate_to_step(12)
+            return
+        _hydrate_customer_label_from_room(_chat_rk)
+        engine = _admin_preview_engine_stub()
+    else:
+        engine = M._require_saju_engine_or_build()
+
     u_name = str(st.session_state.get("u_name", "사주까기님") or "사주까기님")
     day_stem = str(engine.get("day_stem", "알 수 없음"))
     day_el = str(engine.get("day_el", "운세"))
@@ -654,18 +731,17 @@ def render() -> None:
     strength = str(engine.get("strength", "보통"))
     u_gender = str(st.session_state.get("u_gender", "남자") or "남자")
 
-    _chat_rk = _step11_ensure_room_key()
     _chat_label = _step11_chat_label(u_name)
 
     if "shared_chat" not in st.session_state:
         st.session_state.shared_chat = []
+    # STEP11은 관리자/일반 모두 동일한 "AI 사주 챗봇" UI로 렌더한다.
+    # (이전엔 관리자 인증 시 '관리자·고객 채팅 확인' 전용 블록만 보이고 입력창이 사라졌으나,
+    #  사용자 요청으로 입력창이 있는 정상 챗봇으로 통일. 관리자 모니터링은 STEP12에서 수행.)
     st.header("💬 AI 사주 챗봇 · 사주까기")
     st.warning(
         "AI 상담은 운세·성향 참고용입니다. 건강, 임신, 질병, 수술, 법률, 투자 등 중요한 결정은 "
         "반드시 해당 분야 전문가와 상담하세요."
-    )
-    st.caption(
-        "질문·AI 답변·전문가 답변은 **저장소에 기록**되며, 관리자(STEP12) **방 목록**과 **전체 공용 로그**에 동기화됩니다."
     )
     with st.container(key="step11_memo_download_panel"):
         st.markdown("#### 📝 분석 메모 · 상담")
@@ -677,41 +753,50 @@ def render() -> None:
             AFM.render_all_memos_download_button(key="step11_all_memos_download")
         with _memo_cols[1]:
             if st.button(
-                "🔄 새로고침",
+                "🔄 채팅 가져오기",
                 key="step11_pull_shared_chat",
                 use_container_width=True,
+                help="관리자 답변·저장소 내용을 다시 불러옵니다. 기록을 지우지 않습니다.",
             ):
-                _clear_step11_chat_history(_chat_rk, _chat_label)
-                M.rerun_full_app()
+                _pull_step11_chat_from_storage(_chat_rk)
+                M.prepare_step_change_ui(dest=int(st.session_state.get("step", 11)))
+                # 버튼 콜백 경고/포커스 꼬임 방지를 위해 rerun 대신 상태만 반영합니다.
 
     st.session_state["step11_intro"] = {
         "day_stem": day_stem,
         "day_el": day_el,
         "yongshin": yongshin,
     }
-    _clear_step11_chat_on_new_browser_session(_chat_rk, _chat_label)
-    _strip_legacy_welcome_from_room(_chat_rk)
-    M.sync_shared_chat_room_into_session(_chat_rk)
+    if not admin_view:
+        _clear_step11_chat_on_new_browser_session(_chat_rk, _chat_label)
+        _strip_legacy_welcome_from_room(_chat_rk)
+        M.sync_shared_chat_room_into_session(_chat_rk)
+    else:
+        _strip_legacy_welcome_from_room(_chat_rk)
+        _pull_step11_chat_from_storage(_chat_rk)
 
-    with st.expander("개인정보·상담 기록 관리", expanded=False):
-        st.caption(
-            "현재 상담 방의 질문·답변 기록과 현재 세션 아카이브, 현재 입력 정보로 생성된 프로필 저장값을 삭제할 수 있습니다."
-        )
-        confirm_delete = st.checkbox("내 상담 기록과 저장 정보를 삭제하는 데 동의합니다.", key="step11_delete_my_data_ack")
-        if st.button(
-            "내 상담 기록 삭제",
-            type="primary",
-            use_container_width=True,
-            disabled=not confirm_delete,
-            key="step11_delete_my_data_btn",
-        ):
-            _delete_current_user_data(_chat_rk, u_name)
-            st.session_state.shared_chat = []
-            st.success("현재 상담 기록 삭제 요청을 처리했습니다.")
-            M.rerun_full_app()
+    if not admin_view:
+        with st.expander("개인정보·상담 기록 관리", expanded=False):
+            st.caption(
+                "현재 상담 방의 질문·답변 기록과 현재 세션 아카이브, 현재 입력 정보로 생성된 프로필 저장값을 삭제할 수 있습니다."
+            )
+            confirm_delete = st.checkbox(
+                "내 상담 기록과 저장 정보를 삭제하는 데 동의합니다.",
+                key="step11_delete_my_data_ack",
+            )
+            if st.button(
+                "내 상담 기록 삭제",
+                type="primary",
+                use_container_width=True,
+                disabled=not confirm_delete,
+                key="step11_delete_my_data_btn",
+            ):
+                _delete_current_user_data(_chat_rk, u_name)
+                st.session_state.shared_chat = []
+                st.success("현재 상담 기록 삭제 요청을 처리했습니다.")
 
     st.markdown("### 💬 실시간 고객 채팅")
-    _fragment_step11_chat_messages()
+    _render_step11_chat_messages()
 
     err = st.session_state.pop("_shared_chat_persist_error", None)
     if err:
@@ -720,21 +805,11 @@ def render() -> None:
             f"({html.escape(str(err)[:400])})"
         )
 
-    if st.session_state.pop("_step11_clear_chat_input", False):
-        st.session_state.pop("step11_chat_text_input", None)
-
     st.markdown("#### 고민 입력")
-    q_col, send_col = st.columns([0.88, 0.12], gap="small")
-    with q_col:
-        user_text = M.text_input_no_autofill(
-            "고민 입력",
-            placeholder="고민을 입력하세요...",
-            key="step11_chat_text_input",
-            label_visibility="collapsed",
-        )
-    with send_col:
-        sent = st.button("↑", key="step11_send_btn", use_container_width=True, type="primary")
-    user_input = user_text if sent else None
+    user_input = st.chat_input(
+        "고민을 입력하세요...",
+        key="step11_chat_text_input",
+    )
 
     public_settings = W.public_webapp_settings()
     kakao_url = str(public_settings.get("kakao_url") or "").strip()
@@ -817,6 +892,9 @@ def render() -> None:
                 '<div class="step11-qr-placeholder" aria-hidden="true" style="height:0;overflow:hidden;"></div>',
                 unsafe_allow_html=True,
             )
+
+    M.render_step11_inline_step_nav()
+
     if user_input and str(user_input).strip():
         ui = str(user_input).strip()
         try:
@@ -864,5 +942,4 @@ def render() -> None:
                 st.session_state.shared_chat = list(msgs2)
                 lab_out["ts"] = M.now_kst().isoformat(timespec="seconds")
                 M._persist_shared_chat_bus(_chat_rk, msgs2, lab_out)
-        st.session_state["_step11_clear_chat_input"] = True
-        M.rerun_full_app()
+        return

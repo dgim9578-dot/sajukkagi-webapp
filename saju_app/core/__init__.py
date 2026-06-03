@@ -1,2 +1,0 @@
-"""Core (engine + pure calculations)."""
-

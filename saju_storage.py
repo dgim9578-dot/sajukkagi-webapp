@@ -59,40 +59,78 @@ from typing import Any, Callable, Concatenate, ParamSpec, TypeVar
 log = logging.getLogger(__name__)
 
 
-import streamlit as st
-from zoneinfo import ZoneInfo
+def clear_all_user_input_sessions():
+    """외부 사용자 데이터 오염 및 무작위 노출을 막기 위해
+    서버 메모리와 저장소의 임시 프리필 데이터를 강제로 전면 소각하는 프로용 초기화 함수"""
+    try:
+        import streamlit as st
 
-# ... (기존 import들)
+        # 1. 브라우저에 남아있는 모든 사용자 입력값(key)을 완전히 삭제
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
 
-# ==================== 앱 설정 + 스크롤 해결 (최상단에 배치) ====================
-st.set_page_config(
-    page_title="사주까기 - 무료 사주풀이",
-    page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+        # 2. 백엔드 저장소에 임시로 저장되었던 프리필(Prefill) 흔적 제거
+        sqlite_kvs_delete_prefix("step2_prefill")
+        sqlite_kvs_delete("admin_outbox")
 
-# 강력한 스크롤 CSS
-st.markdown(
-    """
-    <style>
-        html, body, [data-testid="stAppViewContainer"] {
-            overflow-y: auto !important;
-            height: auto !important;
-            max-height: none !important;
-        }
-        [data-testid="stMain"] {
-            overflow-y: auto !important;
-        }
-        .main .block-container {
-            padding-bottom: 120px !important;
-        }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
-# ============================================================================
+        # 3. 변경 사항 즉시 반영
+        st.success("모든 사용자 정보와 세션 버퍼가 강력하게 초기화되었습니다.")
+    except Exception:
+        pass
 
+    # ============================== 스크롤 문제 해결 (최종 끝판왕 버전) ==============================
+    st.set_page_config(
+        page_title="사주까기 - 무료 사주풀이",
+        page_icon="🔮",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+
+    # 브라우저의 모든 레벨에서 스크롤을 강제로 열어버리는 CSS
+    st.markdown(
+        """
+        <style>
+            /* 1. 최상위 브라우저 창 및 스크롤바 강제 표시 */
+            html, body {
+                overflow-y: scroll !important;
+                overflow-x: hidden !important;
+                height: auto !important;
+                min-height: 100vh !important;
+            }
+
+            /* 2. Streamlit 내부 모든 뷰 컨테이너의 스크롤 제약 해제 */
+            [data-testid="stAppViewContainer"], 
+            .stApp, 
+            [data-testid="stMain"],
+            .main,
+            [data-testid="stAppViewBlockContainer"] {
+                overflow-y: visible !important;
+                overflow-x: hidden !important;
+                height: auto !important;
+                max-height: none !important;
+                min-height: 100vh !important;
+            }
+
+            /* 3. 콘텐츠 정렬 및 하단 여백 확보 */
+            .main .block-container {
+                padding-top: 2rem !important;
+                padding-bottom: 10rem !important;
+                overflow-y: visible !important;
+                max-height: none !important;
+            }
+
+            /* 4. 상단 헤더가 스크롤을 방해하지 않도록 위치 고정 해제 */
+            [data-testid="stHeader"] {
+                position: absolute !important;
+                background: transparent !important;
+            }
+        </style>
+    """,
+        unsafe_html=True,
+    )
+
+
+# ==============================================================================================
 
 P_sql = ParamSpec("P_sql")
 R_sql = TypeVar("R_sql")

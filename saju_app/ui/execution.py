@@ -4570,12 +4570,10 @@ def inject_home_photo2_layout_css() -> None:
         return
     st.markdown(
         """
-<style id="saju-home-photo2-layout-v8">
-/* 사진2 최종 — 사진1 상단 백화(100vh·세로 가운데) 차단 */
+<style id="saju-home-photo2-layout-v9">
+/* 사진2 — 상단 flex-center 차단(스크롤 루트는 100dvh 유지) */
 html:has(.st-key-saju_router_step_mount_01),
 html:has(.st-key-saju_router_step_mount_01) body,
-html:has(.st-key-saju_router_step_mount_01) .stApp,
-html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
 html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] > .main,
 html:has(.st-key-saju_router_step_mount_01) section.main,
 html:has(.st-key-saju_router_step_mount_01) [data-testid="stMain"],
@@ -4596,7 +4594,6 @@ html:has(.st-key-saju_router_step_mount_01) [data-testid="stMainBlockContainer"]
   margin-top: 0 !important;
   padding-top: 0 !important;
 }
-.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container > [data-testid="stVerticalBlock"],
 .st-key-saju_router_step_mount_01 [data-testid="stVerticalBlock"] {
   display: flex !important;
   flex-direction: column !important;
@@ -4604,6 +4601,23 @@ html:has(.st-key-saju_router_step_mount_01) [data-testid="stMainBlockContainer"]
   align-items: stretch !important;
   gap: 0 !important;
   row-gap: 0 !important;
+}
+.st-key-saju_landing_stack > [data-testid="stVerticalBlock"] {
+  gap: 0.55rem !important;
+  row-gap: 0.55rem !important;
+}
+[data-testid="stElementContainer"][data-stale="true"]:has(.saju-home-hero-banner),
+[data-testid="stElementContainer"][data-stale="true"]:has(.st-key-step1_cta_row_main),
+[data-testid="stElementContainer"][data-stale="true"]:has(.st-key-step1_cta_row_free),
+[data-testid="stElementContainer"][data-stale="true"]:has(.st-key-saju_landing_hero) {
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+#saju-home-hero-top ~ #saju-home-hero-top {
+  display: none !important;
 }
 /* mount 이전 유틸 행만 숨김 (:has — mount 래퍼 EC 는 유지) */
 .stApp:has(.st-key-saju_router_step_mount_01) .main .block-container > [data-testid="stVerticalBlock"] {

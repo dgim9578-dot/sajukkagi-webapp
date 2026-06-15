@@ -2561,7 +2561,6 @@ def configure_application() -> None:
         width: 100% !important;
     }
     .st-key-step1_cta_row_briefing [data-testid="stHorizontalBlock"],
-    .st-key-step1_cta_row_main [data-testid="stHorizontalBlock"],
     .st-key-step1_revisit_pin_row [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -2572,14 +2571,33 @@ def configure_application() -> None:
         max-width: 100% !important;
         box-sizing: border-box !important;
     }
+    .st-key-step1_cta_row_main [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: flex-end !important;
+        gap: clamp(0.35rem, 2vw, 0.55rem) !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        min-height: clamp(2.45rem, 11vw, 3rem) !important;
+    }
     .st-key-step1_cta_row_briefing [data-testid="stHorizontalBlock"] > div,
-    .st-key-step1_cta_row_main [data-testid="stHorizontalBlock"] > div,
     .st-key-step1_revisit_pin_row [data-testid="stHorizontalBlock"] > div {
         flex: 1 1 0 !important;
         min-width: 0 !important;
         max-width: 50% !important;
         width: auto !important;
         overflow: hidden !important;
+    }
+    .st-key-step1_cta_row_main [data-testid="stHorizontalBlock"] > div {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        max-width: 50% !important;
+        width: auto !important;
+        overflow: visible !important;
+        position: relative !important;
     }
     .st-key-step1_cta_row_briefing .stButton > button,
     .st-key-step1_cta_row_briefing .stLinkButton > a,
@@ -2674,8 +2692,11 @@ def configure_application() -> None:
     .st-key-step1_cta_row_free {
         width: 100% !important;
         max-width: 100% !important;
-        margin-top: 0.35rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.25rem !important;
         box-sizing: border-box !important;
+        position: relative !important;
+        clear: both !important;
     }
     .st-key-step1_cta_row_free .stButton > button {
         width: 100% !important;
@@ -8719,8 +8740,20 @@ def configure_application() -> None:
         margin: 0 !important;
         padding: 0 !important;
     }
-    html:has(.st-key-saju_router_step_mount_01) .stApp,
-    html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
+    html:has(.st-key-saju_router_step_mount_01) .stApp {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+    }
+    html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        min-height: 0 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
     html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] > .main,
     html:has(.st-key-saju_router_step_mount_01) section.main,
     html:has(.st-key-saju_router_step_mount_01) [data-testid="stMain"],
@@ -9034,25 +9067,59 @@ def configure_application() -> None:
         padding: 0 !important;
         overflow: hidden !important;
     }
-    /* ===== STEP 이동(rerun) 중 화면이 희미해지는 현상 제거 =====
-       Streamlit 은 rerun 동안 아직 갱신되지 않은 이전(stale) 요소에
-       ``data-stale="true"`` 를 붙이고 opacity 를 낮춰(+transition) 반투명하게
-       만든다. STEP 이전/다음 이동 때마다 본문 전체가 잠깐 흐려져(깜빡임처럼) 보이는
-       원인이다. 모든 stale 요소를 항상 불투명·무전환으로 고정해 깜빡임을 없앤다.
-       (순수 시각 효과만 끄는 것으로 기능·레이아웃에는 영향 없음) */
-    [data-stale="true"],
-    .stApp [data-stale="true"],
-    [data-testid="stAppViewContainer"] [data-stale="true"],
-    [data-testid="stMain"] [data-stale="true"],
+    /* ===== STEP 이동(rerun) stale — 이전 DOM 겹침(배너·버튼 이중 표시) 제거 =====
+       Streamlit 은 rerun 중 이전 위젯에 data-stale 을 붙인다.
+       opacity:1 강제는 stale·fresh 가 동시에 보여 배너·CTA 가 겹치므로,
+       stale element-container 는 레이아웃에서 완전히 제거한다. */
     [data-testid="stElementContainer"][data-stale="true"],
-    [data-testid="stVerticalBlock"][data-stale="true"],
-    .element-container[data-stale="true"],
-    .stApp [data-stale="true"] * {
-        opacity: 1 !important;
+    [data-testid="stVerticalBlockBorderWrapper"][data-stale="true"],
+    .element-container[data-stale="true"] {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
         transition: none !important;
-        -webkit-filter: none !important;
-        filter: none !important;
-        animation: none !important;
+    }
+    /* 배너 id 중복(stale 잔존) — 첫 번째만 표시 */
+    #saju-home-hero-top ~ #saju-home-hero-top,
+    .saju-home-hero-banner ~ .saju-home-hero-banner {
+        display: none !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+    /* STEP1 홈 — 섹션 세로 간격(CTA·재방문 겹침 방지) */
+    .st-key-saju_landing_stack > [data-testid="stVerticalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.55rem !important;
+        row-gap: 0.55rem !important;
+    }
+    .st-key-saju_landing_stack .st-key-step1_solar24,
+    .st-key-saju_landing_stack .st-key-step1_revisit_auth,
+    .st-key-saju_landing_stack .st-key-step1_cta_row_main,
+    .st-key-saju_landing_stack .st-key-step1_cta_row_free,
+    .st-key-saju_landing_stack .st-key-saju_landing_cta {
+        position: relative !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        flex: 0 0 auto !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    .st-key-step1_cta_row_main [data-testid="stForm"],
+    .st-key-step1_cta_row_main form {
+        margin-bottom: 0 !important;
     }
     /* rerun 진행 표시(상단 러닝바·스피너)도 STEP 이동 깜빡임으로 보이므로 숨김 */
     [data-testid="stStatusWidget"],

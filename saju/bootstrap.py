@@ -2688,11 +2688,11 @@ def configure_application() -> None:
     .st-key-step1_cta_row_main .stButton > button:disabled,
     .st-key-step1_cta_row_main [data-testid="stFormSubmitButton"] > button:disabled {
         background: light-dark(#f3f4f6, #2a2a36) !important;
-        color: light-dark(rgba(91, 33, 182, 0.45), rgba(167, 139, 250, 0.45)) !important;
-        border: 2px solid light-dark(rgba(124, 58, 237, 0.25), rgba(167, 139, 250, 0.25)) !important;
+        color: light-dark(rgba(45, 38, 28, 0.45), rgba(235, 228, 210, 0.45)) !important;
+        border: none !important;
         box-shadow: none !important;
     }
-    /* 재방문 — 보라 톤 보조 버튼 */
+    /* 재방문 — 연한 베이지 보조 버튼 (비밀번호 입력과 2열) */
     .st-key-step1_cta_row_main .stButton > button,
     .st-key-step1_cta_row_main [data-testid="stFormSubmitButton"] > button,
     .st-key-step1_cta_row_main .stLinkButton > a {
@@ -2710,9 +2710,9 @@ def configure_application() -> None:
         overflow-wrap: anywhere !important;
         border-radius: var(--saju-soft-radius) !important;
         box-sizing: border-box !important;
-        border: 2px solid light-dark(#7c3aed, #a78bfa) !important;
-        background: light-dark(#f5f0ff, #2a2240) !important;
-        color: light-dark(#5b21b6, #ede9fe) !important;
+        border: none !important;
+        background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
+        color: light-dark(rgba(45, 38, 28, 0.9), rgba(235, 228, 210, 0.94)) !important;
         box-shadow: none !important;
     }
     .st-key-step1_cta_row_main [data-testid="stForm"] {

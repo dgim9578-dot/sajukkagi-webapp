@@ -2014,11 +2014,11 @@ def inject_step_scroll_manager_once() -> None:
     ver_key = f"_saju_scroll_mgr_js_{_SCROLL_MGR_JS_VER}"
     if st.session_state.get(ver_key):
         return
-    st.session_state[ver_key] = True
     for key in list(st.session_state.keys()):
         sk = str(key)
         if sk.startswith("_saju_scroll_mgr_js_") or sk.startswith("_saju_scroll_mgr_v"):
             st.session_state.pop(key, None)
+    st.session_state[ver_key] = True
     # st.markdown("<script>") 은 Streamlit 이 script 를 제거하므로 components.html iframe 으로
     # parent 전역 매니저(__sajuFitHomeSolar24Iframe, __sajuLockHomeViewportTop 등)를 1회 설치한다.
     mgr_js = _SCROLL_MANAGER_JS.replace(

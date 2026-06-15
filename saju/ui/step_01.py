@@ -155,17 +155,25 @@ def render() -> None:
         with st.container(key="step1_cta_row_main"):
             with st.form("step1_revisit_login_form", clear_on_submit=False, border=False):
                 M.render_revisit_pin_rule_hint(home=True)
-                revisit_pin = M.revisit_pin_input_no_autofill(
-                    "비밀번호",
-                    key="step1_revisit_pin_in",
-                    placeholder="비밀번호*",
-                    label_visibility="collapsed",
-                )
-                load_submitted = st.form_submit_button(
-                    "내 기록 불러오기",
-                    type="secondary",
-                    use_container_width=True,
-                )
+                try:
+                    c_pin, c_load = st.columns(
+                        2, gap="small", vertical_alignment="bottom"
+                    )
+                except TypeError:
+                    c_pin, c_load = st.columns(2, gap="small")
+                with c_pin:
+                    revisit_pin = M.revisit_pin_input_no_autofill(
+                        "비밀번호",
+                        key="step1_revisit_pin_in",
+                        placeholder="비밀번호*",
+                        label_visibility="collapsed",
+                    )
+                with c_load:
+                    load_submitted = st.form_submit_button(
+                        "내 기록 불러오기",
+                        type="secondary",
+                        use_container_width=True,
+                    )
         if load_submitted:
             Revisit.process_revisit_login(
                 str(revisit_pin or st.session_state.get("step1_revisit_pin_in") or "")

@@ -116,7 +116,14 @@ def ensure_step01_hero_banner_file(*, force: bool = False) -> Path | None:
         _write_banner_bytes(src.read_bytes(), ext=src.suffix.lower() or ".png")
     except OSError:
         return existing
-    return resolve_mood_image(_BANNER_STEM)
+    synced = resolve_mood_image(_BANNER_STEM)
+    try:
+        from saju.ui.og_share_sync import sync_og_share_from_hero
+
+        sync_og_share_from_hero(force=force)
+    except Exception:
+        pass
+    return synced
 
 
 def step01_hero_banner_img_src() -> str | None:

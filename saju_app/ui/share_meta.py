@@ -5,13 +5,18 @@ from __future__ import annotations
 import html
 import json
 import os
+from pathlib import Path
 
 import streamlit as st
 
-# GitHub raw — Streamlit Cloud 스크린샷 대신 카카오가 직접 가져올 수 있는 배너
+# GitHub raw — 카카오·SNS 크롤러가 Streamlit HTML 대신 직접 가져올 배너
+_DEFAULT_GITHUB_RAW_HERO = (
+    "https://raw.githubusercontent.com/dgim9578-dot/sajukkagi-webapp/main/images/step01_hero_v2.png"
+)
 _DEFAULT_GITHUB_RAW_OG = (
     "https://raw.githubusercontent.com/dgim9578-dot/sajukkagi-webapp/main/static/og-share.png"
 )
+_OG_IMAGE_ALT = "사주까기 — 럭셔리 사주풀이 · 무료 사주풀이"
 
 
 def _setting(name: str, default: str = "") -> str:
@@ -29,15 +34,37 @@ def _public_app_base_url() -> str:
     return value.rstrip("/")
 
 
+def _og_cache_bust() -> str:
+    try:
+        from saju.ui.og_share_sync import og_share_cache_version
+
+        return og_share_cache_version()
+    except Exception:
+        og = Path(__file__).resolve().parents[2] / "static" / "og-share.png"
+        if og.is_file():
+            try:
+                return str(int(og.stat().st_mtime))
+            except OSError:
+                pass
+        return "hero-v2"
+
+
+def _with_og_cache_bust(url: str) -> str:
+    url = str(url or "").strip()
+    if not url:
+        return url
+    token = _og_cache_bust()
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}v={token}"
+
+
 def _og_image_url() -> str:
     """공유 미리보기 배너 URL (카카오·SNS 크롤러용, 절대 경로)."""
     custom = _setting("SAJU_OG_IMAGE_URL")
     if custom:
-        return custom
-    base = _public_app_base_url()
-    if base:
-        return f"{base}/app/static/og-share.png"
-    return _DEFAULT_GITHUB_RAW_OG
+        return _with_og_cache_bust(custom)
+    # GitHub raw — Streamlit /app/static 은 크롤러 MIME 이슈가 있어 raw URL 고정
+    return _with_og_cache_bust(_DEFAULT_GITHUB_RAW_HERO)
 
 
 MOBILE_VIEWPORT_CONTENT = (
@@ -84,7 +111,7 @@ def inject_link_share_meta(*, description: str | None = None) -> None:
         description
         or "무료 사주풀이 — 사주·궁합·대운·타로·주역·AI 상담"
     ).strip()
-    image_alt = "사주까기 — 무료 사주풀이 · LUXURY SAJU INSIGHT"
+    image_alt = _OG_IMAGE_ALT
     page_url = base or ""
 
     og_url_line = ""
@@ -111,3 +138,75 @@ def inject_link_share_meta(*, description: str | None = None) -> None:
 <meta name="twitter:image" content="{html.escape(image, quote=True)}" />
 """.strip()
     st.markdown(block, unsafe_allow_html=True)
+    _inject_share_meta_into_head(
+        title=title,
+        desc=desc,
+        image=image,
+        image_alt=image_alt,
+        page_url=page_url,
+    )
+
+
+def _inject_share_meta_into_head(
+    *,
+    title: str,
+    desc: str,
+    image: str,
+    image_alt: str,
+    page_url: str,
+) -> None:
+    """카카오 크롤러용 — og/twitter 메타를 document.head 에 보장."""
+    payload = {
+        "title": title,
+        "desc": desc,
+        "image": image,
+        "imageAlt": image_alt,
+        "pageUrl": page_url,
+    }
+    st.markdown(
+        f"""
+<script>
+(function () {{
+    const doc = document;
+    if (!doc || !doc.head) return;
+    const cfg = {json.dumps(payload)};
+    const upsert = (selector, attrs) => {{
+        let el = doc.querySelector(selector);
+        if (!el) {{
+            el = doc.createElement("meta");
+            Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+            doc.head.appendChild(el);
+        }} else {{
+            Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+        }}
+        if (attrs.content !== undefined) el.setAttribute("content", attrs.content);
+    }};
+    upsert('meta[name="description"]', {{ name: "description", content: cfg.desc }});
+    upsert('meta[property="og:type"]', {{ property: "og:type", content: "website" }});
+    upsert('meta[property="og:site_name"]', {{ property: "og:site_name", content: "사주까기" }});
+    upsert('meta[property="og:title"]', {{ property: "og:title", content: cfg.title }});
+    upsert('meta[property="og:description"]', {{ property: "og:description", content: cfg.desc }});
+    upsert('meta[property="og:image"]', {{ property: "og:image", content: cfg.image }});
+    upsert('meta[property="og:image:secure_url"]', {{
+        property: "og:image:secure_url",
+        content: cfg.image,
+    }});
+    upsert('meta[property="og:image:type"]', {{ property: "og:image:type", content: "image/png" }});
+    upsert('meta[property="og:image:width"]', {{ property: "og:image:width", content: "1200" }});
+    upsert('meta[property="og:image:height"]', {{ property: "og:image:height", content: "630" }});
+    upsert('meta[property="og:image:alt"]', {{ property: "og:image:alt", content: cfg.imageAlt }});
+    if (cfg.pageUrl) {{
+        upsert('meta[property="og:url"]', {{ property: "og:url", content: cfg.pageUrl }});
+    }}
+    upsert('meta[name="twitter:card"]', {{ name: "twitter:card", content: "summary_large_image" }});
+    upsert('meta[name="twitter:title"]', {{ name: "twitter:title", content: cfg.title }});
+    upsert('meta[name="twitter:description"]', {{
+        name: "twitter:description",
+        content: cfg.desc,
+    }});
+    upsert('meta[name="twitter:image"]', {{ name: "twitter:image", content: cfg.image }});
+}})();
+</script>
+""".strip(),
+        unsafe_allow_html=True,
+    )

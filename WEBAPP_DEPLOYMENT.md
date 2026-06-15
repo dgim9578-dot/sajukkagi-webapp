@@ -121,7 +121,7 @@ PC에서 앱을 켠 뒤 **임시 공개 URL**을 만들려면:
    (jsDelivr·Streamlit `/app/static` 은 카카오 디버거에서 **Invalid URL** 또는 og 미인식)
 
    1. GitHub 저장소 → **Settings → Pages** → Source: **main** / Folder: **/docs** → Save  
-   2. 1~2분 후 공유·디버거 URL:
+   2. 1~2분 후 **공개·공유 URL** (카카오·SNS·명함 — 클릭 시 Streamlit 앱으로 자동 이동):
 
    `https://dgim9578-dot.github.io/sajukkagi-webapp/share-preview.html`
 

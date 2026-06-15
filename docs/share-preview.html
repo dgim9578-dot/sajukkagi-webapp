@@ -22,14 +22,25 @@
     main { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem 2rem; text-align: center; }
     img { width: 100%; max-width: 640px; border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.12); }
     a.btn { display: inline-block; margin-top: 1.25rem; padding: 0.85rem 1.4rem; background: #d4af37; color: #1a1208; font-weight: 800; text-decoration: none; border-radius: 12px; }
+    .hint { margin-top: 0.75rem; font-size: 0.95rem; color: #555; }
   </style>
 </head>
 <body>
   <main>
     <h1>사주까기 · 무료 사주풀이</h1>
-    <p>카카오톡 링크 미리보기용 페이지입니다.</p>
+    <p id="status">앱으로 이동 중입니다…</p>
     <img src="https://raw.githubusercontent.com/dgim9578-dot/sajukkagi-webapp/main/images/step01_hero_v2.png?v=hero-v2" width="640" height="336" alt="사주까기 배너" />
-    <p><a class="btn" href="https://sajukkagi-webapp-mmu8ovcnv3sldnnyiani35.streamlit.app/">앱으로 이동</a></p>
+    <p class="hint">자동으로 넘어가지 않으면 아래 버튼을 눌러 주세요.</p>
+    <p><a class="btn" id="app-link" href="https://sajukkagi-webapp-mmu8ovcnv3sldnnyiani35.streamlit.app/">앱으로 이동</a></p>
   </main>
+  <script>
+  (function () {
+    var app = "https://sajukkagi-webapp-mmu8ovcnv3sldnnyiani35.streamlit.app/";
+    var ua = (navigator.userAgent || "").toLowerCase();
+    var crawler = /bot|crawl|spider|slurp|kakao|facebook|twitter|slack|discord|telegram|whatsapp|preview|linkedin|yeti|naver/i.test(ua);
+    if (crawler) return;
+    window.location.replace(app);
+  })();
+  </script>
 </body>
 </html>

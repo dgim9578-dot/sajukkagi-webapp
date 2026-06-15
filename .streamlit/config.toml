@@ -26,6 +26,6 @@ toolbarMode = "minimal"
 
 # PWA: ``app.py`` 옆 ``static/`` → 브라우저에서는 ``/app/static/...`` (Streamlit 공식 경로)
 [server]
-# 휴대폰·태블릿에서 PC IP(예: http://192.168.x.x:8501)로 접속하려면 0.0.0.0 필요
-address = "0.0.0.0"
+# LAN 접속(로컬): 터미널에서 ``set STREAMLIT_SERVER_ADDRESS=0.0.0.0`` 후 실행.
+# Cloud 에서 address=0.0.0.0 을 두면 static 서빙이 깨질 수 있어 config 에 넣지 않는다.
 enableStaticServing = true

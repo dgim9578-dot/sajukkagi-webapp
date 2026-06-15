@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 _FORCE_SCROLL_OPTS_KEY = "_saju_force_scroll_opts"
 # parent 창 JS 와 Python 세션 키를 반드시 동일 숫자로 맞출 것 (불일치 시 구버전 JS 가 남아 멈춤·스크롤 미적용)
-_SCROLL_MGR_JS_VER = 93
+_SCROLL_MGR_JS_VER = 94
 
 
 def schedule_force_scroll_after_nav(
@@ -2019,9 +2019,18 @@ def inject_step_scroll_manager_once() -> None:
         sk = str(key)
         if sk.startswith("_saju_scroll_mgr_js_") or sk.startswith("_saju_scroll_mgr_v"):
             st.session_state.pop(key, None)
-    # st.markdown("<script>") 은 Streamlit 이 script 를 제거해 실행되지 않는 죽은 코드다.
-    # 게다가 빈 element-container 가 세로 flex gap 슬롯을 차지해 본문 상단 공백을 키운다.
-    # 스크롤은 inject_nav_scroll_tail_once(components.html iframe)가 담당하므로 주입하지 않는다.
+    # st.markdown("<script>") 은 Streamlit 이 script 를 제거하므로 components.html iframe 으로
+    # parent 전역 매니저(__sajuFitHomeSolar24Iframe, __sajuLockHomeViewportTop 등)를 1회 설치한다.
+    mgr_js = _SCROLL_MANAGER_JS.replace(
+        "__SCROLL_MGR_JS_VER__", str(_SCROLL_MGR_JS_VER)
+    )
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
+        f"<script>{mgr_js}</script></body></html>"
+    )
+    with st.container(key=f"saju_scroll_mgr_v{_SCROLL_MGR_JS_VER}"):
+        components.html(html, height=0, scrolling=False)
 
 
 _CALENDAR_LOCALE_NUDGE_JS = r"""
@@ -4105,7 +4114,7 @@ _STEP_NAV_CLICK_GUARD_JS = r"""
 
   ["pointerdown", "touchstart", "mousedown"].forEach(function (ev) {
     try {
-      doc.addEventListener(ev, onNavPointer, { capture: true, passive: true });
+      doc.addEventListener(ev, onNavPointer, true);
     } catch (e) {}
   });
 })();
@@ -4201,13 +4210,16 @@ def get_step_nav_from_step(*, target_step: int | None = None) -> int | None:
 
 
 def inject_step_nav_transition_early(*, target_step: int, from_step: int) -> None:
-    """STEP 이동 run — 라우터·푸터보다 먼저 pending·마운트 CSS 를 주입해 빈 화면을 막습니다."""
+    """STEP 이동 run — 라우터보다 먼저 pending 플래그만 주입(빈 화면 방지).
+
+    마운트 가시성 <style> 은 라우터 본문 뒤 1회만 주입한다.
+    여기서 also_show CSS 를 중복 주입하면 이전·새 마운트가 세로로 겹쳐 상단 공백이 생긴다.
+    """
     fs = max(1, min(12, int(from_step)))
     ts = max(1, min(12, int(target_step)))
     if fs == ts:
         return
     inject_step_nav_pending_flag(from_step=fs)
-    inject_router_step_mount_visibility_css(ts, also_show_step=fs)
 
 
 def inject_step_nav_pending_flag(*, from_step: int) -> None:
@@ -4570,8 +4582,42 @@ def inject_home_photo2_layout_css() -> None:
         return
     st.markdown(
         """
-<style id="saju-home-photo2-layout-v9">
+<style id="saju-home-photo2-layout-v10">
 /* 사진2 — 상단 flex-center 차단(스크롤 루트는 100dvh 유지) */
+/* Cloud: stHeader·block-container 상단 padding 제거 — 배너 최상단 밀착 */
+.stApp:has(.st-key-saju_landing_hero) header[data-testid="stHeader"],
+.stApp:has(.st-key-saju_router_step_mount_01) header[data-testid="stHeader"],
+.stApp:has(.st-key-saju_landing_hero) > header,
+.stApp:has(.st-key-saju_router_step_mount_01) > header {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  width: 0 !important;
+  z-index: -1 !important;
+}
+.stApp:has(.st-key-saju_landing_hero) .main .block-container,
+.stApp:has(.st-key-saju_router_step_mount_01) .main .block-container {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+.stApp:has(.st-key-saju_landing_hero) [data-testid="stAppViewContainer"],
+.stApp:has(.st-key-saju_landing_hero) [data-testid="stMainBlockContainer"] {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+.stApp:has(.st-key-saju_landing_hero) .st-key-saju_landing_hero,
+.stApp:has(.st-key-saju_landing_hero) #saju-home-hero-top,
+.stApp:has(.st-key-saju_landing_hero) .saju-home-hero-banner {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
 html:has(.st-key-saju_router_step_mount_01),
 html:has(.st-key-saju_router_step_mount_01) body,
 html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] > .main,
@@ -4808,7 +4854,10 @@ def inject_home_hero_pin_tail() -> None:
     inject_home_hero_pin_once(slot="tail")
 
 
-_HOME_VIEWPORT_LOCK_HTML = """
+_HOME_VIEWPORT_LOCK_HTML = """<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;height:0;overflow:hidden;">
 <script>
 (function () {
     const pw =
@@ -4864,6 +4913,8 @@ _HOME_VIEWPORT_LOCK_HTML = """
     } catch (eObs) {}
 })();
 </script>
+</body>
+</html>
 """
 
 

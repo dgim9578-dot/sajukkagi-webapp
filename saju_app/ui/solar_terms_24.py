@@ -599,11 +599,13 @@ def solar_term_frame_html(
 </svg>
 """.strip()
 
-    return f"""
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap" media="print" onload="this.media='all'" />
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap" /></noscript>
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body style="margin:0;padding:0;">
 <div id="{_hx(frame_id)}" class="saju-solar24-master" data-theme="hanji" role="region" aria-label="{_hx(t.name_ko)} 절기">
   <p class="s24-flow-title">24절기 에너지 흐름</p>
   <div class="s24-stage">
@@ -624,6 +626,7 @@ def solar_term_frame_html(
   <p class="s24-hint">기둥 위에 커서·손가락을 올리면 설명이 바로 표시됩니다</p>
 </div>
 <style>
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap");
 #{frame_id}.saju-solar24-master {{
   --s24-text: #3d2f1f;
   --s24-muted: rgba(61, 47, 31, 0.72);
@@ -964,6 +967,8 @@ def solar_term_frame_html(
   }} catch (e) {{}}
 }})();
 </script>
+</body>
+</html>
 """.strip()
 
 

@@ -21,16 +21,45 @@ def _project_static_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "static"
 
 
+def _streamlit_cloud_deploy() -> bool:
+    """Streamlit Community Cloud 등 배포 환경 여부(로컬 ``streamlit run`` 과 구분)."""
+    import os
+    from pathlib import Path
+
+    try:
+        import streamlit as st
+
+        flag = str(st.secrets.get("saju_deploy_inline_css", "")).strip().lower()
+        if flag in ("1", "true", "yes", "cloud", "inline"):
+            return True
+        if flag in ("0", "false", "no", "local", "link"):
+            return False
+    except Exception:
+        pass
+
+    if Path("/mount/src/app.py").is_file() or Path("/mount/src").is_dir():
+        return True
+
+    blob = " ".join(
+        str(os.environ.get(k, "") or "")
+        for k in (
+            "HOSTNAME",
+            "STREAMLIT_SERVER_ADDRESS",
+            "STREAMLIT_RUNTIME_ENV",
+            "STREAMLIT_SHARING",
+            "IS_STREAMLIT_CLOUD",
+        )
+    ).lower()
+    return "streamlit.app" in blob or "streamlit-cloud" in blob
+
+
 def _inject_bootstrap_global_css(head_html: str) -> None:
-    """거대한 정적 ``<style>`` 블록을 ``/app/static`` 의 캐시 가능한 .css 파일로 서빙하고
-    ``<link>`` 로 1회만 로드한다.
+    """거대한 정적 ``<style>`` 블록을 주입한다.
 
-    목적: 매 rerun(STEP 이동 등)마다 브라우저가 8천여 줄 CSS 문자열을 다시
-    파싱(rehype-raw)하던 비용을 제거해 화면 전환 체감을 줄인다. CSS 파일은
-    브라우저가 캐시하므로 이동 때마다 재다운로드·재파싱하지 않는다.
-
-    안전장치: 어떤 이유로든(파일 쓰기 실패, 구조 불일치 등) 실패하면 기존처럼
-    인라인 ``<style>`` 전체를 그대로 주입한다 → 스타일이 절대 사라지지 않는다.
+    로컬: ``/app/static/saju_bootstrap.css`` 링크(브라우저 캐시) 우선.
+    Cloud: ``enableStaticServing`` 이 배포 번들만 서빙하거나 링크가 404 HTML 을
+    돌려주면 MIME 오류로 **전역 CSS 전체가 미적용** → 상단 대공백·레이아웃 붕괴.
+    배포 환경에서는 항상 인라인 ``<style>`` 을 사용한다.
     """
     try:
         marker_open = "<style>"
@@ -51,11 +80,17 @@ def _inject_bootstrap_global_css(head_html: str) -> None:
             except OSError:
                 need_write = True
             if need_write:
-                css_path.write_text(css, encoding="utf-8")
+                try:
+                    css_path.write_text(css, encoding="utf-8")
+                except OSError:
+                    pass
             _bootstrap_css_state["hash"] = digest
+        # 항상 인라인 — Cloud 에서 /app/static/*.css 링크가 SPA HTML(text/html)을
+        # 반환하면 MIME 오류로 전역 CSS 전체가 미적용되어 상단 공백·레이아웃이 붕괴된다.
+        # static/ 파일은 og-share 등 다른 용도로만 동기화한다.
+        _ = _streamlit_cloud_deploy()
         st.markdown(
-            f'<link rel="stylesheet" href="/app/static/{_BOOTSTRAP_CSS_FILENAME}?v={digest}">'
-            + rest,
+            f'<style id="saju-bootstrap-global-{digest}">{css}</style>{rest}',
             unsafe_allow_html=True,
         )
     except Exception:
@@ -97,10 +132,31 @@ def inject_early_step_html_attrs() -> None:
             f'html[data-saju-step="{step}"] .main .block-container'
             f"{{padding-top:0!important;margin-top:0!important;min-height:0!important;}}"
             f"html.{home_cls} [data-testid='stAppViewContainer']>.main,"
-            f"html[data-saju-step=\"{step}\"] [data-testid='stAppViewContainer']>.main"
+            f"html[data-saju-step=\"{step}\"] [data-testid='stAppViewContainer']>.main,"
+            f"html.{home_cls} [data-testid='stMain'],"
+            f'html[data-saju-step="{step}"] [data-testid="stMain"],'
+            f"html.{home_cls} [data-testid='stMainBlockContainer'],"
+            f'html[data-saju-step="{step}"] [data-testid="stMainBlockContainer"]'
             f"{{min-height:0!important;height:auto!important;padding-top:0!important;"
             f"margin-top:0!important;display:block!important;"
-            f"justify-content:flex-start!important;align-items:stretch!important;}}</style>"
+            f"justify-content:flex-start!important;align-items:stretch!important;}}"
+            + (
+                "html.saju-home-step1 header[data-testid='stHeader'],"
+                "html[data-saju-step='1'] header[data-testid='stHeader'],"
+                "html.saju-home-step1 .stApp>header,"
+                "html[data-saju-step='1'] .stApp>header,"
+                "html.saju-home-step1 [data-testid='stToolbar'],"
+                "html[data-saju-step='1'] [data-testid='stToolbar'],"
+                "html.saju-home-step1 [data-testid='stDecoration'],"
+                "html[data-saju-step='1'] [data-testid='stDecoration']"
+                "{display:none!important;visibility:hidden!important;height:0!important;"
+                "min-height:0!important;max-height:0!important;margin:0!important;"
+                "padding:0!important;overflow:hidden!important;pointer-events:none!important;"
+                "position:absolute!important;width:0!important;}"
+                if step == 1
+                else ""
+            )
+            + "</style>"
             "<script>(function(){"
             "var e=document.documentElement;"
             f'e.setAttribute("data-saju-step","{step}");'
@@ -1200,7 +1256,7 @@ def configure_application() -> None:
     html.saju-home-step1 #saju-home-hero-top.saju-home-hero-banner,
     html[data-saju-step="1"] #saju-home-hero-top.saju-home-hero-banner {
         margin-top: 0 !important;
-        padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
+        padding-top: 0 !important;
     }
     html.saju-home-step1 .st-key-saju_landing_stack,
     html[data-saju-step="1"] .st-key-saju_landing_stack,
@@ -2631,11 +2687,12 @@ def configure_application() -> None:
     }
     .st-key-step1_cta_row_main .stButton > button:disabled,
     .st-key-step1_cta_row_main [data-testid="stFormSubmitButton"] > button:disabled {
-        background: transparent !important;
-        color: rgba(138, 109, 26, 0.55) !important;
-        border: none !important;
+        background: light-dark(#f3f4f6, #2a2a36) !important;
+        color: light-dark(rgba(91, 33, 182, 0.45), rgba(167, 139, 250, 0.45)) !important;
+        border: 2px solid light-dark(rgba(124, 58, 237, 0.25), rgba(167, 139, 250, 0.25)) !important;
         box-shadow: none !important;
     }
+    /* 재방문 — 보라 톤 보조 버튼 */
     .st-key-step1_cta_row_main .stButton > button,
     .st-key-step1_cta_row_main [data-testid="stFormSubmitButton"] > button,
     .st-key-step1_cta_row_main .stLinkButton > a {
@@ -2643,20 +2700,33 @@ def configure_application() -> None:
         max-width: 100% !important;
         min-height: clamp(2.45rem, 11vw, 3rem) !important;
         height: auto !important;
-        padding: 0.42rem 0.28rem !important;
-        font-size: clamp(10px, 2.85vw, 13px) !important;
+        padding: 0.42rem 0.65rem !important;
+        font-size: clamp(11px, 3vw, 14px) !important;
         font-weight: 800 !important;
         line-height: 1.22 !important;
-        letter-spacing: -0.045em !important;
+        letter-spacing: -0.03em !important;
         white-space: normal !important;
         word-break: keep-all !important;
         overflow-wrap: anywhere !important;
         border-radius: var(--saju-soft-radius) !important;
         box-sizing: border-box !important;
-        border: none !important;
-        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
-        color: light-dark(#8b6914, #f5e6a8) !important;
+        border: 2px solid light-dark(#7c3aed, #a78bfa) !important;
+        background: light-dark(#f5f0ff, #2a2240) !important;
+        color: light-dark(#5b21b6, #ede9fe) !important;
         box-shadow: none !important;
+    }
+    .st-key-step1_cta_row_main [data-testid="stForm"] {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.45rem !important;
+        width: 100% !important;
+    }
+    .st-key-step1_cta_row_main {
+        display: block !important;
+        position: relative !important;
+        margin-bottom: 0.15rem !important;
+        padding-bottom: 0.1rem !important;
+        isolation: isolate !important;
     }
     .st-key-step1_revisit_pin_row .stTextInput label {
         font-size: clamp(11px, 3vw, 13px) !important;
@@ -2692,23 +2762,32 @@ def configure_application() -> None:
     .st-key-step1_cta_row_free {
         width: 100% !important;
         max-width: 100% !important;
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.25rem !important;
+        margin-top: 0.75rem !important;
+        margin-bottom: 0.35rem !important;
         box-sizing: border-box !important;
         position: relative !important;
         clear: both !important;
+        display: block !important;
+        isolation: isolate !important;
     }
+    /* 메인 CTA — 골드 강조 */
     .st-key-step1_cta_row_free .stButton > button {
         width: 100% !important;
-        min-height: clamp(2.55rem, 11vw, 3.05rem) !important;
-        font-size: clamp(11px, 3vw, 14px) !important;
+        min-height: clamp(2.65rem, 12vw, 3.2rem) !important;
+        font-size: clamp(12px, 3.2vw, 15px) !important;
         font-weight: 800 !important;
-        white-space: nowrap !important;
+        white-space: normal !important;
+        word-break: keep-all !important;
         border-radius: var(--saju-soft-radius) !important;
-        border: none !important;
-        background: light-dark(var(--saju-soft-fill-hover), var(--saju-soft-fill-dark-hover)) !important;
-        color: light-dark(#8b6914, #f5e6a8) !important;
-        box-shadow: none !important;
+        border: 1px solid rgba(139, 105, 20, 0.55) !important;
+        background: linear-gradient(135deg, #f0d875 0%, #d4af37 42%, #b8922a 100%) !important;
+        color: #1a1208 !important;
+        box-shadow: 0 4px 14px rgba(201, 162, 39, 0.38) !important;
+    }
+    html.saju-dark-tone .st-key-step1_cta_row_free .stButton > button {
+        background: linear-gradient(135deg, #e8c547 0%, #c9a227 50%, #9a7518 100%) !important;
+        color: #1a1208 !important;
+        border-color: rgba(212, 175, 55, 0.65) !important;
     }
     .st-key-step1_revisit_pin_row .stButton > button {
         border: none !important;
@@ -8697,17 +8776,17 @@ def configure_application() -> None:
         margin-top: 0 !important;
         padding-top: 0 !important;
     }
-    /* PC·모바일 공통 — Streamlit 100dvh·flex 세로 가운데 정렬 차단 (사진1 상단 백화) */
+    /* PC·모바일 공통 — Streamlit flex 세로 가운데 정렬 차단 (상단 백화) */
     html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
     .stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] {
-        height: auto !important;
         min-height: 0 !important;
-        max-height: none !important;
         display: block !important;
         flex: none !important;
         justify-content: flex-start !important;
         align-items: stretch !important;
         align-content: flex-start !important;
+        padding-top: 0 !important;
+        margin-top: 0 !important;
     }
     html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] > .main,
     html:has(.st-key-saju_router_step_mount_01) section.main,
@@ -8899,7 +8978,7 @@ def configure_application() -> None:
        메인 CSS 맨 끝(최후위)에 배치해 권위 있게 덮어쓴다. */
     [data-testid="stMainBlockContainer"],
     .main .block-container {
-        padding-top: 0.3rem !important;
+        padding-top: 0 !important;
         margin-top: 0 !important;
     }
     /* 분석 카드(STEP3~10) 상단 패딩 축소 — 카드 안 첫 요소(즐겨찾기)가 위로 */
@@ -9121,6 +9200,81 @@ def configure_application() -> None:
     .st-key-step1_cta_row_main form {
         margin-bottom: 0 !important;
     }
+    /* STEP1 CTA — 모바일 WebView gap:0 덮어쓰기(버튼 겹침 방지) */
+    html.saju-platform-android .st-key-saju_landing_stack .st-key-step1_cta_row_main,
+    html.saju-platform-android .st-key-saju_landing_stack .st-key-step1_cta_row_free,
+    html.saju-platform-kakao .st-key-saju_landing_stack .st-key-step1_cta_row_main,
+    html.saju-platform-kakao .st-key-saju_landing_stack .st-key-step1_cta_row_free,
+    html.saju-platform-inapp .st-key-saju_landing_stack .st-key-step1_cta_row_main,
+    html.saju-platform-inapp .st-key-saju_landing_stack .st-key-step1_cta_row_free {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.45rem !important;
+        position: relative !important;
+        display: block !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }
+    html.saju-platform-android .st-key-step1_cta_row_free,
+    html.saju-platform-kakao .st-key-step1_cta_row_free,
+    html.saju-platform-inapp .st-key-step1_cta_row_free {
+        margin-top: 0.85rem !important;
+    }
+    /* ===== 비활성 STEP 마운트 래퍼(EC) — flex gap 상단 대공백 제거(핵심) =====
+       마운트 내부만 display:none 해도 ElementContainer 가 flex 슬롯을 차지해
+       현재 STEP 위에 빈 여백이 쌓인다. 현재 data-saju-step 과 일치하지 않는
+       마운트를 담은 EC 는 통째로 접는다(전환 pending 중엔 출발 STEP 유지). */
+    html[data-saju-step="1"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_01)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="2"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_02)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="3"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_03)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="4"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_04)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="5"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_05)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="6"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_06)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="7"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_07)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="8"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_08)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="9"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_09)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="10"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_10)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="11"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_11)):not(:has(.st-key-saju_global_bottom_chrome)),
+    html[data-saju-step="12"]:not([data-saju-nav-pending="1"]) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has([class*="st-key-saju_router_step_mount_"]):not(:has(.st-key-saju_router_step_mount_12)):not(:has(.st-key-saju_global_bottom_chrome)) {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        left: -99999px !important;
+        width: 0 !important;
+    }
+    /* STEP 전환·스크롤 유틸 iframe 컨테이너 — 본문 위 flex 슬롯 제거 */
+    [class*="st-key-saju_nav_pending_flag"],
+    [class*="st-key-saju_nav_scroll_tail"],
+    .st-key-saju_step_top_anchor,
+    [class*="st-key-saju_nav_pending_flag"] [data-testid="stCustomComponentV1"],
+    [class*="st-key-saju_nav_scroll_tail"] [data-testid="stCustomComponentV1"] {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        left: -99999px !important;
+        width: 0 !important;
+    }
+    .stApp:has([class*="st-key-saju_router_step_mount_"]) .main .block-container > [data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+        row-gap: 0 !important;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
     /* rerun 진행 표시(상단 러닝바·스피너)도 STEP 이동 깜빡임으로 보이므로 숨김 */
     [data-testid="stStatusWidget"],
     .stApp > div[data-testid="stStatusWidget"] {
@@ -9189,6 +9343,68 @@ def configure_application() -> None:
         height: auto !important;
         max-height: none !important;
         overflow: visible !important;
+    }
+
+    /* ===== 홈 배너 최상단 밀착 (Cloud·JS/html class 지연 무관, 최종 우선) =====
+       Streamlit Cloud: toolbar(stHeader) + block-container 기본 padding-top 이
+       배너 위 공백을 만든다. :has(히어로) 로 html class 없이도 즉시 적용. */
+    .stApp:has(.st-key-saju_landing_hero) .main .block-container,
+    .stApp:has(#saju-home-hero-top) .main .block-container,
+    .stApp:has(.saju-home-hero-banner) .main .block-container,
+    .stApp:has(.st-key-saju_router_step_mount_01) .main .block-container {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        scroll-padding-top: 0 !important;
+    }
+    .stApp:has(.st-key-saju_landing_hero) [data-testid="stAppViewContainer"],
+    .stApp:has(.st-key-saju_landing_hero) [data-testid="stAppViewContainer"] > .main,
+    .stApp:has(.st-key-saju_landing_hero) [data-testid="stMain"],
+    .stApp:has(.st-key-saju_landing_hero) [data-testid="stMainBlockContainer"],
+    .stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
+    .stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stMainBlockContainer"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    .stApp:has(.st-key-saju_landing_hero) header[data-testid="stHeader"],
+    .stApp:has(.st-key-saju_router_step_mount_01) header[data-testid="stHeader"],
+    .stApp:has(.st-key-saju_landing_hero) > header,
+    .stApp:has(.st-key-saju_router_step_mount_01) > header,
+    .stApp:has(.st-key-saju_landing_hero) [data-testid="stToolbar"],
+    .stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stToolbar"],
+    .stApp:has(.st-key-saju_landing_hero) [data-testid="stDecoration"],
+    .stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stDecoration"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 0 !important;
+        z-index: -1 !important;
+    }
+    .stApp:has(.st-key-saju_landing_hero) .st-key-saju_router_step_mount_01,
+    .stApp:has(.st-key-saju_landing_hero) .st-key-saju_landing_hero,
+    .stApp:has(.st-key-saju_landing_hero) #saju-home-hero-top,
+    .stApp:has(.st-key-saju_landing_hero) .saju-home-hero-banner,
+    .stApp:has(.st-key-saju_landing_hero) .saju-home-hero-banner__figure {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+    .stApp:has(.st-key-saju_landing_hero) .main .block-container > [data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+        row-gap: 0 !important;
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    .stApp:has(.st-key-saju_landing_hero) .main .block-container > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:first-child {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
     }
 </style>
 <script>

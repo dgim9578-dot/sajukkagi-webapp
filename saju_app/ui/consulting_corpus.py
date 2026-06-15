@@ -25,20 +25,74 @@ _CATEGORY_TOPIC: dict[str, str] = {
     "health": "health",
     "charm": "general",
     "move": "move",
+    "exam": "study",
+    "pregnancy": "health",
+    "sinsal": "sinsal",
+    "core": "general",
+}
+
+# infer_category / match 시 같은 주제로 묶는 카테고리
+_RELATED_CATEGORIES: dict[str, frozenset[str]] = {
+    "exam": frozenset({"exam"}),
+    "pregnancy": frozenset({"pregnancy", "health", "family"}),
+    "health": frozenset({"health", "pregnancy", "wellbeing", "family"}),
+    "wellbeing": frozenset({"wellbeing", "health"}),
+    "family": frozenset({"family", "health", "pregnancy"}),
+    "sinsal": frozenset({"sinsal"}),
+    "timing": frozenset({"timing"}),
+    "love": frozenset({"love"}),
+    "job": frozenset({"job", "exam"}),
+    "wealth": frozenset({"wealth"}),
+    "move": frozenset({"move"}),
+    "social": frozenset({"social"}),
+    "charm": frozenset({"charm"}),
+    "core": frozenset({"core"}),
+    "general": frozenset({"timing", "social", "charm", "core"}),
 }
 
 _STEP_DEFAULT_QUERY: dict[str, str] = {
-    "step3": "사주 원국 인생 방향 용신 기운",
-    "step4": "궁합 연애 결혼 관계",
-    "step5": "신살 역마 재살 인간관계 건강",
-    "step6": "오늘 운세 하루 흐름",
-    "step7": "주역 궁금한 일 방향",
-    "step8": "타로 질문 운세",
-    "step9": "대운 세운 흐름 올해",
-    "step10": "올해 총평 대운 인생 방향",
+    "step3": "사주 원국 일주 용신 기운 인생 방향",
+    "step4": "궁합 연애 결혼 재회 속마음",
+    "step5": "신살 도화 화개 역마 망신",
+    "step6": "오늘 운세 하루 흐름 중요한 결정",
+    "step7": "주역 궁금한 일 방향 타이밍",
+    "step8": "타로 질문 운세 연애 재물",
+    "step9": "대운 세운 올해 타이밍 이사 이직",
+    "step10": "올해 총평 대운 상반기 하반기",
     "step11": "상담 질문",
-    "mbti": "직업 적성 커리어 매력",
+    "mbti": "직업 적성 커리어 시험 진로",
 }
+
+# (STEP, 주제) → 코퍼스 검색어 — 전 화면 공통
+_STEP_TOPIC_QUERIES: dict[tuple[str, str], str] = {
+    ("step4", "궁합"): "궁합 연애 결혼 재회 천생연분 속마음",
+    ("step4", "love"): "궁합 연애 결혼 이별 재회",
+    ("step4", "결혼"): "결혼 시기 배우자 궁합",
+    ("step6", "재물"): "재물 돈 투자 오늘 운세",
+    ("step6", "연애"): "연애 썸 결혼 오늘 운세",
+    ("step6", "직장"): "직장 이직 커리어 오늘",
+    ("step6", "건강"): "건강 컨디션 피로 오늘",
+    ("step6", "공부"): "공부 시험 합격 자격증 오늘",
+    ("step10", "총평"): "올해 전체 운세 대운 방향",
+    ("step10", "건강"): "건강 컨디션 대운 회복",
+    ("step10", "연애"): "연애 결혼 올해 인연",
+    ("step10", "직장"): "이직 직장 커리어 올해",
+    ("step10", "재물"): "재물 돈 투자 올해",
+    ("step10", "시험"): "시험 합격 공부 올해",
+    ("step9", "이사"): "이사 이동 환경 변화 타이밍",
+    ("step9", "이직"): "이직 직장 커리어 타이밍",
+    ("step9", "결혼"): "결혼 시기 연애 배우자",
+    ("step9", "임신"): "임신 출산 준비 시기",
+    ("step9", "건강"): "건강 컨디션 회복",
+    ("step9", "재물"): "재물 투자 돈 타이밍",
+    ("step9", "연애"): "연애 인연 재회",
+    ("step9", "시험"): "시험 합격 공부 타이밍",
+    ("step5", "default"): "신살 도화 화개 역마",
+    ("step3", "default"): "원국 용신 일주",
+    ("mbti", "default"): "직업 적성 커리어 시험 진로",
+}
+
+CORPUS_MIN_SCORE = 14
 
 
 @dataclass(frozen=True)
@@ -133,14 +187,52 @@ def infer_category(query: str) -> str:
     text = str(query or "").strip()
     if not text:
         return "general"
+    if any(k in text for k in ("임신", "출산", "시험관", "난임", "둘째")):
+        return "pregnancy"
+    if any(k in text for k in ("신살", "도화", "화개", "역마", "망신", "홍염", "재살", "백호")):
+        return "sinsal"
+    if any(k in text for k in ("시험", "합격", "수능", "공무원", "자격증", "면접", "편입", "유학")):
+        return "exam"
+    if any(k in text for k in ("오늘", "이번달", "다음달", "신년", "월운", "2026", "이번 주", "타이밍")):
+        return "timing"
     topic = K.normalize_topic(text)
-    if topic in ("love", "job", "wealth", "health", "move", "study"):
+    if topic in ("love", "job", "wealth", "health", "move", "study", "sinsal"):
         rev = {v: k for k, v in _CATEGORY_TOPIC.items()}
         return rev.get(topic, "general")
     for cat, qa in _category_keyword_hits(text):
         if cat:
             return cat
     return "general"
+
+
+def _category_matches(entry_cat: str, filter_cat: str, score: int) -> bool:
+    if not filter_cat:
+        return True
+    if entry_cat == filter_cat:
+        return True
+    related = _RELATED_CATEGORIES.get(filter_cat, frozenset({filter_cat}))
+    if entry_cat in related:
+        return True
+    return score >= 15
+
+
+def query_for_step(apply: str, topic: str = "", **ctx: object) -> str:
+    """STEP·주제·사주 컨텍스트로 코퍼스 검색어 생성 (전 화면 공통)."""
+    step = str(apply or "").lower().strip()
+    top = str(topic or "").strip()
+    preset = _STEP_TOPIC_QUERIES.get((step, top))
+    if not preset and top:
+        preset = _STEP_TOPIC_QUERIES.get((step, "default"))
+    base = preset or _STEP_DEFAULT_QUERY.get(step, "사주 상담")
+    parts: list[str] = [base]
+    for key in ("ilju", "strength", "yongshin", "year", "ten", "branch_rel"):
+        val = ctx.get(key)
+        if val:
+            parts.append(str(val))
+    sins = ctx.get("unique_sins")
+    if sins:
+        parts.append(sinsal_consulting_query(list(sins)))  # type: ignore[arg-type]
+    return " ".join(p for p in parts if str(p).strip())
 
 
 def _category_keyword_hits(text: str) -> list[tuple[str, int]]:
@@ -155,29 +247,103 @@ def _category_keyword_hits(text: str) -> list[tuple[str, int]]:
     return sorted(scores.items(), key=lambda x: -x[1])
 
 
+def _query_tokens(query: str) -> set[str]:
+    q = str(query or "").strip().lower()
+    if not q:
+        return set()
+    tokens = set(re.findall(r"[가-힣]{2,}", q))
+    tokens.update(re.findall(r"[a-zA-Z]{2,}", q))
+    _syn = {
+        "남친": "연애",
+        "여친": "연애",
+        "애인": "연애",
+        "남자친구": "연애",
+        "여자친구": "연애",
+        "바람": "외도",
+        "불륜": "외도",
+        "헤어": "이별",
+        "이직": "직장",
+        "퇴사": "직장",
+        "승진": "직장",
+        "취업": "직장",
+        "창업": "사업",
+        "주식": "투자",
+        "코인": "투자",
+        "임신": "출산",
+        "합격": "시험",
+        "수능": "시험",
+        "자격증": "시험",
+        "공무원": "시험",
+        "면접": "시험",
+        "편입": "시험",
+        "유학": "시험",
+        "시험관": "출산",
+        "둘째": "출산",
+        "난임": "출산",
+        "도화": "도화살",
+        "화개": "화개살",
+        "역마": "역마살",
+        "망신": "망신살",
+        "홍염": "홍염살",
+        "신년": "운세",
+        "월운": "운세",
+        "일운": "운세",
+        "오늘": "운세",
+        "이번달": "운세",
+        "다음달": "운세",
+    }
+    for tok in list(tokens):
+        if tok in _syn:
+            tokens.add(_syn[tok])
+    return tokens
+
+
 def _score_entry(entry: ConsultingQA, query: str, *, apply: str | None) -> int:
     q = str(query or "").strip().lower()
     if not q:
         return 0
     score = 0
     if apply and entry.applies and apply.lower() not in entry.applies:
-        score -= 4
+        score -= 2
     q_norm = re.sub(r"\s+", "", q)
     eq_norm = re.sub(r"\s+", "", entry.question.lower())
     if eq_norm and (eq_norm in q_norm or q_norm in eq_norm):
         score += 80
+    tokens = _query_tokens(q)
     for kw in entry.keywords:
-        if len(kw) >= 2 and kw in q:
-            score += 8
-    for tok in re.findall(r"[가-힣]{2,}", q):
+        if len(kw) >= 2 and (kw in q or kw in tokens):
+            score += 10
+    eq_text = f"{entry.question} {entry.answer}".lower()
+    for tok in tokens:
+        if len(tok) < 2:
+            continue
         if tok in entry.question:
-            score += 5
-        if tok in entry.answer:
-            score += 1
+            score += 7
+        elif tok in entry.answer:
+            score += 3
+        elif tok in eq_text:
+            score += 2
     cat = infer_category(q)
     if cat == entry.category:
-        score += 6
+        score += 8
     return score
+
+
+def match_consulting_scored(
+    query: str,
+    *,
+    apply: str | None = None,
+    category: str | None = None,
+    limit: int = 2,
+) -> list[tuple[int, ConsultingQA]]:
+    """질문 매칭 점수와 함께 Q&A 반환."""
+    entries = match_consulting(query, apply=apply, category=category, limit=limit)
+    q = str(query or "").strip()
+    scored: list[tuple[int, ConsultingQA]] = []
+    for entry in entries:
+        scored.append((_score_entry(entry, q, apply=apply), entry))
+    scored.sort(key=lambda x: (-x[0], x[1].question))
+    return scored
 
 
 def match_consulting(
@@ -197,11 +363,12 @@ def match_consulting(
 
     scored: list[tuple[int, ConsultingQA]] = []
     for entry in load_consulting_qa():
-        if cat_filter and entry.category != cat_filter and _score_entry(entry, q, apply=apply) < 15:
-            continue
         sc = _score_entry(entry, q, apply=apply)
-        if sc > 0:
-            scored.append((sc, entry))
+        if sc <= 0:
+            continue
+        if cat_filter and not _category_matches(entry.category, cat_filter, sc):
+            continue
+        scored.append((sc, entry))
     scored.sort(key=lambda x: (-x[0], x[1].source, x[1].question))
     seen: set[str] = set()
     out: list[ConsultingQA] = []
@@ -266,10 +433,38 @@ def corpus_snippet_for_question(
     max_len: int = 900,
 ) -> str:
     """AI·규칙 답변에 넣을 발췌 텍스트."""
+    q = str(user_text or "").strip()
+    if not q:
+        q = query_for_step(str(apply or "step11"))
     return format_answers_plain(
-        match_consulting(user_text, apply=apply, limit=limit),
+        match_consulting(q, apply=apply, limit=limit),
         max_chars=max_len,
     )
+
+
+def direct_answer_scored_html(
+    user_text: str,
+    *,
+    apply: str = "step11",
+    min_score: int = CORPUS_MIN_SCORE,
+    max_answer_chars: int = 720,
+) -> str:
+    """점수 기준으로 가장 잘 맞는 Q&A 1건 HTML (챗봇·카드 공통)."""
+    ut = str(user_text or "").strip()
+    if not ut:
+        return ""
+    scored = match_consulting_scored(ut, apply=apply, limit=1)
+    if not scored:
+        return ""
+    sc, entry = scored[0]
+    if sc < int(min_score):
+        return ""
+    ans = str(entry.answer or "").strip()
+    if len(ans) < 40:
+        return ""
+    q_short = html.escape(entry.question[:80] + ("…" if len(entry.question) > 80 else ""))
+    body = html.escape(ans).replace("\n", "<br>")[:max_answer_chars]
+    return f"<i>현장 상담 Q. {q_short}</i><br><br>{body}"
 
 
 def direct_answer_html(
@@ -317,16 +512,17 @@ def render_consulting_panel(
 
 def sinsal_consulting_query(unique_sins: list[str]) -> str:
     """STEP5 신살 → 코퍼스 검색어."""
-    parts: list[str] = ["신살", "사주"]
+    parts: list[str] = ["신살", "도화", "화개", "역마", "사주"]
     mapping = {
-        "역마": "이사 이동 해외",
-        "재살": "재물 돈 투자",
-        "년살": "연애 인연 매력",
-        "도화": "연애 인연",
-        "화개": "마음 불안 고독",
+        "역마": "역마살 이사 이동 해외",
+        "재살": "재살 재물 돈 투자",
+        "년살": "도화살 연애 인연 매력",
+        "도화": "도화살 연애 바람 매력",
+        "화개": "화개살 예술 고독",
         "육해": "건강 스트레스 인간관계",
-        "망신": "인간관계 직장",
-        "겁살": "돈 손실",
+        "망신": "망신살 직장 구설",
+        "겁살": "돈 손실 동업",
+        "홍염": "홍염살 연애 감정",
     }
     for sin in unique_sins:
         for key, words in mapping.items():

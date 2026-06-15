@@ -4112,6 +4112,57 @@ _STEP_NAV_CLICK_GUARD_JS = r"""
 """
 
 
+def clear_step_nav_pending_now() -> None:
+    """STEP2 저장 실패 등 — 클릭 guard 가 켠 ``data-saju-nav-pending`` 을 즉시 해제."""
+    slot = int(st.session_state.get("_saju_clear_nav_pending_n", 0)) + 1
+    st.session_state["_saju_clear_nav_pending_n"] = slot
+    rid = int(st.session_state.get("reset_id", 0))
+    trigger_js = (
+        "(function(){"
+        "var pw=(window.parent&&window.parent!==window)?window.parent:window;"
+        "var doc=pw.document;if(!doc)return;"
+        "if(typeof pw.__sajuClearStepNavPending==='function'){pw.__sajuClearStepNavPending();return;}"
+        "try{doc.documentElement.removeAttribute('data-saju-nav-pending');}catch(e){}"
+        "})();"
+    )
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
+        f"<script>{trigger_js}</script></body></html>"
+    )
+    with st.container(key=f"saju_clear_nav_pending_{rid}_{slot}"):
+        components.html(html, height=0, scrolling=False)
+
+
+def inject_step2_validation_alert_scroll_once() -> None:
+    """STEP2 검증 실패 시 안내 박스가 보이도록 스크롤."""
+    if not st.session_state.pop("_step2_scroll_to_alert", False):
+        return
+    rid = int(st.session_state.get("reset_id", 0))
+    trigger_js = (
+        "(function(){"
+        "var pw=(window.parent&&window.parent!==window)?window.parent:window;"
+        "var doc=pw.document;if(!doc)return;"
+        "function scrollToAlert(){"
+        "var el=doc.querySelector('.st-key-step2_validation_alert,.st-key-step2_save_actions');"
+        "if(!el)return;"
+        "try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){"
+        "try{el.scrollIntoView(true);}catch(e2){}"
+        "}"
+        "}"
+        "scrollToAlert();"
+        "try{pw.setTimeout(scrollToAlert,120);}catch(e){}"
+        "})();"
+    )
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
+        f"<script>{trigger_js}</script></body></html>"
+    )
+    with st.container(key=f"saju_step2_alert_scroll_{rid}"):
+        components.html(html, height=0, scrolling=False)
+
+
 def inject_step_nav_click_guard_once() -> None:
     """STEP 이동 버튼 클릭 직후( rerun 대기 전) pending·출발 STEP 고정 — 빈 하단 네비 방지."""
     if st.session_state.get("_saju_step_nav_click_guard_v2"):

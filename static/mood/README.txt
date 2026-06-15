@@ -13,7 +13,7 @@
    - step03_mid_pillars.webp   STEP3 사주 원국(팔자) 위
    - step04_hero.webp          STEP4 궁합 상단
    - step04_mid_score.webp     STEP4 종합 궁합 점수 위
-   - step06_hero.webp          STEP6 오늘의 운세 상단
+   - step06_hero.webp          STEP6 오늘의 운세 상단 (전통 수묵 일러스트 와이드 배너)
    - step07_hero.webp          STEP7 주역 상단
    - step08_hero.webp          STEP8 타로 상단
    - step08_mid_spread.webp    STEP8 카드 장수 선택 위

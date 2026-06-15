@@ -281,6 +281,13 @@ def render_step3_aptitude_mbti_block(
 """,
             unsafe_allow_html=True,
         )
+        CC.render_consulting_panel(
+            f"{CC.mbti_consulting_query(mbti)} 시험 진로 합격",
+            apply="mbti",
+            title="📎 현장 상담 참고 (적성·진로·시험)",
+            expanded=False,
+            container_key="step3_mbti_consulting",
+        )
     else:
         if mbti and len(mbti) == 4 and mbti not in MBTI_16_TYPES:
             st.warning("MBTI는 INTJ, ENFP처럼 **알려진 16유형 코드**만 입력해 주세요.")

@@ -1,9 +1,45 @@
-﻿.gitignore
+﻿# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# Streamlit / secrets
+.streamlit/secrets.toml
+*.env
+.env.*
+
+# Local runtime data (개인정보·상담 기록)
 *.db
 saju_app.db
-*.env
-.DS_Store
+step2_form_prefill.json
+consultation_chat_archive.jsonl
+*.sqlite
+*.sqlite3
+
+# Logs & reports
 *.log
+scripts/pre_deploy_report.txt
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Frontend (Streamlit 배포에는 불필요 — 소스만 Git, 빌드 산출물 제외)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# Optional 3D briefing local cache
+.briefing-cache/

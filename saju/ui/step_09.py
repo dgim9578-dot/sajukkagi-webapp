@@ -10,6 +10,7 @@ from saju.core.engine import STEM_ELEMENT
 
 from saju_app.ui import action_timing as AT
 from saju_app.ui import analysis_favorite_memo as AFM
+from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import components as M
 from saju_app.ui import oheng_visuals as OV
 
@@ -115,6 +116,19 @@ def render() -> None:
                 yongshin=yongshin,
                 dae=dae,
             )
+
+        CC.render_consulting_panel(
+            CC.query_for_step(
+                "step9",
+                topic="총평",
+                yongshin=str(yongshin),
+                strength=str(engine9.get("strength", "")),
+            ),
+            apply="step9",
+            title="📎 현장 상담 참고 (올해·세운·타이밍)",
+            expanded=False,
+            container_key="step9_consulting_timing",
+        )
 
         st.caption(
             "※이사·결혼·임신·건강·재물 등 행동 타이밍은 세운·일지 참고용이며 의료·법률·투자 조언을 대체하지 않습니다."

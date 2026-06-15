@@ -18,10 +18,14 @@ import streamlit as st
 from saju.core.iching_64 import get_hexagram
 from saju_app.ui import analysis_favorite_memo as AFM
 from saju_app.ui import consulting_knowledge as K
+from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import components as M
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_STEP7_ICHING_BANNER = _PROJECT_ROOT / "images" / "주역점.png"
+_STEP7_ICHING_BANNER_SOURCES: tuple[Path, ...] = (
+    _PROJECT_ROOT / "images" / "주역점.png",
+    Path(r"C:\Users\Administrator\Desktop\사주프로\images\주역점.png"),
+)
 
 WAIT_TIME = 180
 
@@ -346,6 +350,12 @@ def _step7_consulting_html(user_question: str, *, engine: dict, juyeok_cat: str)
         daewoon_ten=daewoon_ten,
         gender=gender,
     )
+    corpus = CC.format_answers_plain(
+        CC.match_consulting(q, apply="step7", limit=1),
+        max_chars=520,
+    )
+    if corpus:
+        tip = f"{tip}\n\n{corpus}" if tip else corpus
 
     return tip
 
@@ -463,16 +473,17 @@ def _juyeok_storytelling(hx, user_question: str) -> str:
 
 def _step7_iching_banner_data_uri() -> str | None:
     """images/주역점.png → data URI."""
-    path = _STEP7_ICHING_BANNER
-    if not path.is_file():
-        return None
-    try:
-        mime, _ = mimetypes.guess_type(path.name)
-        mime = mime or "image/png"
-        data = base64.b64encode(path.read_bytes()).decode("ascii")
-        return f"data:{mime};base64,{data}"
-    except OSError:
-        return None
+    for path in _STEP7_ICHING_BANNER_SOURCES:
+        if not path.is_file():
+            continue
+        try:
+            mime, _ = mimetypes.guess_type(path.name)
+            mime = mime or "image/png"
+            data = base64.b64encode(path.read_bytes()).decode("ascii")
+            return f"data:{mime};base64,{data}"
+        except OSError:
+            continue
+    return None
 
 
 def _render_step7_iching_banner() -> None:
@@ -480,13 +491,11 @@ def _render_step7_iching_banner() -> None:
     uri = _step7_iching_banner_data_uri()
     if uri:
         st.markdown(
-            f'<figure class="saju-mood-hero step7-iching-banner" aria-hidden="false">'
+            f'<figure class="step7-iching-banner" aria-hidden="false">'
             f'<img src="{uri}" alt="오늘의 주역점" loading="eager" decoding="async" />'
             f"</figure>",
             unsafe_allow_html=True,
         )
-        return
-    if M.render_mood_image("step07_hero", variant="hero", alt="오늘의 주역"):
         return
     st.caption("배너 이미지를 찾을 수 없습니다. images/주역점.png 를 확인해 주세요.")
 

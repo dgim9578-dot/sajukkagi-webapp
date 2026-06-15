@@ -29,6 +29,12 @@ GitHub 업로드 준비:
 
 배포 전 `.streamlit/secrets.toml.example`을 참고해 Streamlit Secrets에 운영 값을 입력하세요. 자세한 절차는 `WEBAPP_DEPLOYMENT.md`를 참고하세요.
 
+한 번에 점검 + Git 안내:
+
+```powershell
+.\scripts\배포-업로드-준비.bat
+```
+
 ## 주요 환경값
 
 - `SAJU_ADMIN_ENABLED`: 공개 앱에서는 `false` 권장

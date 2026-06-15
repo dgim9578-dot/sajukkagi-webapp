@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import re
 import streamlit as st
 
 from saju_app.persistence import storage as saju_storage
@@ -414,6 +413,94 @@ def _storytelling_guidance_html(
     )
 
 
+_STEP11_PENDING_INPUT_KEY = "step11_pending_chat_input"
+
+
+def _append_step11_user_message(
+    room_key: str,
+    ui: str,
+    *,
+    u_name: str,
+) -> list[dict]:
+    """고객 입력 1건을 저장소·세션에 반영."""
+    rk = str(room_key or "").strip()
+    try:
+        raw_msgs, lab = saju_storage.get_shared_chat_room(rk)
+    except Exception:
+        raw_msgs, lab = [], None
+    msgs = dedupe_chat_messages(list(raw_msgs or []))
+    lab_out = dict(lab) if isinstance(lab, dict) else {}
+    inferred_type = _classify_consultation_type(ui)
+    lab_out.update(_step11_chat_label(u_name, inferred_type))
+    lab_out["ts"] = M.now_kst().isoformat(timespec="seconds")
+    if not tail_matches_user(msgs, ui):
+        msgs.append({"role": "user", "msg": ui, "is_manual": False})
+        st.session_state.shared_chat = list(msgs)
+        M._persist_shared_chat_bus(rk, msgs, lab_out)
+        try:
+            saju_storage.archive_append_record(
+                {
+                    "session_id": M.ensure_session_id(),
+                    "ts": M.now_kst().isoformat(timespec="seconds"),
+                    "role": "user",
+                    "content": ui,
+                    "u_name": u_name,
+                }
+            )
+        except Exception:
+            pass
+    return msgs
+
+
+def _flush_step11_pending_chat(
+    room_key: str,
+    *,
+    u_name: str,
+    engine: dict,
+    day_stem: str,
+    day_el: str,
+    yongshin: str,
+    strength: str,
+    gender: str,
+) -> None:
+    """제출된 고객 입력을 저장·AI 답변 생성(채팅 렌더 전)."""
+    ui = str(st.session_state.pop(_STEP11_PENDING_INPUT_KEY, "") or "").strip()
+    if not ui:
+        return
+    rk = str(room_key or "").strip()
+    if not rk:
+        st.session_state[_STEP11_PENDING_INPUT_KEY] = ui
+        return
+
+    _append_step11_user_message(rk, ui, u_name=u_name)
+    try:
+        _, lab = saju_storage.get_shared_chat_room(rk)
+    except Exception:
+        lab = None
+    lab_out = dict(lab) if isinstance(lab, dict) else {}
+
+    with st.spinner("맞춤 답변을 작성하고 저장하는 중…"):
+        reply = generate_saju_reply(
+            ui,
+            engine=engine,
+            day_stem=day_stem,
+            day_el=day_el,
+            yongshin=yongshin,
+            strength=strength,
+            gender=gender,
+        )
+        try:
+            raw2, _ = saju_storage.get_shared_chat_room(rk)
+        except Exception:
+            raw2 = []
+        msgs2 = dedupe_chat_messages(list(raw2 or []))
+        if not tail_matches_assistant(msgs2, reply):
+            msgs2.append({"role": "assistant", "msg": reply, "is_manual": False})
+            st.session_state.shared_chat = list(msgs2)
+            lab_out["ts"] = M.now_kst().isoformat(timespec="seconds")
+            M._persist_shared_chat_bus(rk, msgs2, lab_out)
+
+
 def _pull_step11_chat_from_storage(room_key: str) -> None:
     """저장소(SAJU 공유 방)의 최신 채팅을 세션·화면에 반영합니다. 관리자 답변 수신용."""
     rk = str(room_key or "").strip()
@@ -796,6 +883,16 @@ def render() -> None:
                 st.success("현재 상담 기록 삭제 요청을 처리했습니다.")
 
     st.markdown("### 💬 실시간 고객 채팅")
+    _flush_step11_pending_chat(
+        _chat_rk,
+        u_name=u_name,
+        engine=engine,
+        day_stem=day_stem,
+        day_el=day_el,
+        yongshin=yongshin,
+        strength=strength,
+        gender=u_gender,
+    )
     _render_step11_chat_messages()
 
     err = st.session_state.pop("_shared_chat_persist_error", None)
@@ -813,9 +910,6 @@ def render() -> None:
 
     public_settings = W.public_webapp_settings()
     kakao_url = str(public_settings.get("kakao_url") or "").strip()
-    phone = str(public_settings.get("phone") or "").strip() or "준비중"
-    tel_digits = re.sub(r"\D", "", phone)
-    tel_href = f"tel:{tel_digits}" if tel_digits else ""
 
     with st.container(key="step11_consult_strip"):
         st.caption("상담 연결")
@@ -839,23 +933,7 @@ def render() -> None:
                     key="step11_kakao_disabled",
                 )
         with c_phone:
-            if tel_href:
-                st.link_button(
-                    "📞\n전화상담",
-                    tel_href,
-                    use_container_width=True,
-                    type="primary",
-                    key="step11_phone_link",
-                    help=phone,
-                )
-            else:
-                st.button(
-                    "📞\n전화상담",
-                    use_container_width=True,
-                    disabled=True,
-                    key="step11_phone_disabled",
-                    help=phone,
-                )
+            W.render_consult_phone_tile()
         with c_qr:
             if st.button(
                 "🖼️\nQR문의",
@@ -865,6 +943,12 @@ def render() -> None:
                 st.session_state.step11_show_qr = not bool(
                     st.session_state.get("step11_show_qr", False)
                 )
+        _phone_hint, _tel = W.phone_tel_href()
+        if _tel:
+            st.caption(
+                "PC: 전화상담 칸에 보이는 번호로 휴대폰에서 직접 전화해 주세요. "
+                "휴대폰: 번호를 누르면 바로 연결됩니다."
+            )
 
     with st.container(key="step11_qr_panel"):
         if st.session_state.get("step11_show_qr") and M.QR_DATA:
@@ -896,50 +980,5 @@ def render() -> None:
     M.render_step11_inline_step_nav()
 
     if user_input and str(user_input).strip():
-        ui = str(user_input).strip()
-        try:
-            raw_msgs, lab = saju_storage.get_shared_chat_room(_chat_rk)
-        except Exception:
-            raw_msgs, lab = [], None
-        msgs = dedupe_chat_messages(list(raw_msgs or []))
-        lab_out = dict(lab) if isinstance(lab, dict) else {}
-        inferred_type = _classify_consultation_type(ui)
-        lab_out.update(_step11_chat_label(u_name, inferred_type))
-        lab_out["ts"] = M.now_kst().isoformat(timespec="seconds")
-        if not tail_matches_user(msgs, ui):
-            msgs.append({"role": "user", "msg": ui, "is_manual": False})
-            st.session_state.shared_chat = list(msgs)
-            M._persist_shared_chat_bus(_chat_rk, msgs, lab_out)
-            try:
-                saju_storage.archive_append_record(
-                    {
-                        "session_id": M.ensure_session_id(),
-                        "ts": M.now_kst().isoformat(timespec="seconds"),
-                        "role": "user",
-                        "content": ui,
-                        "u_name": u_name,
-                    }
-                )
-            except Exception:
-                pass
-        with st.spinner("맞춤 답변을 작성하고 저장하는 중…"):
-            reply = generate_saju_reply(
-                ui,
-                engine=engine,
-                day_stem=day_stem,
-                day_el=day_el,
-                yongshin=yongshin,
-                strength=strength,
-                gender=u_gender,
-            )
-            try:
-                raw2, _ = saju_storage.get_shared_chat_room(_chat_rk)
-            except Exception:
-                raw2 = []
-            msgs2 = dedupe_chat_messages(list(raw2 or []))
-            if not tail_matches_assistant(msgs2, reply):
-                msgs2.append({"role": "assistant", "msg": reply, "is_manual": False})
-                st.session_state.shared_chat = list(msgs2)
-                lab_out["ts"] = M.now_kst().isoformat(timespec="seconds")
-                M._persist_shared_chat_bus(_chat_rk, msgs2, lab_out)
-        return
+        st.session_state[_STEP11_PENDING_INPUT_KEY] = str(user_input).strip()
+        st.rerun()

@@ -985,7 +985,11 @@ def render_mood_image(
     uri = mood_image_data_uri(str(slug or "").strip())
     if not uri:
         return False
-    cls = "saju-mood-mid" if str(variant or "").strip().lower() == "mid" else "saju-mood-hero"
+    cls_map = {
+        "mid": "saju-mood-mid",
+        "step6": "saju-mood-step6-hero",
+    }
+    cls = cls_map.get(str(variant or "").strip().lower(), "saju-mood-hero")
     safe_alt = _hx(str(alt or slug or "mood"))
     st.markdown(
         f'<figure class="{cls}" aria-hidden="false">'
@@ -1041,11 +1045,9 @@ def get_johu_advice(month_branch: str | None) -> dict[str, Any]:
 
 
 def get_jukchunsu_advice(strength: str, yongshin: str) -> str:
-    if str(strength) == "신강":
-        return f"일간의 힘이 강하므로 재성·관성 활용이 중요하며, 특히 **{yongshin}**을 통해 과한 기운을 설기·제어하는 운용이 핵심입니다."
-    if str(strength) == "신약":
-        return f"일간의 힘이 약하므로 비겁·인성 보강이 우선이며, **{yongshin}**을 통해 체력을 보강하는 운용이 중요합니다."
-    return f"균형형 구조로, **{yongshin}**을 적절히 활용해 흐름을 유지하는 것이 관건입니다."
+    from saju_app.ui.plain_language import simplify_jukchunsu_advice
+
+    return simplify_jukchunsu_advice(strength, yongshin)
 
 
 def element_to_hanja(el: str) -> str:
@@ -1514,14 +1516,14 @@ _AUTOCOMPLETE_TEXT = "one-time-code"
 _AUTOCOMPLETE_OFF = "one-time-code"
 _AUTOCOMPLETE_PASSWORD = "new-password"
 _AUTOCOMPLETE_REVISIT_PIN = "one-time-code"
-_AUTOFILL_GUARD_VERSION = "v9"
+_AUTOFILL_GUARD_VERSION = "v11"
 _REVISIT_PIN_RULE_TEXT = "비밀번호는 숫자 특수문자 포함 6자 이상 설정 하세요"
 _REVISIT_PIN_RULE_TEXT_HOME = "비밀번호는 특수문자 포함 6자 이상 설정 하세요"
 
 _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
 <script>
 (() => {{
-    const GUARD_VER = "v9";
+    const GUARD_VER = "v11";
     const pw = window.parent !== window ? window.parent : window;
     const doc = pw.document;
     if (!doc) return;
@@ -1529,13 +1531,14 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
     pw.__sajuAutofillGuardVer = GUARD_VER;
     let queued = false;
     const randSuffix = () => Math.random().toString(36).slice(2, 10);
-    const isRevisitPinField = (el) => {{
+    const isMaskedSecretField = (el) => {{
         if (!el) return false;
         try {{
             return !!el.closest(
                 ".st-key-step1_cta_row_main, .st-key-step1_revisit_pin_in, " +
                     "[class*='st-key-step2_revisit_pin'], " +
-                    ".st-key-step2_revisit_pin, .st-key-step2_revisit_pin_confirm"
+                    ".st-key-step2_revisit_pin, .st-key-step2_revisit_pin_confirm, " +
+                    ".st-key-step12_admin_login_panel, .st-key-step12_admin_pwd_input"
             );
         }} catch (_) {{
             return false;
@@ -1566,7 +1569,7 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
             const ph = String(el.getAttribute("placeholder") || "");
             if (/\\d{{4}}\\/\\d{{2}}\\/\\d{{2}}/.test(ph)) return true;
             const keyCls = String(el.closest("[class*='st-key-']")?.className || "");
-            if (/bdate|contact|revisit|password|pin/i.test(keyCls)) return true;
+            if (/bdate|contact|revisit|password|pin|admin_pwd/i.test(keyCls)) return true;
         }} catch (_) {{}}
         return false;
     }};
@@ -1644,7 +1647,16 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
         ) {{
             return;
         }}
-        const revisit = isRevisitPinField(el);
+        const revisit = isMaskedSecretField(el);
+        if (revisit && type === "password") {{
+            try {{ el.type = "text"; }} catch (_) {{}}
+            type = "text";
+            el.dataset.sajuRevisitPin = "1";
+            try {{
+                el.style.setProperty("-webkit-text-security", "disc");
+                el.style.setProperty("text-security", "disc");
+            }} catch (_) {{}}
+        }}
         const sensitiveText =
             type !== "password" && (isCredentialSensitiveText(el) || revisit);
         let ac = "one-time-code";
@@ -1735,56 +1747,93 @@ _REVISIT_PIN_AUTOFILL_SCRIPT = """
     const pw = window.parent !== window ? window.parent : window;
     const doc = pw.document;
     if (!doc) return;
-    const selectors = [
-        ".st-key-step1_cta_row_main input[type=password]",
-        ".st-key-step1_revisit_pin_in input[type=password]",
-        ".st-key-step2_revisit_pin input[type=password]",
-        ".st-key-step2_revisit_pin_confirm input[type=password]",
-        '[class*="st-key-step2_revisit_pin"] input[type=password]',
-        'form[data-testid="stForm"] input[type=password][autocomplete="one-time-code"]',
+    const GUARD_VER = "v11";
+    if (pw.__sajuRevisitPinGuardVer === GUARD_VER) return;
+    pw.__sajuRevisitPinGuardVer = GUARD_VER;
+    const roots = [
+        ".st-key-step1_cta_row_main",
+        ".st-key-step1_revisit_pin_in",
+        ".st-key-step2_revisit_pin",
+        ".st-key-step2_revisit_pin_confirm",
+        '[class*="st-key-step2_revisit_pin"]',
+        ".st-key-step12_admin_login_panel",
+        ".st-key-step12_admin_pwd_input",
     ];
-    const patchRevisitPin = (el) => {{
-        if (!el || el.dataset.sajuRevisitPatched === "1") return;
-        el.dataset.sajuRevisitPatched = "1";
+    const isSecretMaskInput = (el) => {{
+        if (!el) return false;
+        try {{
+            return roots.some((sel) => !!el.closest(sel));
+        }} catch (_) {{
+            return false;
+        }}
+    }};
+    const patchSecretMaskInput = (el) => {{
+        if (!el || el.nodeType !== 1 || !isSecretMaskInput(el)) return;
+        const tag = String(el.tagName || "").toLowerCase();
+        if (tag !== "input") return;
+        let type = String(el.type || "text").toLowerCase();
+        if (type === "password") {{
+            try {{ el.type = "text"; }} catch (_) {{}}
+            type = "text";
+        }}
+        if (type !== "text" && type !== "search") return;
+        el.dataset.sajuRevisitPin = "1";
         el.setAttribute("autocomplete", "one-time-code");
         el.setAttribute("autocorrect", "off");
         el.setAttribute("autocapitalize", "off");
         el.setAttribute("spellcheck", "false");
+        el.setAttribute("aria-autocomplete", "none");
         el.setAttribute("data-1p-ignore", "true");
         el.setAttribute("data-lpignore", "true");
         el.setAttribute("data-bwignore", "true");
         el.setAttribute("data-form-type", "other");
+        el.setAttribute("data-saju-no-credential", "1");
         el.setAttribute("inputmode", "text");
         try {{
-            el.setAttribute(
-                "name",
-                "saju-revisit-pin-" + Math.random().toString(36).slice(2, 10)
-            );
+            el.style.setProperty("-webkit-text-security", "disc");
+            el.style.setProperty("text-security", "disc");
         }} catch (_) {{}}
+        if (!el.dataset.sajuFieldName) {{
+            el.dataset.sajuFieldName = "1";
+            try {{
+                el.setAttribute(
+                    "name",
+                    "saju-secret-" + Math.random().toString(36).slice(2, 10)
+                );
+            }} catch (_) {{}}
+        }}
+        if (el.dataset.sajuRevisitPatched === "1") return;
+        el.dataset.sajuRevisitPatched = "1";
         el.setAttribute("readonly", "readonly");
         const unlock = () => {{
             try {{ el.removeAttribute("readonly"); }} catch (_) {{}}
         }};
+        el.addEventListener("mousedown", unlock, {{ capture: true, passive: true }});
+        el.addEventListener("touchstart", unlock, {{ capture: true, passive: true }});
         el.addEventListener("focus", unlock, {{ passive: true }});
-        el.addEventListener("click", unlock, {{ passive: true }});
     }};
     const patchForms = () => {{
         try {{
-            doc.querySelectorAll('form[data-testid="stForm"]').forEach((form) => {{
+            doc.querySelectorAll("form").forEach((form) => {{
+                const hasSecret = roots.some((sel) => {{
+                    try {{ return !!form.querySelector(sel); }} catch (_) {{ return false; }}
+                }});
+                if (!hasSecret) return;
                 form.setAttribute("autocomplete", "off");
+                form.setAttribute("data-saju-secret-form", "1");
             }});
         }} catch (_) {{}}
     }};
     const run = () => {{
         patchForms();
-        selectors.forEach((sel) => {{
+        roots.forEach((sel) => {{
             try {{
-                doc.querySelectorAll(sel).forEach(patchRevisitPin);
+                doc.querySelectorAll(sel + " input").forEach(patchSecretMaskInput);
             }} catch (_) {{}}
         }});
     }};
     run();
-    [80, 220, 520, 1100].forEach((ms) => pw.setTimeout(run, ms));
+    [0, 80, 220, 520, 1100].forEach((ms) => pw.setTimeout(run, ms));
     try {{
         const root = doc.body || doc.documentElement;
         if (root && pw.MutationObserver) {{
@@ -1837,27 +1886,54 @@ def render_revisit_pin_rule_hint(*, compact: bool = False, home: bool = False) -
     )
 
 
+def inject_secret_mask_autofill_guard_once() -> None:
+    """재방문·관리자 등 — Chrome/Edge 「저장된 암호」 팝업 억제."""
+    rid = int(st.session_state.get("reset_id", 0))
+    guard_key = f"_saju_secret_mask_autofill_guard_{_AUTOFILL_GUARD_VERSION}_{rid}"
+    if st.session_state.get(guard_key):
+        return
+    st.session_state[guard_key] = True
+    inject_global_input_autofill_guard()
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"{_REVISIT_PIN_AUTOFILL_SCRIPT}</body></html>"
+    )
+    with st.container(key=f"saju_secret_mask_guard_{_AUTOFILL_GUARD_VERSION}_{rid}"):
+        components.html(html, height=1, scrolling=False)
+    st.markdown(_REVISIT_PIN_AUTOFILL_SCRIPT, unsafe_allow_html=True)
+
+
 def inject_revisit_pin_autofill_guard_once() -> None:
     """재방문 PIN — Chrome/Edge 「저장된 암호」 팝업 추가 억제."""
-    if st.session_state.get("_saju_revisit_pin_autofill_guard"):
-        return
-    st.session_state["_saju_revisit_pin_autofill_guard"] = True
-    st.markdown(_REVISIT_PIN_AUTOFILL_SCRIPT, unsafe_allow_html=True)
+    inject_secret_mask_autofill_guard_once()
 
 
 def revisit_pin_input_no_autofill(*args, **kwargs):
     """재방문 비밀번호 — 브라우저 저장 암호 팝업 강력 억제."""
-    inject_revisit_pin_autofill_guard_once()
-    kwargs["type"] = "password"
+    inject_secret_mask_autofill_guard_once()
     out = dict(kwargs)
+    # type=password 는 Chrome「저장된 암호」 팝업을 유발 → text + JS/CSS 마스킹
+    out.pop("type", None)
     out["autocomplete"] = _AUTOCOMPLETE_REVISIT_PIN
     try:
-        widget = st.text_input(*args, **out)
+        return st.text_input(*args, **out)
     except TypeError:
         out.pop("autocomplete", None)
-        widget = st.text_input(*args, **out)
-    inject_revisit_pin_autofill_guard_once()
-    return widget
+        return st.text_input(*args, **out)
+
+
+def admin_password_input_no_autofill(*args, **kwargs):
+    """관리자 비밀번호 — 브라우저 저장 암호 팝업 강력 억제."""
+    inject_secret_mask_autofill_guard_once()
+    out = dict(kwargs)
+    out.pop("type", None)
+    out["autocomplete"] = _AUTOCOMPLETE_REVISIT_PIN
+    try:
+        return st.text_input(*args, **out)
+    except TypeError:
+        out.pop("autocomplete", None)
+        return st.text_input(*args, **out)
 
 
 def text_area_no_autofill(*args, **kwargs):
@@ -1996,7 +2072,10 @@ def prepare_step_change_ui(*, dest: int | None = None) -> None:
 
 def queue_step2_save_and_analyze() -> None:
     """STEP2 하단 「다음 →」 — 저장·검증 후 STEP3(사주분석)으로 이동."""
-    st.session_state["_step2_queue_save"] = True
+    from saju.ui.step_02 import try_step2_save_from_session
+
+    if not try_step2_save_from_session():
+        st.session_state["_step2_clear_nav_pending"] = True
 
 
 def assign_step_and_rerun(
@@ -2481,35 +2560,62 @@ def ensure_engine_and_core(
 
     cached = st.session_state.get(eng_key)
     if st.session_state.get(sig_key) == sig_json and _engine_dict_coherent(cached):
-        return cached, {"ok": True}
+        eng = cached
+    else:
+        with st.spinner("사주 엔진을 준비하는 중…"):
+            eng = SajuEngine(
+                birth_year=by,
+                now=now_kst,
+                birth_solar=solar,
+                daewoon_first_start_age=int(dae.get("start_age", 0)),
+                daewoon_forward=bool(dae.get("forward", True)),
+            ).build(u_gapja, gender=str(gen))
+        st.session_state[eng_key] = eng
+        st.session_state[sig_key] = sig_json
 
-    with st.spinner("사주 엔진을 준비하는 중…"):
-        eng = SajuEngine(
-            birth_year=by,
-            now=now_kst,
-            birth_solar=solar,
-            daewoon_first_start_age=int(dae.get("start_age", 0)),
-            daewoon_forward=bool(dae.get("forward", True)),
-        ).build(u_gapja)
+    zi_boundary = str(opt.get("zi_boundary", "23:30") or "23:30")
+    try:
+        from saju_app.ui.saju_interpretation_core import build_step3_core
 
-    st.session_state[eng_key] = eng
-    st.session_state[sig_key] = sig_json
-    return eng, {"ok": True}
+        core = build_step3_core(
+            list(gapja_t),
+            eng,
+            gender=str(gen or ""),
+            birth_record=rec if isinstance(rec, (list, tuple)) else None,
+            birth_year=int(by),
+            zi_boundary=zi_boundary,
+        )
+    except Exception:
+        try:
+            from saju_app.ui.ilju_data import build_ilju_db
+
+            ilju_key = str(gapja_t[2] if len(gapja_t) > 2 else "").strip()
+            entry = build_ilju_db().get(ilju_key) if ilju_key else None
+            if isinstance(entry, dict):
+                core = {
+                    "ok": True,
+                    "ilju": ilju_key,
+                    "personality": str(entry.get("personality") or ""),
+                    "career": str(entry.get("career") or ""),
+                    "relationship": str(entry.get("relationship") or ""),
+                    "interpretation_200": "",
+                }
+            else:
+                core = {"ok": True}
+        except Exception:
+            core = {"ok": True}
+    return eng, core
 
 
 def _gapja_pillars_valid(g: object, *, min_pillars: int) -> bool:
-    """u_gapja가 리스트/튜플이고, 앞쪽 기둥들이 최소 길이·플레이스홀더가 아닌지 검사."""
+    """u_gapja가 리스트/튜플이고, 앞쪽 기둥들이 유효 간지(갑자 형)인지 검사."""
+    from saju.core.gapja_utils import is_valid_pillar
+
     mp = max(1, min(4, int(min_pillars)))
     if not isinstance(g, (list, tuple)) or len(g) < mp:
         return False
     for i in range(mp):
-        p = g[i]
-        if p is None:
-            return False
-        s = str(p).strip()
-        if len(s) < 2:
-            return False
-        if s in ("??", "모름", "?") or s.replace("?", "").strip() == "":
+        if not is_valid_pillar(g[i]):
             return False
     return True
 
@@ -2810,6 +2916,7 @@ def apply_step2_next_from_payload() -> bool:
         st.session_state["_personal_input_saved"] = True
         # 저장 직후 STEP3(사주분석)으로 이동 — prepare_step_change_ui 가 스크롤 플래그를 설정합니다.
         navigate_to_step(3)
+        return True
     except Exception as e:
         report_exception_to_streamlit(e, prefix="처리 중 오류")
         return False
@@ -2935,18 +3042,19 @@ def _partner_birth_from_p_data() -> tuple[int, int, int, str, bool, bool] | None
 
 
 def _partner_birth_tuple_from_session() -> tuple[int, int, int, str, bool, bool] | None:
-    """상대 생년월일·시·음양 — 위젯이 p_data와 다르면 위젯(최신 입력) 우선."""
-    widgets = _partner_birth_from_widgets()
+    """상대 생년월일·시·음양 — STEP2 저장(p_data) 우선, 수정 모드에서만 위젯 우선."""
     saved = _partner_birth_from_p_data()
-    if widgets and saved:
+    widgets = _partner_birth_from_widgets()
+    if saved and widgets:
         w_key = (widgets[0], widgets[1], widgets[2], widgets[3], widgets[4], widgets[5])
         s_key = (saved[0], saved[1], saved[2], str(saved[3]), bool(saved[4]), bool(saved[5]))
-        if w_key != s_key:
+        if w_key != s_key and step2_retain_form_allowed():
             return widgets
-    if widgets:
-        return widgets
+        return saved
     if saved:
         return saved
+    if widgets:
+        return widgets
     return None
 
 
@@ -3061,6 +3169,8 @@ def _invalidate_step4_partner_engine(u_gapja: object, p_gapja: object, p_name: s
 
 def sync_partner_gapja_for_match_analysis() -> bool:
     """STEP4: 저장된 상대 생년월일로 p_gapja를 재계산하고 엔진 캐시를 갱신합니다."""
+    from saju.core.gapja_utils import day_pillar_from_gapja, is_valid_pillar
+
     if not partner_is_registered():
         clear_partner_analysis_state()
         return False
@@ -3070,10 +3180,28 @@ def sync_partner_gapja_for_match_analysis() -> bool:
         return False
     birth = _partner_birth_for_step4()
     if not birth:
-        return ensure_partner_session_from_state()
+        ok = ensure_partner_session_from_state()
+        if ok and day_pillar_from_gapja(st.session_state.get("p_gapja")):
+            return True
+        return ok
     fresh = _apply_partner_birth_to_session(birth, p_name=pn)
-    if not fresh:
-        return False
+    if not fresh or not is_valid_pillar(fresh[2] if len(fresh) > 2 else None):
+        bundle = st.session_state.get("_step4_partner_bundle")
+        if isinstance(bundle, dict):
+            b_name = str(bundle.get("name") or "").strip()
+            gj = bundle.get("gapja")
+            if (
+                b_name == pn
+                and isinstance(gj, (list, tuple))
+                and _gapja_pillars_valid(gj, min_pillars=3)
+                and is_valid_pillar(gj[2])
+            ):
+                st.session_state.p_gapja = [str(x) for x in gj]
+                fresh = list(st.session_state.p_gapja)
+            else:
+                fresh = None
+        if not fresh:
+            return ensure_partner_session_from_state()
     store_step4_partner_bundle(p_name=pn, birth=birth, p_gapja=list(fresh))
     _invalidate_step4_partner_engine(st.session_state.get("u_gapja"), fresh, pn)
     return True

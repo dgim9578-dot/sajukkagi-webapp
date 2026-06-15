@@ -6,17 +6,17 @@
 # 본문 #E5E5E5 · 보조 강조 #A5B4FC (링크에 사용)
 
 [theme.light]
-# 라이트: 크림 베이스 + 골드 액센트 (다크와 쌍)
+# 라이트: 웜 아이보리 캔버스 + 골드 액센트 (노이즈·한지 질감 없이 가독성 우선)
 primaryColor = "#C9A227"
-backgroundColor = "#FFFDF8"
-secondaryBackgroundColor = "#FFF5E8"
+backgroundColor = "#FAF8F5"
+secondaryBackgroundColor = "#F3EFE8"
 textColor = "#1C1510"
 linkColor = "#8A6D1A"
 
 [theme.dark]
 primaryColor = "#D4AF37"
-backgroundColor = "#0A0A14"
-secondaryBackgroundColor = "#1A1A2E"
+backgroundColor = "#0A0A12"
+secondaryBackgroundColor = "#141422"
 textColor = "#E5E5E5"
 linkColor = "#A5B4FC"
 

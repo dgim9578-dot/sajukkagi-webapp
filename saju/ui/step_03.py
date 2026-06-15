@@ -21,6 +21,8 @@ from saju_app.ui.interpretation_layout import (
     render_structured_interpretation_block,
 )
 
+STEP3_UI_BUILD = "2026-05-31-ilju-v2"
+
 
 def _step3_health_tip_text(*, strength: str, max_el: str, min_el: str) -> str:
     """원국 기준 건강·체질 힌트."""
@@ -276,6 +278,16 @@ def render() -> None:
             )
 
         st.subheader("🌟 핵심 해석")
+        if core.get("has_hour"):
+            st.caption(
+                f"출생 시간 반영 · 시주 {M._hx(str(u_gapja[3]))} — "
+                "말년·저녁 리듬·세부 성격 해석 정밀도가 올라갔습니다."
+            )
+        else:
+            st.caption(
+                "출생 시간 미입력 — 3주(년·월·일) 기준 해석입니다. "
+                "STEP2에서 시간을 입력하면 시주까지 반영되어 말년·성격 세부 해석이 더 정밀해집니다."
+            )
         render_structured_interpretation_block(ix3, container_key="saju_ix")
         st.subheader("📖 요약 · 상세 레이어")
         tab_sum, tab_oheng, tab_johu, tab_yong = st.tabs(
@@ -331,3 +343,18 @@ def render() -> None:
                     ix3=ix3,
                     engine=engine,
                 )
+
+        _ilju3 = u_gapja[2] if len(u_gapja) > 2 else ""
+        CC.render_consulting_panel(
+            CC.query_for_step(
+                "step3",
+                topic="default",
+                ilju=_ilju3,
+                yongshin=str(yongshin),
+                strength=str(strength),
+            ),
+            apply="step3",
+            title="📎 현장 상담 참고 (원국·용신)",
+            expanded=False,
+            container_key="step3_consulting",
+        )

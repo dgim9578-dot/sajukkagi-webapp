@@ -12,6 +12,8 @@ import streamlit.components.v1 as components
 from saju_app.ui import components as M
 from saju_app.ui import execution as saju_execution
 
+STEP2_UI_BUILD = "2026-05-31-step2-next-fix"
+
 _STEP2_TIME_OPTIONS_FALLBACK: tuple[str, ...] = (
     "모름",
     "자(23:30~01:29)",
@@ -307,14 +309,37 @@ def _time_option_index(raw: object, *, time_options: list[str]) -> int:
 
 
 def _read_canonical_birth_time(time_key: str) -> str:
-    """저장·검증용 — 위젯 값 우선(「모름」 포함). 깨진 값만 checkpoint/last 복구."""
+    """저장·검증용 — 위젯 인덱스·canonical 문자열·checkpoint 순으로 복구."""
     opts = list(M.STEP2_TIME_OPTIONS)
+    idx_key = _time_widget_index_key(time_key)
+
+    if idx_key in st.session_state:
+        try:
+            from_idx = _time_label_from_index(
+                st.session_state.get(idx_key, 0),
+                time_options=opts,
+                time_key=time_key,
+            )
+            if from_idx in opts:
+                return from_idx
+        except Exception:
+            pass
+
     raw = st.session_state.get(time_key)
     if isinstance(raw, str) and raw in opts:
         return raw
     picked = coerce_step2_time_option(raw)
-    if picked in opts:
+    if picked in opts and picked != "모름":
         return picked
+    if picked in opts and picked == "모름":
+        for recovery_key in (
+            _time_rerun_checkpoint_key(time_key),
+            _time_last_selected_key(time_key),
+        ):
+            last = coerce_step2_time_option(st.session_state.get(recovery_key))
+            if last in opts and last != "모름":
+                return last
+        return "모름"
     checkpoint = coerce_step2_time_option(
         st.session_state.get(_time_rerun_checkpoint_key(time_key))
     )
@@ -323,15 +348,6 @@ def _read_canonical_birth_time(time_key: str) -> str:
     last = coerce_step2_time_option(st.session_state.get(_time_last_selected_key(time_key)))
     if last in opts:
         return last
-    idx_key = _time_widget_index_key(time_key)
-    if idx_key in st.session_state:
-        from_idx = _time_label_from_index(
-            st.session_state.get(idx_key, 0),
-            time_options=opts,
-            time_key=time_key,
-        )
-        if from_idx in opts:
-            return from_idx
     return "모름"
 
 
@@ -371,25 +387,36 @@ def _prepare_birth_time_select_state(*, time_key: str, time_options: list[str]) 
         st.session_state[_time_rerun_checkpoint_key(time_key)] = picked
 
 
-def _sync_birth_time_from_widget(*, time_key: str, time_options: list[str]) -> None:
-    """selectbox → canonical 문자열(u_time) 동기화."""
-    picked = _read_canonical_birth_time(time_key)
+def _sync_canonical_from_time_index(*, time_key: str, time_options: list[str]) -> str:
+    """selectbox 인덱스 → canonical 문자열(u_time). 위젯 key(idx)는 건드리지 않음."""
+    opts = list(time_options)
+    idx_key = _time_widget_index_key(time_key)
+    picked = "모름"
+    if idx_key in st.session_state:
+        try:
+            picked = opts[int(st.session_state[idx_key])]
+        except (TypeError, ValueError, IndexError):
+            picked = _read_canonical_birth_time(time_key)
+    else:
+        picked = _read_canonical_birth_time(time_key)
+    if picked not in opts:
+        picked = "모름"
     st.session_state[time_key] = picked
     if picked != "모름":
         st.session_state[_time_last_selected_key(time_key)] = picked
         st.session_state[_time_rerun_checkpoint_key(time_key)] = picked
+    return picked
+
+
+def _sync_birth_time_from_widget(*, time_key: str, time_options: list[str]) -> None:
+    _sync_canonical_from_time_index(time_key=time_key, time_options=time_options)
 
 
 def _birth_time_change_callback(*, time_key: str, time_options: list[str]):
-    """태어난 시간 — 선택 직후 마지막 유효값 기록."""
+    """태어난 시간 — 선택 직후 canonical·checkpoint 기록."""
 
     def _cb() -> None:
-        picked = coerce_step2_time_option(st.session_state.get(time_key))
-        if picked == "모름":
-            st.session_state.pop(_time_last_selected_key(time_key), None)
-            return
-        st.session_state[_time_last_selected_key(time_key)] = picked
-        st.session_state[_time_rerun_checkpoint_key(time_key)] = picked
+        _sync_canonical_from_time_index(time_key=time_key, time_options=time_options)
 
     return _cb
 
@@ -423,6 +450,16 @@ def _sanitize_time_session_before_widget(*, time_key: str, time_options: list[st
     _migrate_legacy_time_widget_key(time_key=time_key, time_options=opts)
     _import_legacy_time_index_to_label(time_key=time_key, time_options=opts)
 
+    idx_key = _time_widget_index_key(time_key)
+    if idx_key in st.session_state:
+        try:
+            from_idx = opts[int(st.session_state[idx_key])]
+            if from_idx in opts:
+                st.session_state[time_key] = from_idx
+                return
+        except (TypeError, ValueError, IndexError):
+            pass
+
     raw = st.session_state.get(time_key)
     if isinstance(raw, str) and raw in opts:
         return
@@ -432,6 +469,16 @@ def _sanitize_time_session_before_widget(*, time_key: str, time_options: list[st
         st.session_state[time_key] = coerced
         return
 
+    for recovery_key in (
+        _time_rerun_checkpoint_key(time_key),
+        _time_last_selected_key(time_key),
+    ):
+        last = coerce_step2_time_option(st.session_state.get(recovery_key))
+        if last in opts and last != "모름":
+            st.session_state[time_key] = last
+            st.session_state[idx_key] = opts.index(last)
+            return
+
     if time_key not in st.session_state:
         cur = _read_canonical_birth_time(time_key)
         st.session_state[time_key] = cur if cur in opts else "모름"
@@ -439,23 +486,30 @@ def _sanitize_time_session_before_widget(*, time_key: str, time_options: list[st
 
 def _render_birth_time_select(*, time_key: str, time_options: list[str]) -> None:
     opts = list(time_options)
+    idx_key = _time_widget_index_key(time_key)
     st.session_state.pop(_time_index_key(time_key), None)
 
     _sanitize_time_session_before_widget(time_key=time_key, time_options=opts)
 
+    # 위젯 key는 rerun마다 덮어쓰지 않음 — 모바일 선택 직후 「모름」으로 되돌아가는 원인
+    if idx_key not in st.session_state:
+        canonical = _read_canonical_birth_time(time_key)
+        st.session_state[time_key] = canonical if canonical in opts else "모름"
+        st.session_state[idx_key] = _time_option_index(
+            st.session_state[time_key], time_options=opts
+        )
+
     st.selectbox(
         "태어난 시간",
-        options=opts,
-        key=time_key,
+        options=list(range(len(opts))),
+        format_func=lambda i: opts[int(i)],
+        key=idx_key,
         on_change=_birth_time_change_callback(
             time_key=time_key, time_options=time_options
         ),
     )
 
-    picked = _read_canonical_birth_time(time_key)
-    if picked != "모름":
-        st.session_state[_time_last_selected_key(time_key)] = picked
-        st.session_state[_time_rerun_checkpoint_key(time_key)] = picked
+    _sync_canonical_from_time_index(time_key=time_key, time_options=opts)
 
 
 def _default_self_ymd() -> tuple[int, int, int]:
@@ -582,9 +636,11 @@ def _seed_step2_tab_widgets_if_needed() -> None:
     st.session_state.u_lunar = cal
     st.session_state.u_leap = leap
     st.session_state.u_time = coerce_step2_time_option(_default_self_time())
+    st.session_state.u_time_select_idx = _time_option_index(
+        st.session_state.u_time, time_options=list(M.STEP2_TIME_OPTIONS)
+    )
     st.session_state.pop("u_time_idx", None)
     st.session_state.pop("u_time_widget", None)
-    st.session_state.pop("u_time_select_idx", None)
     if st.session_state.u_time != "모름":
         st.session_state[_time_last_selected_key("u_time")] = st.session_state.u_time
     self_name = _default_self_name()
@@ -613,9 +669,11 @@ def _seed_step2_tab_widgets_if_needed() -> None:
         st.session_state.pop(_OPP_BDATE_KEY, None)
         pt = str(pd[3] or "모름")
         st.session_state.p_time = coerce_step2_time_option(pt)
+        st.session_state.p_time_select_idx = _time_option_index(
+            st.session_state.p_time, time_options=list(M.STEP2_TIME_OPTIONS)
+        )
         st.session_state.pop("p_time_idx", None)
         st.session_state.pop("p_time_widget", None)
-        st.session_state.pop("p_time_select_idx", None)
         if st.session_state.p_time != "모름":
             st.session_state[_time_last_selected_key("p_time")] = st.session_state.p_time
         st.session_state.p_lunar = "음력" if bool(pd[4]) else "양력"
@@ -707,20 +765,30 @@ def _collect_step2_payload_from_session() -> dict[str, object]:
     }
 
 
+def _resolve_self_name_for_save() -> str:
+    return str(
+        st.session_state.get(_SELF_NAME_INPUT_KEY)
+        or st.session_state.get("u_name")
+        or ""
+    ).strip()
+
+
 def _step2_show_validation_error(msg: str) -> None:
     st.session_state["_step2_top_alert"] = str(msg)
+    st.session_state["_step2_scroll_to_alert"] = True
 
 
-def _try_begin_step2_save() -> None:
-    self_nm = str(st.session_state.get(_SELF_NAME_INPUT_KEY) or "").strip()
+def try_step2_save_from_session() -> bool:
+    """STEP2 입력 검증·저장 후 STEP3 이동. 하단 「다음 →」 on_click 에서 호출."""
+    self_nm = _resolve_self_name_for_save()
     if not self_nm:
         _step2_show_validation_error("본인 이름을 입력해 주세요.")
-        return
+        return False
     if _parse_bdate_text(st.session_state.get(_SELF_BDATE_TEXT_KEY)) is None:
         _step2_show_validation_error(
             "본인 생년월일을 **YYYY/MM/DD** 형식으로 입력해 주세요. (예: 1995/01/01)"
         )
-        return
+        return False
     _sync_ymd_from_bdate_text(
         bdate_key=_SELF_BDATE_KEY, y_key="u_y", m_key="u_m", d_key="u_d"
     )
@@ -729,16 +797,19 @@ def _try_begin_step2_save() -> None:
         _step2_show_validation_error(
             "상대방 생년월일을 **YYYY/MM/DD** 형식으로 입력해 주세요. (예: 1990/05/15)"
         )
-        return
+        return False
     if opp_nm:
         _sync_ymd_from_bdate_text(
             bdate_key=_OPP_BDATE_KEY, y_key="p_y", m_key="p_m", d_key="p_d"
         )
+    _sync_birth_time_from_widget(time_key="u_time", time_options=list(M.STEP2_TIME_OPTIONS))
+    _sync_birth_time_from_widget(time_key="p_time", time_options=list(M.STEP2_TIME_OPTIONS))
     if not bool(st.session_state.get("agree", False)):
         _step2_show_validation_error(
-            "개인정보 수집·이용에 동의해 주세요. (필수 체크 후 「다음 →」)"
+            "개인정보 수집·이용에 **동의 체크**가 필요합니다. "
+            "아래 필수 항목을 체크한 뒤 「다음 →」를 눌러 주세요."
         )
-        return
+        return False
     payload = _collect_step2_payload_from_session()
     payload["u_name"] = self_nm
     payload["revisit_pin"] = str(st.session_state.get("step2_revisit_pin") or "").strip()
@@ -747,7 +818,13 @@ def _try_begin_step2_save() -> None:
     ).strip()
     st.session_state._step2_payload = payload
     st.session_state.pop("_step2_apply_error", None)
-    M.apply_step2_next_from_payload()
+    if not M.apply_step2_next_from_payload():
+        return False
+    return int(st.session_state.get("step", 2)) != 2
+
+
+def _try_begin_step2_save() -> None:
+    try_step2_save_from_session()
 
 
 def _on_lunar_change_self() -> None:
@@ -875,15 +952,16 @@ def render() -> None:
     if "reset_id" not in st.session_state:
         st.session_state.reset_id = 0
 
+    if st.session_state.pop("_step2_clear_nav_pending", False):
+        saju_execution.clear_step_nav_pending_now()
+
     if st.session_state.pop("_step2_queue_save", False):
-        _try_begin_step2_save()
-        # 하단 「다음 →」의 큐 저장은 on_click 이 아니라 STEP2 렌더 도중 실행된다.
-        # 저장이 성공해 다른 STEP(사주분석 등)으로 이동(step 변경)했는데도 이 run 에서
-        # 계속 STEP2 폼을 그리면, 라우터 마운트(mount_02)는 가시성 CSS 로 숨겨지고
-        # 이동 대상 마운트(mount_03)는 비어 있어 화면이 빈 채로 멈춘다(빈 화면 버그).
-        # 즉시 전체 rerun 해 라우터가 이동 대상 STEP 을 정상 렌더하도록 한다.
-        if int(st.session_state.get("step", 2)) != 2:
-            st.rerun(scope="app")
+        ok = try_step2_save_from_session()
+        if ok and int(st.session_state.get("step", 2)) != 2:
+            M.rerun_full_app()
+        elif not ok:
+            st.session_state["_step2_clear_nav_pending"] = True
+            saju_execution.clear_step_nav_pending_now()
 
     if st.session_state.pop("_step2_apply_pending", False):
         M.apply_step2_next_from_payload()
@@ -906,6 +984,7 @@ def render() -> None:
                 st.error(str(top_alert))
             elif apply_err:
                 st.error(str(apply_err))
+        saju_execution.inject_step2_validation_alert_scroll_once()
 
     st.markdown(
         """
@@ -977,6 +1056,11 @@ def render() -> None:
         )
 
     with st.container(key="step2_save_actions"):
+        if top_alert or apply_err:
+            st.warning(
+                "⚠️ 위 안내를 확인해 주세요. "
+                "**개인정보 동의(필수)** 체크 후 하단 **다음 →**를 눌러 주세요."
+            )
         st.checkbox(
             "개인정보 수집·이용에 동의합니다. (필수)",
             key="agree",

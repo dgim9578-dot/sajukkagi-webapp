@@ -228,8 +228,9 @@ def render() -> None:
                 f"현재 앱이 읽은 설정: **{pwd_source}** · **{len(admin_password)}자**. "
                 "다른 터미널(8501 일반 앱)만 켜 두었거나 `secrets.toml` 수정 후 재시작하지 않았을 수 있습니다."
             )
+        M.inject_secret_mask_autofill_guard_once()
         with st.container(key="step12_admin_login_panel"):
-            M.password_input_no_autofill(
+            M.admin_password_input_no_autofill(
                 "🔑 관리자 비밀번호",
                 key="step12_admin_pwd_input",
                 help="`.streamlit/secrets.toml` 또는 환경변수에 설정한 비밀번호를 입력하세요.",
@@ -365,6 +366,8 @@ def _render_step12_admin_panel() -> None:
             ):
                 try:
                     saju_storage.clear_shared_chat_room(selected)
+                    st.success("선택한 방의 채팅 기록을 비웠습니다.")
+                    st.rerun()
                 except Exception as e:
                     report_exception_to_streamlit(e, prefix="방 삭제")
                 st.session_state.pop("admin_selected_room", None)
@@ -476,18 +479,35 @@ def _render_step12_admin_panel() -> None:
 
     st.divider()
     st.subheader("⚠️ 시스템 초기화")
+    st.caption(
+        "위 **「이 방 기록 삭제」**는 선택한 방만 비웁니다. "
+        "아래 **「전체 채팅 목록 삭제」**는 등록된 **모든 상담 방**의 채팅·로그를 한 번에 삭제합니다."
+    )
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🧹 전체 채팅 기록 삭제(선택 방)", use_container_width=True, key="admin_clear_sel_room"):
-            rk = str(st.session_state.get("admin_selected_room") or "").strip()
-            if rk:
-                try:
-                    saju_storage.clear_shared_chat_room(rk)
-                except Exception as e:
-                    report_exception_to_streamlit(e, prefix="채팅 비우기")
-                st.success("선택한 방의 채팅 기록을 비웠습니다.")
-            else:
-                st.warning("선택된 방이 없습니다.")
+        confirm_all_rooms = st.checkbox(
+            "모든 상담 방의 채팅 기록을 삭제하는 것에 동의합니다",
+            key="admin_wipe_all_rooms_ack",
+        )
+        if st.button(
+            "🗑️ 전체 채팅 목록 삭제 (모든 방)",
+            type="primary",
+            use_container_width=True,
+            disabled=not confirm_all_rooms,
+            key="admin_clear_all_chat_rooms",
+        ):
+            try:
+                stats = saju_storage.clear_all_shared_chat_rooms(include_archive=True)
+                st.session_state.pop("admin_selected_room", None)
+                st.success(
+                    "모든 상담 방 채팅 기록을 삭제했습니다. "
+                    f"(SQLite 방 {int(stats.get('rooms_sqlite', 0))}건 · "
+                    f"Redis 방 {int(stats.get('rooms_redis', 0))}건 · "
+                    f"아카이브 {int(stats.get('archive_rows', 0))}건)"
+                )
+                st.rerun()
+            except Exception as e:
+                report_exception_to_streamlit(e, prefix="전체 채팅 삭제")
     with col2:
         confirm = st.checkbox("모든 고객 DB 삭제 승인", key="admin_wipe_customers_ack")
         if st.button(

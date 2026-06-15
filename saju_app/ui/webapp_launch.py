@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import os
+import re
 from typing import Any
 
 import streamlit as st
@@ -46,6 +47,41 @@ def _a_button(label: str, href: str, *, primary: bool = False) -> str:
         f'background:{bg};border:1px solid {border};color:{fg};font-weight:800;'
         'text-decoration:none;line-height:1.2;">'
         f"{html.escape(label)}</a>"
+    )
+
+
+def phone_tel_href() -> tuple[str, str]:
+    """표시용 번호와 ``tel:`` 링크. 번호가 없으면 ``('', '')``."""
+    phone = str(public_webapp_settings().get("phone") or "").strip()
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) < 8:
+        return phone or "준비중", ""
+    return phone, f"tel:{digits}"
+
+
+def render_consult_phone_tile(*, label: str = "📞\n전화상담") -> None:
+    """STEP11 상담 연결 — 번호 노출. 모바일만 탭 시 전화, PC는 번호 확인 후 직접 전화."""
+    phone, href = phone_tel_href()
+    if not href:
+        st.button(
+            label,
+            use_container_width=True,
+            disabled=True,
+            key="step11_phone_disabled",
+            help=phone or None,
+        )
+        return
+    safe_phone = html.escape(phone)
+    safe_href = html.escape(href, quote=True)
+    safe_label = html.escape(label)
+    st.markdown(
+        f'<div class="step11-consult-tile step11-consult-tile--phone" role="group" '
+        f'aria-label="전화상담 {safe_phone}">'
+        f'<span class="step11-phone-label">{safe_label}</span>'
+        f'<a class="step11-phone-num step11-phone-num--mobile" href="{safe_href}">{safe_phone}</a>'
+        f'<span class="step11-phone-num step11-phone-num--desktop">{safe_phone}</span>'
+        f"</div>",
+        unsafe_allow_html=True,
     )
 
 

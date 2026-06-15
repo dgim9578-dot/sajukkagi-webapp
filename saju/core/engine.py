@@ -5,8 +5,9 @@ from __future__ import annotations
 import datetime
 from collections.abc import Callable
 from typing import Any
-
 from zoneinfo import ZoneInfo
+
+from saju.core.gapja_utils import is_valid_pillar
 
 # ==================== 오행 매핑 ====================
 STEM_ELEMENT: dict[str, str] = {
@@ -221,7 +222,9 @@ def get_element_scores(u_gapja: list[str] | None) -> dict[str, int]:
     scores = {"木": 0, "火": 0, "土": 0, "金": 0, "水": 0}
 
     for i, g in enumerate(u_gapja or []):
-        if not g or len(g) < 2:
+        if not is_valid_pillar(g):
+            continue
+        if len(g) < 2:
             continue
         s, b = g[0], g[1]
 
@@ -258,30 +261,65 @@ def _detailed_ten_stem(user_stem: str, target_stem: str) -> str:
 
 def _pillar_ten_stem_counts(u_gapja: list[str]) -> tuple[int, int, int, int, int]:
     """일간 기준 천간 십성 요약(년·월·일·시)."""
+    counts = _ten_strength_counts(u_gapja)
+    return (
+        int(round(counts["jae"])),
+        int(round(counts["guan"])),
+        int(round(counts["sik"])),
+        int(round(counts["bigyeop"])),
+        int(round(counts["in_cnt"])),
+    )
+
+
+def _accum_ten_bucket(buckets: dict[str, float], ten: str, weight: float) -> None:
+    if weight <= 0:
+        return
+    if ten in ("정재", "편재"):
+        buckets["jae"] += weight
+    elif ten in ("정관", "편관"):
+        buckets["guan"] += weight
+    elif ten in ("식신", "상관"):
+        buckets["sik"] += weight
+    elif ten in ("비견", "겁재"):
+        buckets["bigyeop"] += weight
+    elif "인" in ten:
+        buckets["in_cnt"] += weight
+
+
+def _ten_strength_counts(u_gapja: list[str]) -> dict[str, float]:
+    """천간 십성 + 지지 지장간 가중치(원국 재물·혼인·커리어 개인화)."""
+    buckets: dict[str, float] = {
+        "jae": 0.0,
+        "guan": 0.0,
+        "sik": 0.0,
+        "bigyeop": 0.0,
+        "in_cnt": 0.0,
+    }
     if len(u_gapja) < 3 or not u_gapja[2]:
-        return 0, 0, 0, 0, 0
+        return buckets
+    try:
+        from saju.core.saju_engine import BRANCH_HIDDEN_GAN
+    except Exception:
+        BRANCH_HIDDEN_GAN = {}
+
     day_stem = u_gapja[2][0]
-    jae = guan = sik = bigyeop = in_cnt = 0
     for i in range(4):
-        g = u_gapja[i] if i < len(u_gapja) else ""
-        if not g or len(g) < 1:
+        if i >= len(u_gapja) or not is_valid_pillar(u_gapja[i]):
             continue
-        t = _detailed_ten_stem(day_stem, g[0])
-        if t in ("정재", "편재"):
-            jae += 1
-        elif t in ("정관", "편관"):
-            guan += 1
-        elif t in ("식신", "상관"):
-            sik += 1
-        elif t in ("비견", "겁재"):
-            bigyeop += 1
-        elif "인" in t:
-            in_cnt += 1
-    return jae, guan, sik, bigyeop, in_cnt
-
-
-def _clamp_life_score(n: float) -> int:
-    return max(2, min(10, int(round(n))))
+        g = u_gapja[i]
+        if len(g) < 1:
+            continue
+        _accum_ten_bucket(buckets, _detailed_ten_stem(day_stem, g[0]), 1.0)
+        if len(g) >= 2:
+            branch = g[1]
+            pos = 1.15 if i == 1 else (1.25 if i == 2 else 1.0)
+            for gan, w in BRANCH_HIDDEN_GAN.get(branch, []):
+                _accum_ten_bucket(
+                    buckets,
+                    _detailed_ten_stem(day_stem, gan),
+                    float(w) * 0.55 * pos,
+                )
+    return buckets
 
 
 def _engine_life_foci(
@@ -292,104 +330,33 @@ def _engine_life_foci(
     clash: int,
     timing: dict[str, Any],
     now_year: int,
+    gender: str = "",
+    day_stem: str = "",
+    day_el: str = "",
+    yongshin: str = "",
+    max_el: str = "",
+    min_el: str = "",
+    elements: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """STEP3 등 UI용 재물·혼인·커리어 점수/코멘트(원국·대운 휴리스틱, 참고용)."""
-    jae, guan, sik, bigyeop, _in_cnt = _pillar_ten_stem_counts(u_gapja)
-    st = str(strength or "중화")
-    try:
-        cmb = int(combine)
-    except (TypeError, ValueError):
-        cmb = 0
-    try:
-        clh = int(clash)
-    except (TypeError, ValueError):
-        clh = 0
+    """STEP3 등 UI용 재물·혼인·커리어 점수/코멘트(원국·대운·일간·성별 반영)."""
+    from saju.core.life_fortune import build_life_foci
 
-    w_raw = 5.0 + min(4.0, jae * 1.8)
-    if st == "신강" and bigyeop >= 2:
-        w_raw -= 1.5
-    if st == "신약" and jae >= 3:
-        w_raw -= 1.0
-    if cmb >= 2:
-        w_raw += 1.0
-    if clh >= 3:
-        w_raw -= 0.5
-
-    m_raw = 5.0 + min(3.0, guan * 1.2) + min(2.0, jae * 0.8)
-    if clh >= 3:
-        m_raw -= 1.5
-    if cmb >= 2:
-        m_raw += 1.0
-    if guan == 0 and jae >= 2:
-        m_raw -= 0.5
-
-    c_raw = 5.0 + min(3.5, guan * 1.1 + sik * 0.9)
-    if sik >= 2:
-        c_raw += 0.8
-    if guan >= 2:
-        c_raw += 0.5
-
-    ws = _clamp_life_score(w_raw)
-    ms = _clamp_life_score(m_raw)
-    cs = _clamp_life_score(c_raw)
-
-    if jae >= 2:
-        wc = (
-            "재성이 드러나 수입·자산 축이 분명한 편입니다. 흐름을 타면 누적이 잘 붙습니다."
-        )
-    elif jae == 0:
-        wc = "재가 약하게 보여 현금·저축 리듬을 스스로 설계하는 것이 유리합니다."
-    else:
-        wc = "재가 한두 축에 모여, 시기를 가려 쓰면 효율이 좋아지는 타입입니다."
-
-    age = int(timing.get("age") or 0)
-    phase = str(timing.get("phase") or "")
-    if age >= 34:
-        wc += " 30대 중반 이후 재물운이 급상승하는 구간으로도 읽힙니다."
-    elif "확장" in phase:
-        wc += " 지금 대운은 재물 축이 확장되기 쉬운 흐름입니다."
-
-    if guan >= 2:
-        mc = "관이 정돈되어 약속·책임이 인연의 핵심 테마로 읽히기 쉽습니다."
-    elif guan == 0:
-        mc = "관이 약해 형식보다 감정·자유로운 흐름을 선호할 수 있습니다. 맞춤이 필요합니다."
-    else:
-        mc = "관이 한두 곳에 있어, 관계에서 역할과 경계를 정하면 안정감이 커집니다."
-
-    if cmb >= 1 or guan >= 1:
-        if now_year <= 2029:
-            mc += " 2027~2029년 전후에 좋은 인연 가능성이 열리기 쉽습니다."
-        else:
-            mc += " 대운이 바뀌는 시기 전후에 인연 신호를 주목하면 좋습니다."
-    else:
-        mc += " 합·충이 맞물리는 해에 인연 운이 살아나기 쉽습니다."
-
-    if "성장" in phase or "확장" in phase:
-        cc = "현재 대운이 승진·이직에 비교적 유리한 흐름입니다. "
-    elif "시작" in phase:
-        cc = "새 출발·전환이 읽히는 대운으로, 직무 방향을 가볍게 넓히기 좋습니다. "
-    elif "조정" in phase or "정리" in phase:
-        cc = "정리·조정의 대운이라 이직보다는 내실 다지기에 유리합니다. "
-    else:
-        cc = ""
-
-    if guan + sik >= 3:
-        cc += "관·식상이 살아 직무·전문성에서 두각을 내기 좋은 조합입니다."
-    elif sik >= 2:
-        cc += "식상이 강해 창의·표현·기술로 밥그릇을 키우기 좋습니다."
-    elif guan >= 1:
-        cc += "관이 받쳐줘 조직·규범 안에서 성과를 쌓기 유리한 편입니다."
-    else:
-        cc += "다양한 축이 섞여, 한 가지 강점을 ‘주무기’로 고르는 전략이 이득입니다."
-
-    return {
-        "wealth_strength": str(ws),
-        "wealth_comment": wc.strip(),
-        "marriage_strength": str(ms),
-        "marriage_comment": mc.strip(),
-        "career_strength": str(cs),
-        "career_comment": cc.strip(),
-    }
+    return build_life_foci(
+        u_gapja,
+        strength=str(strength or "중화"),
+        combine=int(combine or 0),
+        clash=int(clash or 0),
+        timing=timing,
+        now_year=int(now_year),
+        gender=str(gender or ""),
+        day_stem=str(day_stem or ""),
+        day_el=str(day_el or ""),
+        yongshin=str(yongshin or ""),
+        max_el=str(max_el or ""),
+        min_el=str(min_el or ""),
+        elements=elements,
+        ten_counts=_ten_strength_counts(u_gapja),
+    )
 
 
 def _default_now_kst() -> datetime.datetime:
@@ -432,7 +399,7 @@ class SajuEngine:
                 return cls()
         return cls()
 
-    def build(self, u_gapja: list[str]) -> dict[str, Any]:
+    def build(self, u_gapja: list[str], *, gender: str | None = None) -> dict[str, Any]:
         """
         UI와 분리된 '단일 엔진 결과'를 제공합니다.
         - 오행 분포: get_element_scores 단일 사용
@@ -506,6 +473,7 @@ class SajuEngine:
             }
 
         timing_flow = get_timing_flow()
+        jae, guan, sik, bigyeop, in_cnt = _pillar_ten_stem_counts(u_gapja)
         life_foci = _engine_life_foci(
             u_gapja,
             strength=str(strength_result.get("strength", "중화")),
@@ -513,6 +481,13 @@ class SajuEngine:
             clash=int(strength_result.get("clash") or 0),
             timing=timing_flow,
             now_year=self._now().year,
+            gender=str(gender or ""),
+            day_stem=day_stem,
+            day_el=day_el,
+            yongshin=str(yong.get("yongshin") or "판단 필요"),
+            max_el=max_el,
+            min_el=min_el,
+            elements=elements,
         )
 
         return {
@@ -530,6 +505,11 @@ class SajuEngine:
             "strength_score": strength_result.get("score", 0),
             "clash": strength_result.get("clash", 0),
             "combine": strength_result.get("combine", 0),
+            "ten_jae": jae,
+            "ten_guan": guan,
+            "ten_sik": sik,
+            "ten_bigyeop": bigyeop,
+            "ten_in": in_cnt,
             "daewoon_first_start_age": d_start,
             "daewoon_forward": self._daewoon_forward,
             "get_ten": get_ten,

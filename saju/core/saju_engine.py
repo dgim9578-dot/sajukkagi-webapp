@@ -14,6 +14,7 @@ from saju.core.engine import (
     evaluate_month_power,
     get_relation,
 )
+from saju.core.gapja_utils import is_valid_pillar
 
 # 지지藏干(本·中·余 비중 근사) — 일간 득지(通根)·월령 보조에 사용
 BRANCH_HIDDEN_GAN: dict[str, list[tuple[str, float]]] = {
@@ -84,17 +85,28 @@ def calculate_strength(
     """
     신강약: 월령·천간·지지表 + 지지藏干 + (선택) 만세력 양력→음력 보조.
     """
+    if not u_gapja or len(u_gapja) < 3 or not is_valid_pillar(u_gapja[2]):
+        return {
+            "day_el": "木",
+            "score": 0.0,
+            "strength": "중화",
+            "clash": 0,
+            "combine": 0,
+        }
+
     day_stem = u_gapja[2][0]
     day_el = STEM_ELEMENT.get(day_stem)
 
     total_score = 0.0
 
-    month_branch = u_gapja[1][1]
-    month_result = evaluate_month_power(day_el, month_branch)
-    total_score += month_result["score"] * 2.5
-    total_score += _hidden_root_score(day_el, month_branch, 1)
+    month_branch = u_gapja[1][1] if is_valid_pillar(u_gapja[1]) else ""
+    if month_branch:
+        month_result = evaluate_month_power(day_el, month_branch)
+        total_score += month_result["score"] * 2.5
+        total_score += _hidden_root_score(day_el, month_branch, 1)
 
-    for i in [0, 2, 3]:
+    branch_indices = [i for i in (0, 2, 3) if i < len(u_gapja) and is_valid_pillar(u_gapja[i])]
+    for i in branch_indices:
         branch = u_gapja[i][1]
         el = BRANCH_ELEMENT.get(branch)
         relation = get_relation(day_el, el)
@@ -108,7 +120,9 @@ def calculate_strength(
         total_score += score_map.get(relation, 0)
         total_score += _hidden_root_score(day_el, branch, i)
 
-    for i in range(4):
+    for i in range(min(4, len(u_gapja))):
+        if not is_valid_pillar(u_gapja[i]):
+            continue
         stem = u_gapja[i][0]
         el = STEM_ELEMENT.get(stem)
         relation = get_relation(day_el, el)
@@ -121,10 +135,14 @@ def calculate_strength(
         }
         total_score += score_map.get(relation, 0)
 
-    branches = [u_gapja[i][1] for i in range(4)]
+    branches = [
+        u_gapja[i][1]
+        for i in range(min(4, len(u_gapja)))
+        if is_valid_pillar(u_gapja[i])
+    ]
     clash_cnt, combine_cnt, branch_score = check_branch_relation(branches)
     total_score += branch_score
-    total_score += _lunar_calendar_bonus(birth_solar, month_branch)
+    total_score += _lunar_calendar_bonus(birth_solar, month_branch) if month_branch else 0.0
 
     if total_score >= 3:
         strength = "신강"

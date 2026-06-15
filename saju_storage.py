@@ -1652,7 +1652,19 @@ def sqlite_clear_chat_room(conn, room_key: str) -> None:
     if not rk:
         return
     conn.execute("DELETE FROM chat_room WHERE room_key = ?", (rk,))
+    _ensure_global_chat_log_table(conn)
+    conn.execute("DELETE FROM global_chat_log WHERE room_key = ?", (rk,))
     conn.commit()
+
+
+@_with_sqlite
+def sqlite_clear_all_chat_rooms(conn) -> tuple[int, int]:
+    """모든 상담 방 + 공용 채팅 로그 행 삭제."""
+    cur_room = conn.execute("DELETE FROM chat_room")
+    _ensure_global_chat_log_table(conn)
+    cur_log = conn.execute("DELETE FROM global_chat_log")
+    conn.commit()
+    return int(cur_room.rowcount or 0), int(cur_log.rowcount or 0)
 
 
 @_with_sqlite
@@ -2282,8 +2294,29 @@ def redis_clear_chat_room(room_key: str) -> None:
     try:
         r.delete(_r_key_room_msgs(rk), _r_key_room_label(rk))
         r.srem(_R_KEY_ROOM_INDEX, rk)
+        r.hdel(_R_KEY_GLOBAL_CHAT_CURSOR, rk)
     except Exception as e:
         _redis_note_failure(e)
+
+
+def redis_clear_all_chat_rooms() -> int:
+    """Redis에 등록된 모든 상담 방·공용 채팅 로그 삭제."""
+    r = _redis_client()
+    if not r:
+        return 0
+    try:
+        keys = [str(k) for k in (r.smembers(_R_KEY_ROOM_INDEX) or [])]
+        if keys:
+            pipe = r.pipeline()
+            for rk in keys:
+                pipe.delete(_r_key_room_msgs(rk), _r_key_room_label(rk))
+            pipe.delete(_R_KEY_ROOM_INDEX)
+            pipe.execute()
+        r.delete(_R_KEY_GLOBAL_CHAT_LOG, _R_KEY_GLOBAL_CHAT_CURSOR)
+        return len(keys)
+    except Exception as e:
+        _redis_note_failure(e)
+        return 0
 
 
 def redis_kvs_get(key: str) -> str | None:
@@ -2841,6 +2874,38 @@ def clear_shared_chat_room(room_key: str) -> None:
     sqlite_clear_chat_room(room_key)
     if _redis_enabled():
         redis_clear_chat_room(room_key)
+
+
+def clear_all_shared_chat_rooms(*, include_archive: bool = True) -> dict[str, int]:
+    """모든 상담 방 채팅·공용 로그(및 선택 시 아카이브) 삭제."""
+    rooms_sqlite = 0
+    log_sqlite = 0
+    try:
+        rooms_sqlite, log_sqlite = sqlite_clear_all_chat_rooms()
+    except Exception:
+        log.exception("clear_all_shared_chat_rooms: sqlite failed")
+    rooms_redis = 0
+    if _redis_enabled():
+        rooms_redis = redis_clear_all_chat_rooms()
+    archive_rows = 0
+    if include_archive:
+        try:
+            archive_rows = int(sqlite_archive_clear_all() or 0)
+        except Exception:
+            log.exception("clear_all_shared_chat_rooms: sqlite archive failed")
+        if _redis_enabled():
+            try:
+                r = _redis_client()
+                if r:
+                    _redis_archive_clear_all_strict(r)
+            except Exception as e:
+                _redis_note_failure(e)
+    return {
+        "rooms_sqlite": rooms_sqlite,
+        "log_sqlite": log_sqlite,
+        "rooms_redis": rooms_redis,
+        "archive_rows": archive_rows,
+    }
 
 
 def list_chat_room_keys(limit: int = 500) -> list[str]:

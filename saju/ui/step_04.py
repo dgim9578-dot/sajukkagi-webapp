@@ -7,8 +7,14 @@ from datetime import datetime
 import streamlit as st
 
 from saju.core.engine import get_element_scores
+from saju.core.gapja_utils import (
+    day_pillar_from_gapja,
+    format_day_branch_rel_label,
+    ilju_parts_from_gapja,
+)
 
 from saju_app.ui import analysis_favorite_memo as AFM
+from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import components as M
 from saju_app.ui import pdf_utils
 from saju_app.ui import step4_match_analysis as M4
@@ -181,6 +187,12 @@ def _render_match_sections_batch(sections: list[tuple[str, str, str]]) -> None:
     )
 
 
+def _navigate_step2_for_partner() -> None:
+    M.prepare_step_change_ui()
+    st.session_state._return_step_after_input = 4
+    M.navigate_to_step(2)
+
+
 def render() -> None:
     M._resync_user_gapja_from_u_data()
     if not M.partner_is_registered():
@@ -195,6 +207,34 @@ def render() -> None:
     p_gapja = list(st.session_state.get("p_gapja") or []) if M.partner_is_registered() else []
     u_gender = st.session_state.get("u_gender", "남자")
     p_gender = st.session_state.get("p_gender", "여자")
+
+    if M.partner_is_registered() and p_gapja and not day_pillar_from_gapja(p_gapja):
+        M.sync_partner_gapja_for_match_analysis()
+        p_gapja = list(st.session_state.get("p_gapja") or [])
+
+    if (
+        M.partner_is_registered()
+        and p_gapja
+        and len(p_gapja) >= 3
+        and not day_pillar_from_gapja(p_gapja)
+    ):
+        _pn_gate = str(
+            st.session_state.get("partner_name_snapshot")
+            or st.session_state.get("p_name")
+            or "상대"
+        ).strip()
+        st.error(
+            f"상대방 **{M._hx(_pn_gate)}** 일주(일지)를 계산하지 못했습니다. "
+            "STEP2 **상대방정보**에서 생년월일·달력(양/음력)을 확인한 뒤 "
+            "**저장하고 사주 분석 시작**을 다시 눌러 주세요."
+        )
+        st.button(
+            "← 정보 입력(상대방)으로",
+            use_container_width=True,
+            key="step4_gate_partner_ilju",
+            on_click=_navigate_step2_for_partner,
+        )
+        return
 
     if not u_gapja or len(u_gapja) < 3:
         _, mid, _ = st.columns([1, 3, 1])
@@ -233,9 +273,7 @@ def render() -> None:
             "**저장하고 사주 분석 시작**을 눌러 주세요."
         )
         def _go_step2_partner_birth() -> None:
-            M.prepare_step_change_ui()
-            st.session_state._return_step_after_input = 4
-            M.navigate_to_step(2)
+            _navigate_step2_for_partner()
 
         st.button(
             "← 정보 입력(상대방)으로",
@@ -312,10 +350,8 @@ def render() -> None:
         p_max_el = M.element_to_hanja(p_max_el) or p_max_el
         p_min_el = M.element_to_hanja(p_min_el) or p_min_el
 
-        u_ilju = u_gapja[2] if len(u_gapja) > 2 else "甲子"
-        p_ilju = p_gapja[2] if len(p_gapja) > 2 else "甲子"
-        u_day_stem, u_day_branch = (u_ilju[0], u_ilju[1] if len(u_ilju) >= 2 else None)
-        p_day_stem, p_day_branch = (p_ilju[0], p_ilju[1] if len(p_ilju) >= 2 else None)
+        u_ilju, u_day_stem, u_day_branch = ilju_parts_from_gapja(u_gapja)
+        p_ilju, p_day_stem, p_day_branch = ilju_parts_from_gapja(p_gapja)
 
         u_spouse_el = (
             M.element_i_control(u_engine.get("day_el", "木"))
@@ -376,6 +412,9 @@ def render() -> None:
             get_ten_fn=M.get_detailed_ten_stem,
         )
         day_branch_rel = _mf.day_branch_rel
+        day_branch_rel_display = format_day_branch_rel_label(
+            str(day_branch_rel), u_day_branch, p_day_branch
+        )
         _ms = int(min(100, max(0, int(_mf.match_score))))
         _yong_harmony = (
             "강함"
@@ -408,6 +447,12 @@ def render() -> None:
             u_gender=str(u_gender),
             p_gender=str(p_gender),
             day_branch_rel=str(day_branch_rel),
+            day_branch_same=_mf.day_branch_same,
+            day_stem_he=_mf.day_stem_he,
+            mutual_sheng=_mf.mutual_sheng,
+            pillar_harmony=_mf.pillar_harmony,
+            pillar_conflict=_mf.pillar_conflict,
+            yin_yang_day=_mf.yin_yang_day,
             u_spouse_el=str(u_spouse_el),
             p_spouse_el=str(p_spouse_el),
             u_next_3=list(u_next_3),
@@ -435,7 +480,7 @@ def render() -> None:
 <div class="step4-metric-frame-grid">
   <div class="step4-metric-frame" style="--step4-tone:#F472B6;">
     <div class="step4-metric-title">일지 궁합</div>
-    <div class="step4-metric-value">{M._hx(str(day_branch_rel))}</div>
+    <div class="step4-metric-value">{M._hx(str(day_branch_rel_display))}</div>
   </div>
   <div class="step4-metric-frame" style="--step4-tone:#A78BFA;">
     <div class="step4-metric-title">천간합</div>
@@ -501,6 +546,14 @@ def render() -> None:
             _render_match_sections_batch(M4.tab_caution_sections(_mctx))
 
         st.divider()
+
+        CC.render_consulting_panel(
+            CC.query_for_step("step4", topic="궁합", ilju=u_ilju),
+            apply="step4",
+            title="💬 현장 상담 참고 (연애·궁합)",
+            expanded=False,
+            container_key="step4_consulting_love",
+        )
 
         st.subheader("🧭 결론 요약")
         c1, c2, c3 = st.columns(3)

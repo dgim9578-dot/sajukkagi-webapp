@@ -249,23 +249,49 @@ def build_gapja_master_chart_html(
     max_count = max(counts_norm.values()) or 1
 
     pillars_html: list[str] = []
+    raw_gapja = list(u_gapja or [])
     for idx, (_slot, han, kor) in enumerate(_SLOT_LABELS):
-        row = _pillar_row(meta, idx, list(u_gapja or []))
+        raw_p = str(raw_gapja[idx] if idx < len(raw_gapja) else "").strip()
+        is_unknown = not raw_p or raw_p == "모름" or len(raw_p) < 2
+        row = _pillar_row(meta, idx, raw_gapja)
         stem = row.get("stem") if isinstance(row.get("stem"), dict) else {}
         branch = row.get("branch") if isinstance(row.get("branch"), dict) else {}
         is_day = idx == 2
-        stem_ch = str(stem.get("char") or "?")
-        branch_ch = str(branch.get("char") or "?")
-        col = str(stem.get("color") or "#94a3b8")
+        stem_ch = "?" if is_unknown else str(stem.get("char") or "?")
+        branch_ch = "?" if is_unknown else str(branch.get("char") or "?")
+        col = "#64748b" if is_unknown else str(stem.get("color") or "#94a3b8")
         el = str(stem.get("element") or "")
         ten = str(stem.get("ten_god") or "")
         grad_id = f"{cid}_g{idx}"
         pillar_cls = "saju-mc-pillar saju-mc-pillar--day" if is_day else "saju-mc-pillar"
-        el_name = str(stem.get("element_name") or saju_storage.ELEMENT_COLORS.get(el, {}).get("name", ""))
-        ten_line = (
-            f'<div class="saju-mc-ten">{_hx(ten)}</div>' if ten else ""
+        if is_unknown:
+            pillar_cls += " saju-mc-pillar--unknown"
+        el_name = "—" if is_unknown else str(
+            stem.get("element_name") or saju_storage.ELEMENT_COLORS.get(el, {}).get("name", "")
         )
+        ten_cls = "saju-mc-ten saju-mc-ten--empty" if not ten else "saju-mc-ten"
+        ten_line = f'<div class="{ten_cls}">{_hx(ten) if ten else "&nbsp;"}</div>'
+        if is_unknown:
+            glyph_block = (
+                f'<text x="36" y="108" text-anchor="middle" '
+                f'class="saju-mc-glyph saju-mc-glyph--unknown">{_hx("모름")}</text>'
+            )
+        else:
+            glyph_block = (
+                f'<text x="36" y="78" text-anchor="middle" class="saju-mc-glyph">{_hx(stem_ch)}</text>'
+                f'<text x="36" y="138" text-anchor="middle" '
+                f'class="saju-mc-glyph saju-mc-glyph--branch">{_hx(branch_ch)}</text>'
+            )
         popover = _popover_html(row, kor=kor, han=han, is_day=is_day)
+        if is_unknown:
+            popover = f"""
+    <div class="saju-mc-popover" role="tooltip">
+      <p class="saju-mc-pop-title">{_hx(kor)} · {_hx(han)}</p>
+      <div class="saju-mc-pop-block">
+        <p class="saju-mc-pop-note">시주(時柱) 정보가 없습니다. 태어난 시간을 입력하면 시주 해석이 추가됩니다.</p>
+      </div>
+    </div>
+    """
         pillars_html.append(
             f"""
             <div class="{pillar_cls}" style="--mc-color:{_hx(col)};" tabindex="0" data-pillar-idx="{idx}">
@@ -280,8 +306,7 @@ def build_gapja_master_chart_html(
                   </linearGradient>
                 </defs>
                 <rect x="14" y="8" width="44" height="184" rx="10" fill="url(#{grad_id})" stroke="{_hx(col)}" stroke-opacity="0.55" stroke-width="1.2"/>
-                <text x="36" y="78" text-anchor="middle" class="saju-mc-glyph">{_hx(stem_ch)}</text>
-                <text x="36" y="138" text-anchor="middle" class="saju-mc-glyph saju-mc-glyph--branch">{_hx(branch_ch)}</text>
+                {glyph_block}
               </svg>
               {ten_line}
               <div class="saju-mc-el">{_hx(el_name)}</div>
@@ -340,6 +365,7 @@ def build_gapja_master_chart_html(
     <button type="button" class="saju-mc-theme-btn {hanji_active}" data-theme-set="hanji">한지 · 전통</button>
   </div>
   <canvas class="saju-mc-canvas" aria-hidden="true"></canvas>
+  <div class="saju-mc-stage-wrap">
   <div class="saju-mc-stage">
     <svg class="saju-mc-ring" viewBox="0 0 400 400" aria-hidden="true">
       <circle cx="200" cy="200" r="156" fill="none" stroke="rgba(212,175,55,0.2)" stroke-width="1"/>
@@ -359,8 +385,9 @@ def build_gapja_master_chart_html(
       {''.join(oheng_bars)}
     </svg>
   </div>
+  </div>
   <div class="saju-mc-mobile-dock" id="{cid}_dock" aria-hidden="true" role="region" aria-label="기둥 상세 설명"></div>
-  <p class="saju-mc-hint">기둥 위에 손가락·커서를 올리면 설명이 바로 표시됩니다</p>
+  <p class="saju-mc-hint">기둥을 탭(클릭)하면 아래에 설명이 표시됩니다</p>
 </div>
 <style>
 #{cid}.saju-master-chart {{
@@ -384,6 +411,8 @@ def build_gapja_master_chart_html(
   border: 1px solid var(--mc-border);
   box-shadow: 0 12px 40px rgba(0,0,0,0.35), inset 0 0 60px rgba(212,175,55,0.06);
   font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
 }}
 #{cid}.saju-master-chart[data-theme="hanji"] {{
   --mc-text: #3d2f1f;
@@ -420,6 +449,11 @@ def build_gapja_master_chart_html(
 }}
 #{cid} .saju-mc-canvas {{
   position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;
+}}
+#{cid} .saju-mc-stage-wrap {{
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }}
 #{cid} .saju-mc-stage {{
   position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
@@ -474,12 +508,18 @@ def build_gapja_master_chart_html(
   gap: 0.15rem;
   width: 78%;
   max-width: 380px;
-  align-items: end;
+  align-items: start;
   padding-bottom: 12%;
   overflow: visible;
 }}
 #{cid} .saju-mc-pillar {{
-  text-align: center; min-width: 0; position: relative; cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+  position: relative;
+  cursor: pointer;
   outline: none;
   -webkit-tap-highlight-color: rgba(212, 175, 55, 0.25);
   touch-action: manipulation;
@@ -491,17 +531,20 @@ def build_gapja_master_chart_html(
 #{cid} .saju-mc-pillar.is-pop-open .saju-mc-pillar-svg {{
   filter: drop-shadow(0 0 16px var(--mc-color));
 }}
-#{cid} .saju-mc-mobile-dock {{
-  display: none;
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  #{cid} .saju-mc-mobile-dock {{
+    display: none;
+    position: relative;
+    flex: 0 0 auto;
+    order: 3;
+  left: auto;
+  right: auto;
+  bottom: auto;
   z-index: 80;
-  max-height: min(46vh, 280px);
+  max-height: none;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  margin: 0 8px 8px;
   padding: 0.65rem 0.75rem;
   border-radius: 12px;
   background: var(--mc-pop-bg);
@@ -510,8 +553,19 @@ def build_gapja_master_chart_html(
   color: var(--mc-text);
   text-align: left;
 }}
-#{cid}.has-mobile-dock-open .saju-mc-mobile-dock {{
+#{cid}.has-mobile-dock-open .saju-mc-mobile-dock,
+#{cid} .saju-mc-mobile-dock.is-visible {{
   display: block;
+}}
+#{cid}.has-mobile-dock-open {{
+  height: auto;
+  min-height: clamp(480px, 92vw, 560px);
+}}
+#{cid}.has-mobile-dock-open .saju-mc-pillar .saju-mc-popover {{
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }}
 #{cid} .saju-mc-pillar:hover,
 #{cid} .saju-mc-pillar:focus-visible {{
@@ -527,6 +581,7 @@ def build_gapja_master_chart_html(
 #{cid} .saju-mc-pillar--day .saju-mc-pillar-svg {{
   filter: drop-shadow(0 0 12px var(--mc-color));
   transform: scale(1.06);
+  transform-origin: top center;
 }}
 #{cid} .saju-mc-popover {{
   position: absolute;
@@ -651,9 +706,32 @@ def build_gapja_master_chart_html(
 #{cid}[data-theme="hanji"] .saju-mc-glyph--branch {{ fill: #5c4030; }}
 #{cid} .saju-mc-ten {{
   font-size: 9px; color: rgba(212, 175, 55, 0.9); margin-top: 2px;
+  min-height: 14px;
+  line-height: 14px;
+}}
+#{cid} .saju-mc-ten--empty {{
+  visibility: hidden;
 }}
 #{cid}[data-theme="hanji"] .saju-mc-ten {{ color: #8b5a2b; }}
-#{cid} .saju-mc-el {{ font-size: 9px; color: var(--mc-muted); }}
+#{cid} .saju-mc-el {{
+  font-size: 9px; color: var(--mc-muted);
+  min-height: 14px;
+  line-height: 14px;
+}}
+#{cid} .saju-mc-glyph--unknown {{
+  font-size: 15px;
+  fill: rgba(240, 230, 200, 0.82);
+}}
+#{cid}[data-theme="hanji"] .saju-mc-glyph--unknown {{ fill: #5c4030; }}
+#{cid} .saju-mc-hint {{
+  order: 4;
+  flex: 0 0 auto;
+  margin: 0 10px 10px;
+  font-size: 10px;
+  color: var(--mc-muted);
+  text-align: center;
+  line-height: 1.4;
+}}
 #{cid} .saju-mc-center {{
   position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
   z-index: 4; text-align: center; pointer-events: none;
@@ -695,12 +773,17 @@ def build_gapja_master_chart_html(
 #{cid} .saju-mc-dm-meta {{
   font-size: 9px; color: var(--mc-muted); margin-top: 0.15rem;
 }}
-@media (max-width: 520px) {{
+@media (max-width: 768px) {{
   #{cid}.saju-master-chart {{
-    min-height: 560px;
+    min-height: 520px;
     height: auto;
     max-width: 100%;
     margin-bottom: 0.35rem;
+  }}
+  #{cid} .saju-mc-stage-wrap {{
+    flex: 0 0 auto;
+    min-height: clamp(420px, 78vw, 520px);
+    height: clamp(420px, 78vw, 520px);
   }}
   #{cid} .saju-mc-stage {{
     padding-top: 36px;
@@ -719,17 +802,16 @@ def build_gapja_master_chart_html(
   }}
   #{cid} .saju-mc-pillar .saju-mc-popover {{
     display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }}
-  /* 기둥 상세(dock)는 차트 내부를 '오버레이'한다.
-     예전엔 padding-bottom 으로 차트 높이를 키워(최대 +300px) 기둥 상세를 아래에 펼쳤으나,
-     이 경우 모바일(iOS Safari·WebView)에서 iframe 이 콘텐츠 높이만큼 자동 확장되며
-     고정 높이(620px) 레이아웃 박스를 넘어서서 아래의 「나의 인생 핵심 운세」 제목을 덮었다.
-     차트 높이를 키우지 않고 하단을 오버레이하면 iframe 이 넘치지 않아 제목 가림이 사라진다. */
   #{cid}.has-mobile-dock-open {{
     padding-bottom: 0;
   }}
   #{cid} .saju-mc-mobile-dock {{
-    max-height: min(42vh, 260px);
+    max-height: none;
+    margin-top: 0.35rem;
   }}
   #{cid} .saju-mc-pop-hidden li {{
     grid-template-columns: 1.1em minmax(0, 1fr);
@@ -768,6 +850,15 @@ def build_gapja_master_chart_html(
     padding: 3px 7px;
   }}
 }}
+@media (max-width: 520px) {{
+  #{cid}.saju-master-chart {{
+    min-height: 560px;
+  }}
+  #{cid} .saju-mc-stage-wrap {{
+    min-height: clamp(440px, 82vw, 540px);
+    height: clamp(440px, 82vw, 540px);
+  }}
+}}
 </style>
 <script>
 (function() {{
@@ -791,7 +882,27 @@ def build_gapja_master_chart_html(
     btn.addEventListener("click", () => applyTheme(btn.getAttribute("data-theme-set")));
   }});
 
-  const MOBILE_MQ = window.matchMedia("(max-width: 520px)");
+  const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
+  const COARSE_MQ = window.matchMedia("(pointer: coarse)");
+
+  function isTouchDevice() {{
+    try {{
+      if (navigator.maxTouchPoints > 0) return true;
+      if ("ontouchstart" in window) return true;
+    }} catch (e) {{}}
+    return false;
+  }}
+
+  function isMobileUi() {{
+    if (MOBILE_MQ.matches) return true;
+    if (COARSE_MQ.matches) return true;
+    if (isTouchDevice() && window.innerWidth <= 960) return true;
+    return false;
+  }}
+
+  function useDockUi() {{
+    return isMobileUi();
+  }}
 
   function clearPopInline(pop) {{
     pop.style.top = "";
@@ -815,20 +926,7 @@ def build_gapja_master_chart_html(
 
     pop.classList.add("saju-mc-popover--below");
 
-    if (MOBILE_MQ.matches) {{
-      pop.classList.add("saju-mc-popover--viewport");
-      const margin = 12;
-      const pr = pillar.getBoundingClientRect();
-      const vh = window.innerHeight || document.documentElement.clientHeight;
-      pop.style.left = margin + "px";
-      pop.style.right = margin + "px";
-      pop.style.width = "auto";
-      let top = pr.bottom + 8;
-      const popH = pop.offsetHeight || 220;
-      if (top + popH > vh - margin) {{
-        top = Math.max(margin, pr.top - popH - 8);
-      }}
-      pop.style.top = Math.round(top) + "px";
+    if (useDockUi()) {{
       return;
     }}
 
@@ -847,15 +945,35 @@ def build_gapja_master_chart_html(
     root.classList.remove("has-mobile-dock-open");
     if (dock) {{
       dock.innerHTML = "";
+      dock.classList.remove("is-visible");
       dock.setAttribute("aria-hidden", "true");
     }}
     root.querySelectorAll(".saju-mc-popover").forEach(clearPopInline);
+  }}
+
+  function togglePillar(pillar) {{
+    const alreadyOpen = pillar.classList.contains("is-pop-open");
+    closeAllPillars();
+    if (!alreadyOpen) openPillar(pillar);
+  }}
+
+  function handlePillarTap(pillar, ev) {{
+    if (ev) {{
+      ev.preventDefault();
+      ev.stopPropagation();
+    }}
+    if (useDockUi()) {{
+      togglePillar(pillar);
+      return;
+    }}
+    activatePillar(pillar);
   }}
 
   function showMobileDock(pillar) {{
     const pop = pillar.querySelector(".saju-mc-popover");
     if (!dock || !pop) return;
     dock.innerHTML = pop.innerHTML;
+    dock.classList.add("is-visible");
     dock.setAttribute("aria-hidden", "false");
     root.classList.add("has-mobile-dock-open");
     requestAnimationFrame(() => {{
@@ -867,7 +985,7 @@ def build_gapja_master_chart_html(
 
   function openPillar(pillar) {{
     pillar.classList.add("is-pop-open");
-    if (MOBILE_MQ.matches) {{
+    if (useDockUi()) {{
       showMobileDock(pillar);
       return;
     }}
@@ -890,6 +1008,7 @@ def build_gapja_master_chart_html(
 
   root.querySelectorAll(".saju-mc-pillar").forEach((pillar) => {{
     pillar.addEventListener("pointerenter", () => {{
+      if (useDockUi()) return;
       if (hoverLeaveTimer) {{
         clearTimeout(hoverLeaveTimer);
         hoverLeaveTimer = 0;
@@ -897,20 +1016,24 @@ def build_gapja_master_chart_html(
       activatePillar(pillar);
     }});
     pillar.addEventListener("pointerleave", () => {{
-      if (MOBILE_MQ.matches) return;
+      if (useDockUi()) return;
       if (hoverLeaveTimer) clearTimeout(hoverLeaveTimer);
       hoverLeaveTimer = window.setTimeout(() => {{
         const open = root.querySelector(".saju-mc-pillar.is-pop-open");
         if (open === pillar) closeAllPillars();
       }}, 320);
     }});
+    pillar.addEventListener("click", (ev) => {{
+      handlePillarTap(pillar, ev);
+    }});
     pillar.addEventListener("focus", () => {{
+      if (useDockUi()) return;
       activatePillar(pillar);
     }});
     pillar.addEventListener("keydown", (ev) => {{
       if (ev.key === "Enter" || ev.key === " ") {{
         ev.preventDefault();
-        activatePillar(pillar);
+        handlePillarTap(pillar, ev);
       }}
     }});
   }});
@@ -923,27 +1046,32 @@ def build_gapja_master_chart_html(
   window.addEventListener("resize", () => {{
     const open = root.querySelector(".saju-mc-pillar.is-pop-open");
     if (!open) return;
-    if (MOBILE_MQ.matches) showMobileDock(open);
+    if (useDockUi()) showMobileDock(open);
     else {{
       closeAllPillars();
       open.classList.add("is-pop-open");
       positionMcPopover(open);
     }}
   }});
-  if (MOBILE_MQ.addEventListener) {{
-    MOBILE_MQ.addEventListener("change", () => {{
-      const open = root.querySelector(".saju-mc-pillar.is-pop-open");
-      if (!open) return;
-      if (MOBILE_MQ.matches) showMobileDock(open);
-      else {{
-        root.classList.remove("has-mobile-dock-open");
-        if (dock) {{
-          dock.innerHTML = "";
-          dock.setAttribute("aria-hidden", "true");
-        }}
-        positionMcPopover(open);
+  function onUiModeChange() {{
+    const open = root.querySelector(".saju-mc-pillar.is-pop-open");
+    if (!open) return;
+    if (useDockUi()) showMobileDock(open);
+    else {{
+      root.classList.remove("has-mobile-dock-open");
+      if (dock) {{
+        dock.innerHTML = "";
+        dock.classList.remove("is-visible");
+        dock.setAttribute("aria-hidden", "true");
       }}
-    }});
+      positionMcPopover(open);
+    }}
+  }}
+  if (MOBILE_MQ.addEventListener) {{
+    MOBILE_MQ.addEventListener("change", onUiModeChange);
+  }}
+  if (COARSE_MQ.addEventListener) {{
+    COARSE_MQ.addEventListener("change", onUiModeChange);
   }}
 
   const cfg = {json.dumps(particle_cfg, ensure_ascii=False)};
@@ -1049,7 +1177,7 @@ def render_gapja_master_chart(
         theme_pick = "hanji" if str(theme_pick).strip().lower() == "hanji" else "neon"
     st.session_state.gapja_chart_theme = theme_pick
 
-    # 모바일 하단 설명 패널(dock)이 잘리지 않도록 최소 높이 확보
-    iframe_h = max(int(height) if height is not None else 700, 620)
+    # 모바일: 기둥 아래 설명(dock)이 잘리지 않도록 iframe 스크롤 허용
+    iframe_h = max(int(height) if height is not None else 820, 720)
     html_body = build_gapja_master_chart_html(list(u_gapja), theme=str(theme_pick))
-    components.html(html_body, height=iframe_h, scrolling=False)
+    components.html(html_body, height=iframe_h, scrolling=True)

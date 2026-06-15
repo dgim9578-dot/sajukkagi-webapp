@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from saju.core.engine import BRANCH_ELEMENT, STEM_ELEMENT, get_relation
+from saju.core.gapja_utils import format_day_branch_rel_label, ilju_parts_from_gapja
 from saju_app.ui.components import (
     branch_pair_relation,
     day_branch_match_label,
@@ -50,9 +51,12 @@ def _section_label(base: str, ctx: Step4MatchContext, *, partner: bool = False) 
 
 
 def _pair_lead(ctx: Step4MatchContext) -> str:
+    rel_disp = format_day_branch_rel_label(
+        ctx.day_branch_rel, ctx.u_day_branch, ctx.p_day_branch
+    )
     return (
         f"<b>{ctx.u_name}</b>({ctx.u_ilju}) × <b>{ctx.p_name}</b>({ctx.p_ilju}) · "
-        f"일지 <b>{ctx.day_branch_rel}</b><br>"
+        f"일지 <b>{rel_disp}</b><br>"
     )
 
 
@@ -130,11 +134,15 @@ def _pillar_stem(gapja: tuple[str, ...], idx: int) -> str | None:
 def _count_pillar_branch_stats(
     u_gapja: tuple[str, ...], p_gapja: tuple[str, ...]
 ) -> tuple[int, int]:
-    """년·월·일 지지의 합(六合) 개수와 충·형·해 개수."""
+    """년·월·일·시 지지의 합(六合) 개수와 충·형·해 개수."""
     harmony = 0
     conflict = 0
-    for idx in (0, 1, 2):
-        rel = branch_pair_relation(_pillar_branch(u_gapja, idx), _pillar_branch(p_gapja, idx))
+    for idx in (0, 1, 2, 3):
+        ub = _pillar_branch(u_gapja, idx)
+        pb = _pillar_branch(p_gapja, idx)
+        if not ub or not pb:
+            continue
+        rel = branch_pair_relation(ub, pb)
         if rel.startswith("합"):
             harmony += 1
         elif rel.startswith("충") or rel.startswith("형") or rel.startswith("해"):
@@ -243,6 +251,20 @@ def compute_step4_match_factors(
     else:
         yin_yang_day = "음양 동극(같은 극성)"
 
+    day_ten_fit = 0
+    u2p_ten = get_ten_fn(u_day_stem, p_day_stem)
+    p2u_ten = get_ten_fn(p_day_stem, u_day_stem)
+    if any("합" in x or "合" in x for x in (u2p_ten, p2u_ten)):
+        day_ten_fit += 2
+    if "정재" in u2p_ten or "정관" in u2p_ten:
+        day_ten_fit += 2
+    if "정재" in p2u_ten or "정관" in p2u_ten:
+        day_ten_fit += 2
+    if "겁재" in u2p_ten and "겁재" in p2u_ten:
+        day_ten_fit -= 3
+    if "상관" in u2p_ten and "상관" in p2u_ten:
+        day_ten_fit -= 2
+
     match_score = C.calc_simple_match_score(
         day_branch_rel=day_branch_rel,
         element_balance=element_balance,
@@ -258,6 +280,7 @@ def compute_step4_match_factors(
     )
     if stem_he_count >= 2:
         match_score = min(99, match_score + 2)
+    match_score = max(38, min(99, match_score + day_ten_fit))
 
     return Step4MatchFactors(
         day_branch_rel=day_branch_rel,
@@ -304,12 +327,8 @@ def build_step4_match_context(
     p_next_3: list[str],
     match_score: int,
 ) -> Step4MatchContext:
-    u_ilju = u_gapja[2] if len(u_gapja) > 2 else "甲子"
-    p_ilju = p_gapja[2] if len(p_gapja) > 2 else "甲子"
-    u_ds = u_ilju[0] if u_ilju else "甲"
-    p_ds = p_ilju[0] if p_ilju else "甲"
-    u_db = u_ilju[1] if len(u_ilju) >= 2 else None
-    p_db = p_ilju[1] if len(p_ilju) >= 2 else None
+    u_ilju, u_ds, u_db = ilju_parts_from_gapja(u_gapja)
+    p_ilju, p_ds, p_db = ilju_parts_from_gapja(p_gapja)
     u_de = str(u_engine.get("day_el") or STEM_ELEMENT.get(u_ds, "木"))
     p_de = str(p_engine.get("day_el") or STEM_ELEMENT.get(p_ds, "木"))
     el_sup = f"{u_max_el} ↔ {p_min_el}"
@@ -442,7 +461,7 @@ def _stem_he_note(ctx: Step4MatchContext) -> str:
 def _pillar_harmony_audit(ctx: Step4MatchContext) -> str:
     ph, pc = ctx.pillar_harmony, ctx.pillar_conflict
     lines = [
-        f"년·월·일 지지 기준 — <b>합(六合) {ph}건</b> · "
+        f"년·월·일·시 지지 기준 — <b>합(六合) {ph}건</b> · "
         f"<b>충·형·해 {pc}건</b>"
     ]
     if ph >= 2 and pc == 0:
@@ -520,6 +539,53 @@ def _yongshin_mutual_note(ctx: Step4MatchContext) -> str:
     if not extra:
         return base
     return base + "<br>" + "<br>".join(extra)
+
+
+def _clip_ilju_sentence(text: str, *, max_len: int = 150) -> str:
+    t = str(text or "").strip()
+    if not t:
+        return ""
+    for sep in ("。", ". ", " — ", " —", "— "):
+        if sep in t:
+            t = t.split(sep, 1)[0].strip()
+            if sep == "。":
+                t += "。"
+            elif sep == ". ":
+                t += "."
+            break
+    if len(t) > max_len:
+        t = t[: max_len - 1].rstrip() + "…"
+    return t
+
+
+def _ilju_pair_relationship_note(ctx: Step4MatchContext) -> str:
+    """60일주 DB 연애·결혼 문단 — 조합마다 다른 해설."""
+    from saju_app.ui.ilju_profiles import get_ilju_profile
+
+    u_rel = _clip_ilju_sentence(get_ilju_profile(ctx.u_ilju).get("relationship", ""))
+    p_rel = _clip_ilju_sentence(get_ilju_profile(ctx.p_ilju).get("relationship", ""))
+    if not u_rel and not p_rel:
+        return ""
+    lines = ["<br><b>⑤ 60일주 연애·결혼 테마</b>"]
+    if u_rel:
+        lines.append(f"<b>{ctx.u_name}</b>({ctx.u_ilju}): {u_rel}")
+    if p_rel:
+        lines.append(f"<b>{ctx.p_name}</b>({ctx.p_ilju}): {p_rel}")
+    if ctx.u_ilju != ctx.p_ilju:
+        u_pers = _clip_ilju_sentence(
+            get_ilju_profile(ctx.u_ilju).get("personality", ""), max_len=90
+        )
+        p_pers = _clip_ilju_sentence(
+            get_ilju_profile(ctx.p_ilju).get("personality", ""), max_len=90
+        )
+        if u_pers and p_pers:
+            lines.append(
+                f"<b>{ctx.u_ilju}×{ctx.p_ilju}</b> — "
+                f"{ctx.u_name} 쪽은 {u_pers} "
+                f"{ctx.p_name} 쪽은 {p_pers} "
+                "서로의 ‘기본 속도’를 먼저 맞추면 체감 궁합이 달라집니다."
+            )
+    return "<br>".join(lines)
 
 
 def _branch_pair_narrative(ctx: Step4MatchContext, *, brief: bool = False) -> str:
@@ -763,6 +829,9 @@ def pair_analysis_banner(ctx: Step4MatchContext) -> str:
     """STEP4 상단 조합 배너(어두운 배경·밝은 글씨)."""
     u4 = " · ".join(ctx.u_gapja[:4]) if len(ctx.u_gapja) >= 4 else ctx.u_ilju
     p4 = " · ".join(ctx.p_gapja[:4]) if len(ctx.p_gapja) >= 4 else ctx.p_ilju
+    rel_disp = format_day_branch_rel_label(
+        ctx.day_branch_rel, ctx.u_day_branch, ctx.p_day_branch
+    )
     stem_bit = (
         f" · 천간 <b>{ctx.day_stem_he}</b>"
         if ctx.day_stem_he.startswith("天干合")
@@ -773,7 +842,7 @@ def pair_analysis_banner(ctx: Step4MatchContext) -> str:
         f'<div class="step4-pair-banner">'
         f"<b>{ctx.u_name}</b> <span class='step4-pair-pillars'>{u4}</span>"
         f" × <b>{ctx.p_name}</b> <span class='step4-pair-pillars'>{p4}</span>"
-        f" · 일지 <b>{ctx.day_branch_rel}</b>{stem_bit}{yy}"
+        f" · 일지 <b>{rel_disp}</b>{stem_bit}{yy}"
         f" · 합{ctx.pillar_harmony}/충형해{ctx.pillar_conflict}"
         f" · 종합 <b>{ctx.match_score}</b>점"
         f"</div>"
@@ -816,12 +885,16 @@ def tab_love_sections(
     spouse_note = _spouse_structure_note(
         ctx, u2p=u2p, p2u=p2u, is_f_u=is_f_u, is_f_p=is_f_p
     )
+    rel_disp = format_day_branch_rel_label(
+        ctx.day_branch_rel, ctx.u_day_branch, ctx.p_day_branch
+    )
     body1 = (
         _pair_lead(ctx)
         + "<b>① 일지 궁합(최우선)</b><br>"
         + f"일지 <b>{ctx.u_day_branch or '?'}</b> ↔ <b>{ctx.p_day_branch or '?'}</b> · "
-        f"<b>{ctx.day_branch_rel}</b><br>"
+        + f"<b>{rel_disp}</b><br>"
         + _branch_pair_narrative(ctx)
+        + _ilju_pair_relationship_note(ctx)
         + spouse_note
         + "<br><b>② 천간합·음양</b>"
         + _stem_he_note(ctx)

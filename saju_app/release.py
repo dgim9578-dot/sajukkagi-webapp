@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 # 코드 배포 시 수동으로 올리거나 SAJU_RELEASE_TAG 환경변수로 덮어씁니다.
-_DEFAULT_DEPLOY_TAG = "20260522-md08"
+_DEFAULT_DEPLOY_TAG = "20260531-ilju-v2"
 
 
 def deploy_tag() -> str:
@@ -21,8 +21,17 @@ def input_form_build() -> str:
         return "unknown"
 
 
+def step3_build() -> str:
+    try:
+        from saju.ui.step_03 import STEP3_UI_BUILD
+
+        return str(STEP3_UI_BUILD).strip()
+    except Exception:
+        return "unknown"
+
+
 def full_release_id() -> str:
-    return f"{deploy_tag()}:{input_form_build()}"
+    return f"{deploy_tag()}:{input_form_build()}:{step3_build()}"
 
 
 def sw_cache_name() -> str:

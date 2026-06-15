@@ -200,3 +200,11 @@ def render() -> None:
                         tone="#60A5FA",
                     )
 
+        CC.render_consulting_panel(
+            CC.query_for_step("step5", unique_sins=unique_sins),
+            apply="step5",
+            title="📎 현장 상담 참고 (신살·도화·역마)",
+            expanded=False,
+            container_key="step5_consulting",
+        )
+

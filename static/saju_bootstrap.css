@@ -9,8 +9,13 @@
         --saju-bg-elevated: #16213e;
         --saju-bg-card-a: #1a1a2e;
         --saju-bg-card-b: #16213e;
-        --saju-bg-paper: #fffdf8;
-        --saju-bg-paper-soft: #fff8ee;
+        --saju-bg-paper: #f7f4ef;
+        --saju-bg-paper-soft: #f2eee6;
+        --saju-bg-canvas-light: #faf8f5;
+        --saju-bg-canvas-light-mid: #f3efe8;
+        --saju-bg-canvas-light-deep: #ebe6de;
+        --saju-bg-canvas-dark: #0a0a12;
+        --saju-bg-canvas-dark-mid: #0e0e18;
         /* 정보입력(년·월·일) 칩과 동일 — 이동·안내 버튼 배경 */
         --saju-soft-fill: #fff5ee;
         --saju-soft-fill-hover: #fff0e6;
@@ -50,12 +55,34 @@
         font-size: 1rem;
         font-family: "Playfair Display", "Noto Serif KR", "Apple SD Gothic Neo", "Malgun Gothic",
             Georgia, "Times New Roman", "Noto Color Emoji", serif !important;
-        /* 테마 배경과 맞춤: 다크 #0F0F1A / 라이트 크림 (config.toml 과 동조) */
-        background-color: light-dark(var(--saju-bg-paper), var(--saju-bg-mid)) !important;
+        /* 테마 배경: 한지 노이즈 대신 고급 아이보리·딥 네이비 그라데이션 (모바일 가독성) */
+        background-color: light-dark(var(--saju-bg-canvas-light), var(--saju-bg-canvas-dark)) !important;
         background-image: light-dark(
-            linear-gradient(180deg, #fffffe 0%, #fff9f0 38%, #fff3e4 100%),
-            linear-gradient(180deg, #0c0c16 0%, #0a0a14 100%)
+            radial-gradient(ellipse 110% 72% at 50% -16%, rgba(201, 162, 39, 0.07), transparent 54%),
+            linear-gradient(
+                168deg,
+                var(--saju-bg-canvas-light) 0%,
+                var(--saju-bg-canvas-light-mid) 46%,
+                var(--saju-bg-canvas-light-deep) 100%
+            ),
+            radial-gradient(ellipse 95% 68% at 50% -18%, rgba(212, 175, 55, 0.1), transparent 56%),
+            linear-gradient(
+                168deg,
+                var(--saju-bg-canvas-dark) 0%,
+                var(--saju-bg-canvas-dark-mid) 54%,
+                #12121f 100%
+            )
         ) !important;
+        background-attachment: scroll !important;
+    }
+    /* 본문 래퍼는 투명 — .stApp 단일 캔버스만 보이게 (iPhone 이중 질감·색 번짐 방지) */
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    section.main,
+    [data-testid="stMainBlockContainer"],
+    .stApp > [data-testid="stAppViewContainer"] > .main {
+        background: transparent !important;
+        background-image: none !important;
     }
     /* Streamlit 플랫폼 UI — 사주 앱 기능과 무관 (Fork·Deploy·왕관·관리 등) */
     header[data-testid="stHeader"],
@@ -318,18 +345,19 @@
         margin-right: auto !important;
         isolation: isolate;
     }
-    /* 럭셔리 워치 톤: 다크에서 은은한 골드 앰비언트(한지 위 금박 반사 느낌) */
+    /* 은은한 상단 골드 앰비언트만 (미세 노이즈·한지 질감 없음) */
     .main .block-container::before {
         content: "";
         position: absolute;
         inset: 0;
         pointer-events: none;
         z-index: 0;
-        opacity: 1;
-        background:
-            radial-gradient(ellipse 100% 52% at 50% -12%, rgba(212, 175, 55, 0.09), transparent 58%),
-            radial-gradient(ellipse 55% 40% at 100% 18%, rgba(165, 180, 252, 0.04), transparent 50%),
-            radial-gradient(ellipse 50% 38% at 0% 72%, rgba(212, 175, 55, 0.035), transparent 48%);
+        opacity: light-dark(0.72, 0.48);
+        background: radial-gradient(
+            ellipse 92% 48% at 50% -8%,
+            rgba(212, 175, 55, 0.07),
+            transparent 62%
+        );
     }
     [data-testid="stMarkdownContainer"] p,
     [data-testid="stMarkdownContainer"] li,
@@ -430,6 +458,32 @@
         margin: 0 auto;
         opacity: 0.96;
         filter: drop-shadow(0 6px 18px rgba(212, 175, 55, 0.16));
+    }
+    /* STEP6 오늘의 운세 — images/오늘의 운세.png 와이드 배너 */
+    .st-key-step6_hero_banner [data-testid="stMarkdownContainer"],
+    .st-key-step6_hero_banner [data-testid="stMarkdownContainer"] > div {
+        overflow: visible !important;
+        max-width: 100% !important;
+    }
+    .saju-mood-step6-hero,
+    .st-key-step6_hero_banner .saju-mood-step6-hero {
+        display: block;
+        width: 100%;
+        max-width: 920px;
+        margin: 0.2rem auto 0.85rem;
+        text-align: center;
+        line-height: 0;
+    }
+    .saju-mood-step6-hero img,
+    .st-key-step6_hero_banner .saju-mood-step6-hero img {
+        width: 100%;
+        max-width: 920px;
+        height: auto;
+        object-fit: contain;
+        margin: 0 auto;
+        border-radius: 14px;
+        border: 1px solid rgba(139, 105, 20, 0.22);
+        box-shadow: 0 10px 28px rgba(80, 60, 30, 0.14);
     }
     [data-testid="stExpander"] details {
         border-radius: 16px !important;
@@ -2439,6 +2493,14 @@
     .st-key-step1_cta_row_main .saju-revisit-pin-rule {
         margin-bottom: 0.28rem !important;
     }
+    .st-key-step1_revisit_pin_in input[data-saju-revisit-pin="1"],
+    .st-key-step1_cta_row_main input[data-saju-revisit-pin="1"],
+    .st-key-step2_revisit_pin input[data-saju-revisit-pin="1"],
+    .st-key-step2_revisit_pin_confirm input[data-saju-revisit-pin="1"],
+    [class*="st-key-step2_revisit_pin"] input[data-saju-revisit-pin="1"] {
+        -webkit-text-security: disc !important;
+        text-security: disc !important;
+    }
     .st-key-step1_revisit_pin_row .stTextInput > div > div > input,
     .st-key-step1_cta_row_main .stTextInput > div > div > input {
         min-height: clamp(2.45rem, 11vw, 3rem) !important;
@@ -3135,7 +3197,7 @@
         box-sizing: border-box;
         border: 1px solid light-dark(rgba(92, 62, 36, 0.2), rgba(212, 175, 55, 0.22));
         background: light-dark(
-            linear-gradient(150deg, #ffffff 0%, #fffaf3 48%, #fff4e8 100%),
+            linear-gradient(150deg, #fdfcfa 0%, #f8f5ef 48%, #f2ede5 100%),
             linear-gradient(135deg, #1a1a2e 0%, #16213e 52%, #141b2a 100%)
         );
         box-shadow: light-dark(
@@ -3153,14 +3215,8 @@
         display: none !important;
     }
     div[class*="st-key-saju_analysis_card"]::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        z-index: 0;
-        opacity: light-dark(0.02, 0.04);
-        mix-blend-mode: multiply;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        content: none !important;
+        display: none !important;
     }
     div[class*="st-key-saju_analysis_card"] > div {
         position: relative;
@@ -4149,9 +4205,32 @@
         font-size: 1.35rem;
         font-weight: 800;
     }
-    div[class*="st-key-step10_health_fortune"] .saju-step10-health-sub {
-        color: light-dark(#475569, #e0e7ff);
+    div[class*="st-key-step10_health_fortune"] .saju-step10-health-sub,
+    div[class*="st-key-step10_health_fortune"] .saju-step10-health-meta,
+    div[class*="st-key-step10_health_fortune"] .saju-step10-age-band,
+    div[class*="st-key-step10_health_fortune"] .saju-step10-risk-label {
+        color: light-dark(#334155, #f8fafc) !important;
         font-size: 0.95rem;
+        font-weight: 650;
+        opacity: 1 !important;
+    }
+    div[class*="st-key-step10_health_fortune"] .saju-step10-age-band {
+        margin-bottom: 8px;
+    }
+    div[class*="st-key-step10_health_fortune"] .saju-step10-risk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-weight: 700;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    div[class*="st-key-step10_health_fortune"] .saju-step10-health-card .saju-step10-risk-block {
+        color: light-dark(#334155, #f8fafc) !important;
+    }
+    div[class*="st-key-step10_health_fortune"] .saju-step10-health-card .saju-step10-risk-block span:not(.saju-step10-risk-score):not(.saju-step10-risk-label) {
+        color: inherit !important;
     }
     div[class*="st-key-step10_health_fortune"] .saju-step10-health-yong {
         padding: 1rem 1.05rem;
@@ -4170,10 +4249,6 @@
         color: light-dark(#1e293b, #e5e7eb);
         font-size: 0.98rem;
         border: 1px solid light-dark(rgba(139, 105, 20, 0.16), rgba(148, 163, 184, 0.22));
-    }
-    div[class*="st-key-step10_health_fortune"] .saju-step10-health-card .saju-step10-risk-block,
-    div[class*="st-key-step10_health_fortune"] .saju-step10-health-card .saju-step10-risk-block * {
-        color: light-dark(#334155, #e0e7ff) !important;
     }
     div[class*="st-key-step10_health_fortune"] .saju-step10-health-card .saju-step10-risk-score {
         font-weight: 800;
@@ -4194,6 +4269,101 @@
     }
     div[class*="st-key-step10_health_fortune"] .saju-health-tips b {
         color: light-dark(#be123c, #f9a8d4) !important;
+    }
+
+    /* STEP10 건강 카드 — 앱 다크 톤(html.saju-dark-tone) 가독성 (light-dark와 OS 불일치 보정) */
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-card {
+        background: linear-gradient(165deg, #1a1020 0%, #121828 100%) !important;
+        color: #f1f5f9 !important;
+        border-color: rgba(244, 114, 182, 0.55) !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-head {
+        color: #fb7185 !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-sub,
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-meta,
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-age-band,
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-risk-label {
+        color: #f8fafc !important;
+        opacity: 1 !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-yong {
+        background: rgba(244, 114, 182, 0.16) !important;
+        color: #fce7f3 !important;
+        border: 1px solid rgba(244, 114, 182, 0.28);
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-yong b,
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-yong span {
+        color: #fdf2f8 !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-health-weak {
+        background: rgba(15, 23, 42, 0.78) !important;
+        color: #f1f5f9 !important;
+        border-color: rgba(148, 163, 184, 0.3) !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-risk-block {
+        color: #f8fafc !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-step10-risk-block span:not(.saju-step10-risk-score):not(.saju-step10-risk-label) {
+        color: #f8fafc !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-health-tips {
+        background: rgba(15, 23, 42, 0.62) !important;
+        color: #f8fafc !important;
+        border-color: rgba(244, 114, 182, 0.38) !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-health-tips * {
+        color: inherit !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_health_fortune"] .saju-health-tips b {
+        color: #f9a8d4 !important;
+    }
+
+    /* Streamlit 다크 테마 — OS 라이트와 light-dark() 불일치 시 건강 카드 보조 문구 */
+    [data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-health-card,
+    .stApp[data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-health-card {
+        background: linear-gradient(165deg, #1a1020 0%, #121828 100%) !important;
+        color: #f1f5f9 !important;
+    }
+    [data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-health-sub,
+    [data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-health-meta,
+    [data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-age-band,
+    [data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-risk-block,
+    [data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-risk-label,
+    .stApp[data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-health-sub,
+    .stApp[data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-health-meta,
+    .stApp[data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-age-band,
+    .stApp[data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-risk-block,
+    .stApp[data-theme="dark"] div[class*="st-key-step10_health_fortune"] .saju-step10-risk-label {
+        color: #f8fafc !important;
+        opacity: 1 !important;
+    }
+    @media (prefers-color-scheme: dark) {
+        div[class*="st-key-step10_health_fortune"] .saju-step10-health-sub,
+        div[class*="st-key-step10_health_fortune"] .saju-step10-health-meta,
+        div[class*="st-key-step10_health_fortune"] .saju-step10-age-band,
+        div[class*="st-key-step10_health_fortune"] .saju-step10-risk-block,
+        div[class*="st-key-step10_health_fortune"] .saju-step10-risk-label {
+            color: #f8fafc !important;
+            opacity: 1 !important;
+        }
+    }
+
+    html.saju-dark-tone .step10-exec-card {
+        color: #f1f5f9;
+    }
+    html.saju-dark-tone .step10-exec-subtitle {
+        color: #cbd5e1 !important;
+    }
+    html.saju-dark-tone .step10-exec-body {
+        color: #f1f5f9 !important;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_report_sheet"] {
+        color: #ece8e0;
+    }
+    html.saju-dark-tone div[class*="st-key-step10_report_sheet"] .stMarkdown,
+    html.saju-dark-tone div[class*="st-key-step10_report_sheet"] p {
+        color: rgba(235, 228, 210, 0.94) !important;
     }
 
     /* ===== 구조화 해석 블록(STEP3·STEP6 등) ===== */
@@ -4271,6 +4441,12 @@
         line-height: 1.78;
         font-size: clamp(0.94rem, 3vw, 1.03rem);
         text-align: left;
+    }
+    .saju-ix-detail-title {
+        font-weight: 850;
+        font-size: clamp(0.98rem, 3.2vw, 1.06rem);
+        margin-bottom: 0.55rem;
+        color: light-dark(#5c4510, #f4d179);
     }
     .saju-ix-detail-body b {
         color: light-dark(#5c4510, #f4d179);
@@ -5919,6 +6095,11 @@
         padding: 0 !important;
         overflow: hidden !important;
     }
+    .st-key-step12_admin_login_panel input[data-saju-revisit-pin="1"],
+    .st-key-step12_admin_pwd_input input[data-saju-revisit-pin="1"] {
+        -webkit-text-security: disc !important;
+        text-security: disc !important;
+    }
 
     /* STEP3: 사주 × MBTI 적성(한지·금색 톤, 청록 테마 제거) */
     .saju-mbti-blend-card {
@@ -5986,12 +6167,16 @@
 
     /* STEP7: 주역점 배너 (images/주역점.png) */
     .step7-iching-banner {
+        display: block;
+        width: min(100%, 720px);
         margin: 0.15rem auto 0.85rem;
+        text-align: center;
+        line-height: 0;
     }
     .step7-iching-banner img {
-        width: min(100%, 720px);
-        max-height: none;
-        height: auto;
+        width: min(100%, 720px) !important;
+        max-height: none !important;
+        height: auto !important;
         object-fit: contain;
         margin: 0 auto;
         border-radius: 14px;
@@ -6355,6 +6540,73 @@
         background: light-dark(var(--saju-soft-fill), var(--saju-soft-fill-dark)) !important;
         box-shadow: none !important;
         box-sizing: border-box !important;
+        color: light-dark(#8b6914, #f5e6a8) !important;
+        text-decoration: none !important;
+        width: 100% !important;
+        cursor: pointer !important;
+        -webkit-tap-highlight-color: transparent;
+    }
+    div[class*="st-key-step11_consult_strip"] .stMarkdown .step11-consult-tile--phone {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0.2rem !important;
+        min-height: auto !important;
+        padding: 0.32rem 0.12rem 0.4rem !important;
+        border-radius: var(--saju-soft-radius) !important;
+        background: light-dark(#6b5b2a, #8b7355) !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+    }
+    div[class*="st-key-step11_consult_strip"] .step11-phone-label {
+        display: block;
+        font-size: clamp(10px, 2.75vw, 12px) !important;
+        line-height: 1.2 !important;
+        white-space: pre-line !important;
+        text-align: center !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+    }
+    div[class*="st-key-step11_consult_strip"] a.step11-phone-num,
+    div[class*="st-key-step11_consult_strip"] span.step11-phone-num {
+        display: block;
+        font-size: clamp(13px, 4.1vw, 17px) !important;
+        line-height: 1.2 !important;
+        letter-spacing: 0.04em;
+        text-align: center !important;
+        color: #fef9c3 !important;
+        font-weight: 900 !important;
+        word-break: keep-all;
+    }
+    div[class*="st-key-step11_consult_strip"] a.step11-phone-num {
+        text-decoration: underline !important;
+        text-underline-offset: 3px;
+    }
+    div[class*="st-key-step11_consult_strip"] span.step11-phone-num {
+        user-select: all;
+        -webkit-user-select: all;
+    }
+    /* PC(마우스): 번호만 표시 — tel 클릭 시 Chrome 팝업 방지 */
+    @media (hover: hover) and (pointer: fine) {
+        div[class*="st-key-step11_consult_strip"] a.step11-phone-num--mobile {
+            display: none !important;
+        }
+        div[class*="st-key-step11_consult_strip"] span.step11-phone-num--desktop {
+            display: block !important;
+        }
+    }
+    /* 모바일(터치): 번호 탭 → 전화 앱 */
+    @media (hover: none), (pointer: coarse) {
+        div[class*="st-key-step11_consult_strip"] a.step11-phone-num--mobile {
+            display: block !important;
+        }
+        div[class*="st-key-step11_consult_strip"] span.step11-phone-num--desktop {
+            display: none !important;
+        }
+    }
+    div[class*="st-key-step11_consult_strip"] a.step11-phone-num:active {
+        opacity: 0.88;
     }
     @media (max-width: 420px) {
         div[class*="st-key-step11_consult_strip"] [data-testid="stHorizontalBlock"] {
@@ -6365,6 +6617,10 @@
             min-height: 3.1rem !important;
             font-size: 10px !important;
             padding: 0.32rem 0.1rem !important;
+        }
+        div[class*="st-key-step11_consult_strip"] a.step11-phone-num,
+        div[class*="st-key-step11_consult_strip"] span.step11-phone-num {
+            font-size: clamp(12px, 3.6vw, 14px) !important;
         }
     }
 
@@ -6665,8 +6921,50 @@
         --saju-soft-fill-dark-hover: rgba(50, 44, 38, 0.94);
     }
     html.saju-dark-tone .main .block-container::before {
-        opacity: 0.88 !important;
-        filter: saturate(0.95) brightness(0.97) !important;
+        opacity: 0.35 !important;
+        filter: none !important;
+    }
+    html.saju-dark-tone .stApp {
+        background-color: var(--saju-bg-canvas-dark) !important;
+        background-image:
+            radial-gradient(ellipse 95% 68% at 50% -18%, rgba(212, 175, 55, 0.1), transparent 56%),
+            linear-gradient(168deg, #0a0a12 0%, #0e0e18 54%, #12121f 100%) !important;
+    }
+    [data-theme="dark"] .stApp,
+    .stApp[data-theme="dark"] {
+        background-color: var(--saju-bg-canvas-dark) !important;
+        background-image:
+            radial-gradient(ellipse 95% 68% at 50% -18%, rgba(212, 175, 55, 0.1), transparent 56%),
+            linear-gradient(168deg, #0a0a12 0%, #0e0e18 54%, #12121f 100%) !important;
+    }
+    [data-theme="light"] .stApp,
+    .stApp[data-theme="light"] {
+        background-color: var(--saju-bg-canvas-light) !important;
+        background-image:
+            radial-gradient(ellipse 110% 72% at 50% -16%, rgba(201, 162, 39, 0.07), transparent 54%),
+            linear-gradient(
+                168deg,
+                var(--saju-bg-canvas-light) 0%,
+                var(--saju-bg-canvas-light-mid) 46%,
+                var(--saju-bg-canvas-light-deep) 100%
+            ) !important;
+    }
+    /* iPhone Safari — feTurbulence·mix-blend 노이즈 번짐 방지, 단색 그라데이션만 */
+    @supports (-webkit-touch-callout: none) {
+        .stApp {
+            background-image: light-dark(
+                linear-gradient(180deg, #fcfaf7 0%, #f3efe8 100%),
+                linear-gradient(180deg, #0c0c16 0%, #0a0a12 100%)
+            ) !important;
+        }
+        .main .block-container::before {
+            display: none !important;
+        }
+        div[class*="st-key-saju_analysis_card"]::after,
+        div[class*="st-key-step3_hanji_card"]::before {
+            content: none !important;
+            display: none !important;
+        }
     }
     html.saju-dark-tone *:focus-visible {
         outline-color: rgba(165, 180, 252, 0.55) !important;
@@ -7032,17 +7330,21 @@
     }
     @media (max-width: 768px) {
         .stApp {
+            background-color: light-dark(var(--saju-bg-canvas-light), var(--saju-bg-canvas-dark)) !important;
             background-image: light-dark(
-                linear-gradient(180deg, #fffffe 0%, #fffaf3 50%, #fff5e6 100%),
-                linear-gradient(180deg, #0c0c16 0%, #0a0a14 100%)
+                linear-gradient(180deg, #fcfaf7 0%, #f5f1ea 52%, #efeae2 100%),
+                linear-gradient(180deg, #0c0c16 0%, #0a0a12 100%)
             ) !important;
+        }
+        .main .block-container::before {
+            display: none !important;
         }
         div[class*="st-key-saju_analysis_card"]::after {
             opacity: 0 !important;
         }
         div[class*="st-key-saju_analysis_card"] {
             background: light-dark(
-                linear-gradient(160deg, #fffffe 0%, #fff8ec 100%),
+                linear-gradient(160deg, #fdfcfa 0%, #f6f2eb 100%),
                 linear-gradient(135deg, #1c1c30 0%, #141b2a 100%)
             ) !important;
             color: light-dark(var(--saju-text-readable), #ece8e0) !important;

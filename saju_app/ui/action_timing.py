@@ -11,6 +11,7 @@ from saju_app.core import calculations as C
 from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import consulting_knowledge as K
 from saju_app.ui import components as M
+from saju_app.ui.plain_language import to_plain_text
 
 
 def _dae_row_for_year(rows: list[dict[str, Any]], year: int) -> dict[str, Any] | None:
@@ -277,15 +278,79 @@ def _verdict_pregnancy(*, ctx: dict[str, Any]) -> tuple[str, str]:
     )
 
 
-def _action_consulting_text(
+def _pick_consulting_hit(
+    hits: list[CC.ConsultingQA],
+    *,
+    u_gapja: list[str],
+) -> CC.ConsultingQA:
+    if not hits:
+        raise ValueError("hits required")
+    if len(hits) == 1:
+        return hits[0]
+    seed = sum(ord(ch) for g in u_gapja for ch in str(g))
+    return hits[seed % len(hits)]
+
+
+def _action_corpus_query(
+    topic: str,
+    *,
+    ctx: dict[str, Any],
+    strength: str,
+    yongshin: str,
+    u_gapja: list[str],
+) -> str:
+    """세운·일지·신강약·용신·일주를 반영한 코퍼스 검색어."""
+    parts = [
+        topic,
+        str(ctx.get("year") or ""),
+        str(ctx.get("연주") or ""),
+        str(ctx.get("세운십성") or ""),
+        str(ctx.get("지지관계") or ""),
+        str(ctx.get("대운십성") or ""),
+        strength,
+        f"용신 {yongshin}",
+    ]
+    if len(u_gapja) > 2:
+        parts.append(f"일주 {u_gapja[2]}")
+    rel = str(ctx.get("지지관계") or "")
+    t = K.normalize_topic(topic)
+    topic_l = str(topic or "").lower()
+    if t == "move":
+        if "충" in rel:
+            parts.extend(["이사 후 불안", "적응", "환경 변화"])
+        elif "합" in rel:
+            parts.extend(["지방", "다른 지역", "정착", "새로운 흐름"])
+        else:
+            parts.extend(["이사운", "환경 변화", "독립"])
+        if yongshin in ("木", "火", "土", "金", "水"):
+            parts.append(f"용신{yongshin}")
+    elif t == "job":
+        parts.extend(["이직", "직장", "커리어", str(ctx.get("세운십성") or "")])
+    elif t in ("marriage", "love"):
+        parts.extend(["연애", "결혼", "인연", "궁합", "재회", str(ctx.get("세운십성") or "")])
+    elif t == "health":
+        parts.extend(["건강", "컨디션", "회복", strength])
+    elif t == "wealth":
+        parts.extend(["재물", "돈", "투자", str(ctx.get("세운십성") or "")])
+    elif t == "study":
+        parts.extend(["시험", "합격", "공부", "자격증", "면접", str(ctx.get("세운십성") or "")])
+    elif any(k in topic_l for k in ("임신", "출산", "준비")):
+        parts.extend(["임신", "출산", "준비", "시기", str(ctx.get("세운십성") or "")])
+    elif any(k in topic_l for k in ("연애", "인연")):
+        parts.extend(["연애", "재회", "인연", str(ctx.get("세운십성") or "")])
+    return " ".join(p for p in parts if str(p).strip())
+
+
+def _action_consulting_parts(
     topic: str,
     *,
     ctx: dict[str, Any],
     strength: str,
     yongshin: str,
     gender: str,
-    apply: str,
-) -> str:
+    u_gapja: list[str],
+) -> tuple[str, str]:
+    """개인화 상담(base) + 현장 Q&A(corpus) 분리."""
     base = K.consulting_tip_for_action_year(
         topic,
         year=int(ctx.get("year") or 0),
@@ -301,15 +366,25 @@ def _action_consulting_text(
             yongshin, str(ctx.get("세천간") or "")
         ),
     )
-    q = (
-        f"{topic} {ctx.get('year')} {ctx.get('연주')} {ctx.get('세운십성')} "
-        f"{ctx.get('지지관계')} {ctx.get('대운십성')}"
+    q = _action_corpus_query(
+        topic,
+        ctx=ctx,
+        strength=strength,
+        yongshin=yongshin,
+        u_gapja=list(u_gapja),
     )
-    hits = CC.match_consulting(q, apply=apply, limit=1)
-    extra = CC.format_answers_plain(hits, max_chars=420) if hits else ""
-    if not extra:
-        return base
-    return f"{base}\n\n📎 현장 상담: {extra}"
+    hits = CC.match_consulting(q, apply="step9", limit=3)
+    if not hits:
+        return base, ""
+    pick = _pick_consulting_hit(hits, u_gapja=list(u_gapja))
+    lead = (
+        f"{int(ctx.get('year') or 0)}년 1년 운(세운) {ctx.get('연주')}·{ctx.get('세운십성')} "
+        f"({strength}/핵심 기운 {yongshin}) 기준 참고 — "
+    )
+    corpus = f"{lead}Q. {pick.question}\n{pick.answer}"
+    from saju_app.ui.plain_language import to_plain_text
+
+    return to_plain_text(base), to_plain_text(corpus)
 
 
 def _render_action_timing_frame(
@@ -320,7 +395,8 @@ def _render_action_timing_frame(
     note: str,
     tone: str,
     caution: str = "",
-    consulting: str = "",
+    consulting_base: str = "",
+    consulting_corpus: str = "",
     frame_key: str,
 ) -> None:
     """탭마다 DOM 트리가 달라지지 않도록 Streamlit 기본 위젯만 사용(removeChild 오류 방지)."""
@@ -331,14 +407,25 @@ def _render_action_timing_frame(
             unsafe_allow_html=True,
         )
         st.markdown(f"**{verdict}** 총평(참고)")
-        st.markdown(str(message or ""))
+        st.markdown(to_plain_text(str(message or "")))
         st.caption(str(note or ""))
-        if str(consulting or "").strip():
-            consult_body = M._hx(str(consulting)).replace("\n", "<br>")
+        if str(consulting_base or "").strip():
+            base_body = M._hx(str(consulting_base)).replace("\n", "<br>")
             st.markdown(
                 f"""
-<div class="saju-step9-consult-frame">
-  <p class="saju-step9-consult-title">상담 포인트</p>
+<div class="saju-step9-consult-frame saju-step9-consult-frame--personal">
+  <p class="saju-step9-consult-title">사주 맞춤 상담</p>
+  <div class="saju-step9-consult-body">{base_body}</div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+        if str(consulting_corpus or "").strip():
+            consult_body = M._hx(str(consulting_corpus)).replace("\n", "<br>")
+            st.markdown(
+                f"""
+<div class="saju-step9-consult-frame saju-step9-consult-frame--corpus">
+  <p class="saju-step9-consult-title">📎 현장 상담 참고 (일반 사례)</p>
   <div class="saju-step9-consult-body">{consult_body}</div>
 </div>
 """,
@@ -385,7 +472,6 @@ def render_action_timing_block(
     engine, _core = M.ensure_engine_and_core(list(u_gapja), birth_record=u_data)
     strength = str(engine.get("strength", "") or "")
     gender = str(st.session_state.get("u_gender", "") or "")
-    apply = " ".join(str(x) for x in u_gapja if x)
     age_at_pick = _age_at_year(birth_year=int(birth_year), year=int(pick_y))
     profile = _action_timing_profile(age=age_at_pick)
     heading, intro = _action_section_copy(profile)
@@ -398,7 +484,7 @@ def render_action_timing_block(
         yongshin=str(yongshin),
         strength=strength,
         gender=gender,
-        apply=apply,
+        u_gapja=list(u_gapja),
         profile=profile,
     )
 
@@ -410,28 +496,33 @@ def _render_action_timing_tabs(
     yongshin: str,
     strength: str,
     gender: str,
-    apply: str,
+    u_gapja: list[str],
     profile: str,
 ) -> None:
     is_female = _is_female_gender(gender)
     tab_labels = _action_tab_labels(profile=profile, is_female=is_female)
     tabs = st.tabs(tab_labels)
 
+    def _consult(topic: str) -> tuple[str, str]:
+        return _action_consulting_parts(
+            topic,
+            ctx=ctx,
+            strength=strength,
+            yongshin=yongshin,
+            gender=gender,
+            u_gapja=u_gapja,
+        )
+
     def _move_tab(tab) -> None:
         v, msg = _verdict_move(ctx=ctx, yongshin=yongshin)
+        base, corpus = _consult("이사")
         _render_action_timing_frame(
             title="이사 타이밍",
             verdict=v,
             message=msg,
             note="실제 이사는 날씨·대출·병원·근무지·돌봄 거리 등 현실 조건과 함께 보세요.",
-            consulting=_action_consulting_text(
-                "이사",
-                ctx=ctx,
-                strength=strength,
-                yongshin=yongshin,
-                gender=gender,
-                apply=apply,
-            ),
+            consulting_base=base,
+            consulting_corpus=corpus,
             tone="#D4AF37",
             frame_key=f"step9_action_move_{pick_y}",
         )
@@ -443,19 +534,14 @@ def _render_action_timing_tabs(
             if profile == "mature"
             else "대운·세운 흐름과 함께 보면 분기·월 단위 감각을 더 얹기 좋습니다."
         )
+        base, corpus = _consult("이직")
         _render_action_timing_frame(
             title="이직 타이밍",
             verdict=v,
             message=msg,
             note=note,
-            consulting=_action_consulting_text(
-                "이직",
-                ctx=ctx,
-                strength=strength,
-                yongshin=yongshin,
-                gender=gender,
-                apply=apply,
-            ),
+            consulting_base=base,
+            consulting_corpus=corpus,
             tone="#60A5FA",
             frame_key=f"step9_action_job_{pick_y}",
         )
@@ -468,38 +554,28 @@ def _render_action_timing_tabs(
         frame_key: str | None = None,
     ) -> None:
         v, msg = _verdict_marriage(ctx=ctx)
+        base, corpus = _consult(topic)
         _render_action_timing_frame(
             title=title,
             verdict=v,
             message=msg,
             note="궁합·일지 상세는 STEP4, 인연 상담은 STEP11을 함께 참고하세요.",
-            consulting=_action_consulting_text(
-                topic,
-                ctx=ctx,
-                strength=strength,
-                yongshin=yongshin,
-                gender=gender,
-                apply=apply,
-            ),
+            consulting_base=base,
+            consulting_corpus=corpus,
             tone="#F472B6",
             frame_key=frame_key or f"step9_action_marriage_{pick_y}",
         )
 
     def _pregnancy_tab(tab) -> None:
         v, msg = _verdict_pregnancy(ctx=ctx)
+        base, corpus = _consult("임신 준비")
         _render_action_timing_frame(
             title="임신·준비 타이밍",
             verdict=v,
             message=msg,
             note="몸 상태와 생활 리듬을 우선으로 보면서 무리한 일정 압축은 피하는 편이 좋습니다.",
-            consulting=_action_consulting_text(
-                "임신 준비",
-                ctx=ctx,
-                strength=strength,
-                yongshin=yongshin,
-                gender=gender,
-                apply=apply,
-            ),
+            consulting_base=base,
+            consulting_corpus=corpus,
             caution=(
                 "**임신·출산**은 반드시 산부인과 진료로 결정하세요. 사주는 생활 리듬 참고용이며, "
                 "불임·유산 등 민감한 주제를 단정하지 않습니다."
@@ -510,19 +586,14 @@ def _render_action_timing_tabs(
 
     def _health_tab(tab) -> None:
         v, msg = _verdict_health(ctx=ctx)
+        base, corpus = _consult("건강")
         _render_action_timing_frame(
             title="건강·컨디션 타이밍",
             verdict=v,
             message=msg,
             note="정기 검진·수면·식사·가벼운 운동을 우선하고, 증상·치료는 의료진과 상의하세요.",
-            consulting=_action_consulting_text(
-                "건강",
-                ctx=ctx,
-                strength=strength,
-                yongshin=yongshin,
-                gender=gender,
-                apply=apply,
-            ),
+            consulting_base=base,
+            consulting_corpus=corpus,
             caution=(
                 "**건강·질병·수술**은 사주로 단정하지 않습니다. "
                 "이 화면은 생활 리듬 참고용이며, 진단·치료는 의료진 상담이 우선입니다."
@@ -533,19 +604,14 @@ def _render_action_timing_tabs(
 
     def _wealth_tab(tab) -> None:
         v, msg = _verdict_wealth(ctx=ctx, yongshin=yongshin)
+        base, corpus = _consult("재물")
         _render_action_timing_frame(
             title="재물·재정 타이밍",
             verdict=v,
             message=msg,
             note="연금·저축·부동산·투자는 세운 참고와 함께 세금·현금 흐름·전문가 상담을 우선하세요.",
-            consulting=_action_consulting_text(
-                "재물",
-                ctx=ctx,
-                strength=strength,
-                yongshin=yongshin,
-                gender=gender,
-                apply=apply,
-            ),
+            consulting_base=base,
+            consulting_corpus=corpus,
             caution="**투자·대출·큰 거래**는 손실 가능성이 있으므로, 사주 해석만으로 결정하지 마세요.",
             tone="#FBBF24",
             frame_key=f"step9_action_wealth_{pick_y}",

@@ -1,7 +1,7 @@
 ---
 category: love
 keywords: 연애, 썸, 결혼, 재회, 소개팅, 인연, 결혼운, 연애운, 호감, 관계 진전, 오래, 늦은 결혼, 올해 연애
-applies: step3, step4, step8, step11, mbti
+applies: step3, step4, step8, step9, step10, step11, mbti
 gender: all
 tone: 사주까기_현장상담
 ---

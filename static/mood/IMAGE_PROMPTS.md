@@ -198,11 +198,11 @@ Shield outline with soft warning triangle merged subtly, protective advice theme
 
 ## STEP 6 · 오늘의 운세
 
-### `step06_hero.webp` — 상단
+### `step06_hero.webp` — 상단 (전통 수묵 일러스트 와이드 배너)
 
 **Prompt:**
 ```
-Wide banner, sunrise over calendar page showing abstract date block without readable numbers, today daily fortune theme, warm gold morning light
+Wide horizontal Korean traditional Saju daily fortune banner, ink-wash misty mountains with gold outlines, hanok in valley, full moon, purple crystal balls with yin-yang on gold stands, bagua center, parchment beige, decorative template without readable text, 16:9
 ```
 
 ### `step06_mid_focus.webp` — 핵심 운세 3카드 위

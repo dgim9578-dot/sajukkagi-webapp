@@ -26,6 +26,7 @@ except ImportError:
     _OPENAI_SDK_AVAILABLE = False
 
 from saju_app.ui import consulting_knowledge as K
+from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import components as M
 from saju_app.ui import tarot_consulting as T
 from saju_app.ui.execution import rerun_full_app
@@ -294,13 +295,20 @@ def _tarot_consulting_tip_from_question(question: str) -> str:
     q = str(question or "").strip()
     if not q:
         return ""
-    return K.consulting_tip(
+    tip = K.consulting_tip(
         q,
         strength=str(engine.get("strength", "") or ""),
         yongshin=str(engine.get("yongshin", "") or ""),
         gender=str(st.session_state.get("u_gender", "") or ""),
         daewoon_ten=daewoon_ten,
     )
+    corpus = CC.format_answers_plain(
+        CC.match_consulting(q, apply="step8", limit=1),
+        max_chars=520,
+    )
+    if corpus:
+        tip = f"{tip}\n\n{corpus}" if tip else corpus
+    return tip
 
 
 def _render_tarot_frame(*, title: str, body: str, tone: str = "#D4AF37") -> None:

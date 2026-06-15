@@ -1,7 +1,7 @@
 ---
 category: social
 keywords: 인간관계, 친구, 직장, 상처, 친구 복, 피곤, 부딪힘, 만만하게, 손절, 연락, 믿기, 질투, 시기, 인연, 사람
-applies: step3, step4, step8, step11, mbti
+applies: step3, step4, step8, step9, step10, step11, mbti
 gender: all
 tone: 사주까기_현장상담
 ---

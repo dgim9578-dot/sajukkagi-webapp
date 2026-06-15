@@ -1,5 +1,5 @@
 /* 사주까기 PWA — 정적 아이콘만 캐시. Streamlit HTML/WS는 항상 네트워크 우선. */
-const CACHE = "saju-pwa-static-20260519-accordion-v5";
+const CACHE = "saju-pwa-static-20260531-ilju-v2";
 
 function scopeBase() {
   const u = new URL(self.registration.scope);

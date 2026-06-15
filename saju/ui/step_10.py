@@ -200,27 +200,27 @@ def _health_fortune_html(
     risk_label_e = html.escape(risk_label)
     age_html = ""
     if age_band:
-        age_html = f'<div class="saju-step10-health-sub" style="margin-bottom:8px;">{html.escape(age_band)}</div>'
+        age_html = f'<div class="saju-step10-health-sub saju-step10-health-meta saju-step10-age-band">{html.escape(age_band)}</div>'
 
     return f"""
-<div class="saju-card saju-step10-health-card">
+<div class="saju-step10-health-card">
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
         <div style="font-size:3.5rem;" aria-hidden="true">🫀</div>
         <div>
-            <div class="saju-step10-health-head">원국 건강 취약점</div>
-            <div class="saju-step10-health-sub">{de} 일간 · {stg} 체질</div>
+            <div class="saju-step10-health-head">건강 · 잘 챙길 포인트</div>
+            <div class="saju-step10-health-sub saju-step10-health-meta">{de} 일간(나) · {stg} 체질</div>
         </div>
     </div>
     <div class="saju-step10-health-yong">
-        <b>용신 <span>{ys}</span> 기준으로 삼아 보강하면 좋은 건강 포인트</b>
+        <b>핵심 보조 기운 <span>{ys}</span>을 기준으로 챙기면 좋은 건강 포인트</b>
     </div>
     <div class="saju-step10-health-weak">
         {weak_block}
     </div>
     <div class="saju-step10-risk-block" style="margin-bottom:20px;">
         {age_html}
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;flex-wrap:wrap;gap:8px;">
-            <span>📍 현재 대운 컨디션 관리 주의도</span>
+        <div class="saju-step10-risk-row">
+            <span class="saju-step10-risk-label">📍 지금 10년 흐름(대운) — 몸·마음 관리 필요도</span>
             <span class="saju-step10-risk-score" style="color:{risk_color};">{int(risk_score)}% {risk_label_e}</span>
         </div>
     </div>
@@ -369,7 +369,10 @@ def render() -> None:
                 )
 
         with st.container(key="step10_report_sheet"):
-            _total_review_frame(_uname, combined)
+            from saju_app.ui.plain_language import plain_caption_line, to_plain_text
+
+            st.caption(plain_caption_line())
+            _total_review_frame(_uname, to_plain_text(combined))
 
             st.markdown("### 🧭 실행 포인트")
             st.caption("총평 본문에 오행 해석을 함께 묶었습니다. 카드는 실행 체크용입니다.")
@@ -397,5 +400,53 @@ def render() -> None:
                 accent="#7c3aed",
                 soft_bg="#f5f3ff",
                 md_body=_t10c,
+            )
+
+        st.divider()
+        st.markdown("### 📎 현장 상담 참고")
+        st.caption("아래는 사주까기 현장 Q&A 코퍼스입니다. 총평·대운·분야별 질문에 공통 적용됩니다.")
+        _t10_col_a, _t10_col_b = st.columns(2)
+        with _t10_col_a:
+            CC.render_consulting_panel(
+                CC.query_for_step(
+                    "step10",
+                    topic="총평",
+                    yongshin=str(yongshin),
+                    strength=strength,
+                ),
+                apply="step10",
+                title="올해·대운 흐름",
+                expanded=False,
+                container_key="step10_consult_timing",
+            )
+        with _t10_col_b:
+            CC.render_consulting_panel(
+                CC.query_for_step(
+                    "step10",
+                    topic="건강",
+                    yongshin=str(yongshin),
+                    strength=strength,
+                ),
+                apply="step10",
+                title="건강·컨디션",
+                expanded=False,
+                container_key="step10_consult_health",
+            )
+        _t10_col_c, _t10_col_d = st.columns(2)
+        with _t10_col_c:
+            CC.render_consulting_panel(
+                CC.query_for_step("step10", topic="연애"),
+                apply="step10",
+                title="연애·결혼",
+                expanded=False,
+                container_key="step10_consult_love",
+            )
+        with _t10_col_d:
+            CC.render_consulting_panel(
+                CC.query_for_step("step10", topic="시험"),
+                apply="step10",
+                title="학업·시험",
+                expanded=False,
+                container_key="step10_consult_exam",
             )
 

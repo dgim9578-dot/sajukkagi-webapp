@@ -10,6 +10,7 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent
 MOOD_DIR = _PROJECT_ROOT / "static" / "mood"
 _EXTENSIONS: tuple[str, ...] = (".webp", ".png", ".jpg", ".jpeg")
+_MOOD_FALLBACKS: dict[str, tuple[Path, ...]] = {}
 
 
 @lru_cache(maxsize=128)
@@ -22,6 +23,9 @@ def resolve_mood_image(slug: str) -> Path | None:
         path = MOOD_DIR / f"{key}{ext}"
         if path.is_file():
             return path
+    for fb in _MOOD_FALLBACKS.get(key, ()):
+        if fb.is_file():
+            return fb
     return None
 
 

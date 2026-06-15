@@ -6,14 +6,63 @@ import html
 
 import streamlit as st
 
-from saju.core.engine import STEM_ELEMENT
+from saju.core.daily_fortune import build_daily_fortune
+from saju.core.engine import STEM_ELEMENT, _ten_strength_counts
 
 from saju_app.ui import analysis_favorite_memo as AFM
 from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import components as M
 from saju_app.ui.interpretation_layout import (
     build_step6_today_interpretation,
+    render_structured_interpretation_block,
 )
+from saju_app.ui.plain_language import to_plain_text
+from saju_app.ui.step06_hero_banner import render_step06_hero_banner
+
+_EL_KO = {"木": "목", "火": "화", "土": "토", "金": "금", "水": "수"}
+
+
+def _el_ko(el: str) -> str:
+    return _EL_KO.get(str(el or "").strip(), str(el or ""))
+
+
+def _yongshin_card_body(*, strength: str, yongshin: str, day_el: str) -> str:
+    ys = _el_ko(yongshin)
+    de = _el_ko(day_el)
+    if not yongshin or yongshin == "판단 필요":
+        return "아직 핵심 기운 판단이 더 필요해요. 오늘은 큰 결정보다 루틴·환경부터 정리하세요."
+    if strength == "신강":
+        return (
+            f"에너지가 강한 편(신강)이고 나(일간)는 {de}({day_el}) 타입이에요. "
+            f"오늘은 핵심 보조 기운 {ys}({yongshin}) 쪽으로 일·대화·생활 리듬을 맞추면 "
+            f"무리하지 않고 힘을 쓸 수 있어요."
+        )
+    if strength == "신약":
+        return (
+            f"에너지가 약한 편(신약)이고 나(일간)는 {de}({day_el}) 타입이에요. "
+            f"오늘은 핵심 보조 기운 {ys}({yongshin})으로 컨디션을 먼저 채우는 선택이 "
+            f"루틴·환경·대화에 도움이 돼요."
+        )
+    return (
+        f"균형형(중화)이고 나(일간)는 {de}({day_el}) 타입이에요. "
+        f"핵심 보조 기운 {ys}({yongshin})을 기준으로 과하지 않게 맞추면 "
+        f"오늘 흐름이 안정적이에요."
+    )
+
+
+def _strength_card_body(
+    *,
+    strength: str,
+    max_el: str,
+    min_el: str,
+    today_el: str,
+    ten_detail: str,
+) -> str:
+    return (
+        f"내 에너지는 {strength}이에요. 타고난 팔자에서는 {_el_ko(max_el)}({max_el})이 강하고 "
+        f"{_el_ko(min_el)}({min_el})을 채우면 좋아요. "
+        f"오늘은 {_el_ko(today_el)}({today_el})·{ten_detail} 기운이 더 눈에 띄는 날이에요."
+    )
 
 
 def _step6_score_bar_html(score: int, tone: str) -> str:
@@ -57,11 +106,6 @@ def render() -> None:
         u_stem, u_branch = u_gapja[2][0], u_gapja[2][1]
         t_stem, t_branch = today_gapja[2][0], today_gapja[2][1]
 
-        st.markdown(
-            f"## 🔮 {u_name}님의 {now.strftime('%m월 %d일')} 오늘의 운세 심층분석"
-        )
-        M.render_mood_image("step06_hero", variant="hero", alt="오늘의 운세")
-
         ten_detail = M.get_detailed_ten_stem(
             u_stem, t_stem
         )
@@ -81,19 +125,26 @@ def render() -> None:
         strength = str(engine.get("strength", "중화"))
         max_el = str(engine.get("max_el", "木"))
         min_el = str(engine.get("min_el", "水"))
+        day_el = str(engine.get("day_el", STEM_ELEMENT.get(u_stem, "木")))
+        gender = str(st.session_state.get("u_gender") or "남자")
+        ten_counts = _ten_strength_counts(u_gapja)
+        when = now.date()
 
-        base = 68
-        yong_bonus = 6 if yongshin and (yongshin == t_el or yongshin == max_el) else 0
-        cold_penalty = -4 if (min_el == t_el and strength == "신약") else 0
-
-        category_weights = {
-            "직장": {"관성": 10, "식상": 6, "인성": 4, "재성": 2, "비겁": -3},
-            "연애": {"재성": 8, "식상": 6, "관성": 4, "인성": 3, "비겁": -4},
-            "재물": {"재성": 12, "식상": 6, "관성": 2, "인성": 2, "비겁": -6},
-            "공부": {"인성": 12, "관성": 7, "식상": 3, "재성": -2, "비겁": -3},
-            # 건강은 '인성(회복/보강)' + '관성(루틴/관리)'를 우선
-            "건강": {"인성": 10, "관성": 8, "식상": 4, "재성": 1, "비겁": -2},
-        }
+        daily = build_daily_fortune(
+            u_gapja=u_gapja,
+            today_gapja=today_gapja,
+            when=when,
+            engine=engine,
+            ten_counts=ten_counts,
+            ten_detail=ten_detail,
+            ten_group=ten_group,
+            u_name=u_name,
+            gender=gender,
+            branch_pair_relation_fn=M.branch_pair_relation,
+        )
+        daily_scores = daily["scores"]
+        daily_comments = daily["comments"]
+        day_branch_rel = str(daily.get("day_branch_rel") or "")
 
         category_meta = {
             "직장": {"icon": "💼", "tone": "#60a5fa"},
@@ -103,104 +154,12 @@ def render() -> None:
             "건강": {"icon": "🩺", "tone": "#a78bfa"},
         }
 
-        desc_by_group = {
-            "직장": {
-                "관성": "규칙·책임·평가가 강해지는 흐름입니다. 오늘은 '정확도'와 '마감'이 성과를 좌우합니다.",
-                "식상": "기획·발표·설득이 먹히는 날입니다. 한 번에 완성하려 하기보다, 60% 초안을 빠르게 공유하세요.",
-                "재성": "성과가 숫자로 연결되기 쉽습니다. 단, 욕심을 내면 과투입·과로로 번질 수 있어 페이스 조절이 핵심입니다.",
-                "인성": "지원군/정보가 들어옵니다. 혼자 해결하려 하지 말고, 레퍼런스·선배 조언을 적극 활용하세요.",
-                "비겁": "동료·팀 이슈가 부각될 수 있습니다. 오늘은 이기기보다 '합의'를 먼저 잡는 쪽이 유리합니다.",
-            },
-            "연애": {
-                "재성": "호감·끌림이 잘 살아납니다. 약속을 잡거나 관계를 한 단계 진전시키기 좋은 날입니다.",
-                "식상": "표현이 관계를 움직입니다. 말/메시지는 짧고 명확하게, 칭찬은 구체적으로 하세요.",
-                "관성": "진중함이 신뢰로 연결됩니다. 가벼운 밀당보다, 약속·예의를 지키는 태도가 득점입니다.",
-                "인성": "편안한 대화가 힘이 됩니다. 감정 정리·공감이 잘 되는 날이라 관계 회복에도 유리합니다.",
-                "비겁": "고집/자존심 싸움이 생기기 쉽습니다. '맞다/틀리다'보다 '기분'을 먼저 확인하세요.",
-            },
-            "재물": {
-                "재성": "돈의 흐름이 보이는 날입니다. 수익 기회가 오지만, 조건·리스크 확인은 반드시 하세요.",
-                "식상": "아이디어가 수익으로 이어질 수 있습니다. 부업/판매/콘텐츠는 '작게 테스트'가 정답입니다.",
-                "관성": "고정지출·의무지출이 잡힐 수 있습니다. 계획된 지출이면 OK, 충동 결제는 보류하세요.",
-                "인성": "문서·정보가 돈을 지킵니다. 계약/약관/세금/정산 체크에 시간을 쓰면 손실을 막습니다.",
-                "비겁": "돈이 새기 쉽습니다(동업/빌려줌/과소비). 오늘은 지갑을 '잠그는 날'로 두세요.",
-            },
-            "공부": {
-                "인성": "흡수력이 올라갑니다. 어려운 과목/개념을 정리하기 좋은 날입니다.",
-                "관성": "루틴·계획이 잘 먹힙니다. 시간표대로 밀어붙이면 성과가 납니다.",
-                "식상": "설명·요약이 빠릅니다. 발표/서술형/포트폴리오 정리에 유리합니다.",
-                "재성": "공부 외 유혹이 늘 수 있습니다. 환경(폰/알림)부터 정리하면 효율이 유지됩니다.",
-                "비겁": "경쟁심은 좋지만 비교로 지치기 쉽습니다. 오늘은 '나의 페이스'를 지키는 게 핵심입니다.",
-            },
-            "건강": {
-                "인성": "회복·보강이 잘 되는 흐름입니다. 수면/수분/스트레칭만 지켜도 컨디션이 빠르게 올라옵니다.",
-                "관성": "관리·루틴이 성과를 냅니다. 오늘은 '시간 정해 운동/식사'처럼 규칙을 만들면 좋습니다.",
-                "식상": "활력이 올라가지만 무리하면 탈이 납니다. 강도보다 '지속'으로 잡아야 안전합니다.",
-                "재성": "밖일/이동으로 체력이 새기 쉽습니다. 일정 사이 휴식(10분)으로 회복을 먼저 챙기세요.",
-                "비겁": "승부욕/페이스 경쟁은 금물입니다. 남과 비교하지 말고 내 리듬으로 정리하세요.",
-            },
-        }
-
-        def score_for(cat: str) -> int:
-            w = int(category_weights.get(cat, {}).get(ten_group, 0))
-            return max(35, min(99, base + w + yong_bonus + cold_penalty))
-
-        def analysis_100_plus(cat: str) -> str:
-            """상담자 사주 + 오늘 십성(ten_group) 기반 100자 이상 문장."""
-            base_msg = desc_by_group.get(cat, {}).get(ten_group, "오늘 흐름에 맞춰 유연하게 조절하세요.")
-            engine_comment = {
-                "재물": str(engine.get("wealth_comment") or ""),
-                "연애": str(engine.get("marriage_comment") or ""),
-                "직장": str(engine.get("career_comment") or ""),
-                "건강": "오늘 컨디션은 무리한 승부보다 회복 리듬과 생활 패턴을 먼저 맞출 때 안정됩니다.",
-                "공부": "오늘 학습은 새 범위를 많이 넓히기보다 이미 본 내용을 정리하고 반복하는 쪽이 효율적입니다.",
-            }.get(cat, "")
-            category_focus = {
-                "재물": (
-                    f"{u_name}님은 {max_el} 기운이 강하게 잡혀 있어 돈을 움직일 때도 한 번 정한 방식과 패턴을 반복하는 힘이 있습니다. "
-                    f"다만 약한 {min_el} 기운 때문에 숫자 검토, 계약 조건, 손익 계산처럼 차갑게 따져보는 과정은 의식적으로 보완하는 편이 좋습니다."
-                ),
-                "연애": (
-                    f"{u_name}님의 오늘 연애 흐름은 감정 표현보다 안정감과 태도가 더 크게 작용합니다. "
-                    f"{strength} 구조에서는 마음이 앞설 때도 상대의 반응을 확인하며 속도를 맞추는 것이 관계를 편하게 만듭니다."
-                ),
-                "직장": (
-                    f"직장운에서는 {ten_detail} 기운이 오늘의 업무 태도에 영향을 줍니다. "
-                    f"강한 {max_el}은 책임감과 버티는 힘으로 쓰고, 약한 {min_el}은 보고·정리·우선순위 체크로 보완하면 성과가 더 선명해집니다."
-                ),
-                "건강": (
-                    f"건강운은 진단이 아니라 컨디션 관리 관점으로 보세요. {strength} 흐름에서는 몸의 신호를 늦게 알아차리거나 반대로 예민하게 느낄 수 있으니, "
-                    "오늘은 수면, 수분, 식사 시간, 가벼운 움직임처럼 기본 루틴을 먼저 맞추는 것이 좋습니다."
-                ),
-                "공부": (
-                    f"공부운은 집중력의 방향을 잡는 것이 중요합니다. {max_el} 기운이 강하면 한 번 몰입했을 때 오래 끌고 가는 힘이 있지만, "
-                    f"약한 {min_el} 보완을 위해 오답 정리, 메모, 시간표처럼 구조화된 방식이 필요합니다."
-                ),
-            }.get(cat, "")
-            yongshin_tip = {
-                "재물": f"용신 {yongshin}은 지출을 줄이는 기준과 수익 기회를 고르는 기준으로 쓰면 좋습니다.",
-                "연애": f"용신 {yongshin}은 대화 톤, 만나는 장소, 관계 속 거리감을 조절하는 기준이 됩니다.",
-                "직장": f"용신 {yongshin}은 업무 환경, 협업 방식, 오늘 먼저 처리할 일을 고르는 기준으로 삼기 좋습니다.",
-                "건강": f"용신 {yongshin}은 생활 습관과 회복 루틴을 정할 때 참고하면 컨디션 균형을 잡는 데 도움이 됩니다.",
-                "공부": f"용신 {yongshin}은 공부 장소, 시간대, 반복 방식처럼 학습 환경을 고르는 기준으로 쓰기 좋습니다.",
-            }.get(cat, f"용신 {yongshin} 기운을 살리는 선택이 유리합니다.")
-            tips: list[str] = [base_msg]
-            if engine_comment:
-                tips.append(engine_comment)
-            if category_focus:
-                tips.append(category_focus)
-            if yongshin and yongshin != "판단 필요":
-                tips.append(yongshin_tip)
-            tips.append("오늘은 큰 결론을 서두르기보다, 이 항목에서 바로 실행할 수 있는 작은 행동 하나를 정하는 것이 가장 현실적입니다.")
-            msg = " ".join(t for t in tips if t).strip()
-            if len(msg) > 520:
-                msg = msg[:519] + "…"
-            return msg
+        render_step06_hero_banner()
 
         def render_panel(cat: str) -> None:
-            sc = int(score_for(cat))
+            sc = int(daily_scores[cat])
             meta = category_meta[cat]
-            msg = analysis_100_plus(cat)
+            msg = to_plain_text(daily_comments.get(cat, ""))
             tone = str(meta["tone"])
             st.subheader(f"{meta['icon']} {cat}")
             st.markdown(_step6_score_bar_html(sc, tone), unsafe_allow_html=True)
@@ -227,7 +186,7 @@ def render() -> None:
       font-size:0.92rem;
       line-height:1.55;
   ">
-    체크포인트: 십성 {html.escape(str(ten_detail))}({html.escape(str(ten_group))}) · 용신 {html.escape(str(yongshin))}
+    체크포인트: 십성 {html.escape(str(ten_detail))}({html.escape(str(ten_group))}) · 일지 {html.escape(day_branch_rel or '무특별')} · 용신 {html.escape(str(yongshin))}
   </div>
 </div>
 """,
@@ -238,17 +197,24 @@ def render() -> None:
             cards = [
                 (
                     "오늘의 중심 기운",
-                    f"오늘은 {ten_detail}({ten_group}) 기운이 중심입니다.",
+                    f"오늘 일진 {today_gapja[2]} × 본인 {u_gapja[2]} — "
+                    f"{ten_detail}({ten_group}) · 일지 {day_branch_rel or '무특별'}",
                     "#D4AF37",
                 ),
                 (
                     "용신 활용",
-                    f"용신 {yongshin}을 살리는 선택(루틴·환경·대화 톤)을 하면 체감 운이 더 안정적으로 올라갑니다.",
+                    _yongshin_card_body(strength=strength, yongshin=yongshin, day_el=day_el),
                     "#60A5FA",
                 ),
                 (
                     "신강약 메모",
-                    f"신강약은 {strength}이며, 오늘은 {t_el} 기운이 상대적으로 잘 드러나는 날입니다.",
+                    _strength_card_body(
+                        strength=strength,
+                        max_el=max_el,
+                        min_el=min_el,
+                        today_el=t_el,
+                        ten_detail=ten_detail,
+                    ),
                     "#34D399",
                 ),
             ]
@@ -266,16 +232,15 @@ def render() -> None:
         st.divider()
 
         core_box = (
-            f"오늘은 **{ten_detail}({ten_group})** 기운이 중심입니다. "
-            f"용신 **{yongshin}**을 살리는 선택(루틴·환경·대화 톤)을 하면 체감 운이 더 안정적으로 올라옵니다."
+            f"오늘 {daily.get('today_ilju', today_gapja[2])} · 본인 {daily.get('user_ilju', u_gapja[2])} · "
+            f"일지 {day_branch_rel or '무특별'} · **{ten_detail}({ten_group})** 중심. "
+            f"용신 **{yongshin}** 방향으로 루틴·환경을 맞추면 체감 운이 안정됩니다."
         )
-        if len(core_box) < 50:
-            core_box += " 작은 선택을 반복해 흐름을 굳히세요."
-        if len(core_box) > 120:
-            core_box = core_box[:119] + "…"
+        if len(core_box) > 160:
+            core_box = core_box[:159] + "…"
 
         cats = ("재물", "연애", "직장", "건강", "공부")
-        avg_today = int(sum(score_for(c) for c in cats) / len(cats))
+        avg_today = int(daily.get("avg_score") or 0)
 
         st.subheader("오늘의 핵심 운세")
         _ix6 = build_step6_today_interpretation(
@@ -285,9 +250,12 @@ def render() -> None:
             strength=strength,
             max_el=max_el,
             min_el=min_el,
+            today_el=t_el,
+            day_el=day_el,
             base_msg=core_box.replace("**", ""),
             harmony_pct=avg_today,
         )
+        render_structured_interpretation_block(_ix6, container_key="saju_ix_step6")
         _render_daily_focus_cards()
 
         st.divider()
@@ -321,10 +289,10 @@ def render() -> None:
         st.divider()
         _pick6 = str(st.session_state.get("step6_today_pick") or "재물")
         render_panel(_pick6)
-        _cat_q = {
-            "재물": "재물 돈 투자",
-            "연애": "연애 썸 결혼",
-            "직장": "직장 이직 커리어",
-            "건강": "건강 컨디션 마음",
-            "공부": "공부 시험 자격증",
-        }
+        CC.render_consulting_panel(
+            f"{CC.query_for_step('step6', topic=_pick6)} 오늘 운세 타이밍",
+            apply="step6",
+            title="📎 현장 상담 참고 (일반 사례)",
+            expanded=False,
+            container_key="step6_consulting",
+        )

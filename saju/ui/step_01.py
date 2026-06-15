@@ -150,6 +150,7 @@ def render() -> None:
             inject_home_scroll_after_solar24()
 
         Revisit.render_revisit_home_header()
+        M.inject_revisit_pin_autofill_guard_once()
 
         with st.container(key="step1_cta_row_main"):
             with st.form("step1_revisit_login_form", clear_on_submit=False, border=False):

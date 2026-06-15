@@ -89,8 +89,8 @@ def inject_early_step_html_attrs() -> None:
         (
             f"<style>html{{scroll-padding-top:0!important;}}"
             f"html.{home_cls},html[data-saju-step=\"{step}\"]"
-            f'[data-testid="stAppViewContainer"]{{min-height:0!important;height:auto!important;'
-            f"max-height:none!important;justify-content:flex-start!important;"
+            f'[data-testid="stAppViewContainer"]{{min-height:0!important;height:100dvh!important;'
+            f"max-height:100dvh!important;overflow-y:auto!important;justify-content:flex-start!important;"
             f"align-items:stretch!important;align-content:flex-start!important;"
             f"display:block!important;flex:none!important;padding-top:0!important;margin-top:0!important;}}"
             f"html.{home_cls} .main .block-container,"
@@ -284,6 +284,12 @@ def configure_application() -> None:
         height: 0 !important;
         min-height: 0 !important;
     }
+    .stApp {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+    }
     [data-testid="stAppViewContainer"] {
         padding-top: 0 !important;
         margin-top: 0 !important;
@@ -293,20 +299,24 @@ def configure_application() -> None:
         overscroll-behavior-y: auto;
         scroll-behavior: auto !important;
         touch-action: pan-y !important;
-        height: auto !important;
+        height: 100vh !important;
+        height: 100dvh !important;
         min-height: 0 !important;
-        max-height: none !important;
+        max-height: 100dvh !important;
         /* 모바일 WebView에서 flex center로 밀리는 현상 방지(홈/전체 공통) */
         display: block !important;
         justify-content: flex-start !important;
         align-items: stretch !important;
     }
-    /* 100vh 강제는 제거 — 일부 모바일(WebView)에서 세로 가운데 정렬+대공백을 유발 */
+    /* 홈 STEP1 — 스크롤 루트는 뷰포트 고정(상단 flex-center 만 차단) */
     html.saju-home-step1 [data-testid="stAppViewContainer"],
     html[data-saju-step="1"] [data-testid="stAppViewContainer"] {
         display: block !important;
         min-height: 0 !important;
-        height: auto !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow-y: auto !important;
         justify-content: flex-start !important;
         align-items: stretch !important;
     }
@@ -9069,6 +9079,49 @@ def configure_application() -> None:
     html:has(.st-key-saju_router_step_mount_03) .st-key-step3_gapja_chart [data-testid="stCustomComponentV1"] {
         overflow: visible !important;
         pointer-events: auto !important;
+    }
+
+    /* ===== 스크롤 복구 (Streamlit Cloud · 최종 우선) =====
+       height:auto + overflow-y:auto 는 컨테이너가 콘텐츠만큼 늘어나 스크롤바가 생기지 않고,
+       .stApp(100dvh·overflow:hidden) 안에서 하단이 잘린다. 뷰포트 고정 스크롤 루트를 복원한다.
+       (상단 flex-center 차단은 justify-content:flex-start 유지) */
+    html body .stApp,
+    html:has([class*="st-key-saju_router_step_mount_"]) .stApp,
+    html:has(.st-key-saju_router_step_mount_01) .stApp {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+    }
+    html body [data-testid="stAppViewContainer"],
+    html:has([class*="st-key-saju_router_step_mount_"]) [data-testid="stAppViewContainer"],
+    html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
+    html.saju-home-step1 [data-testid="stAppViewContainer"],
+    html[data-saju-step="1"] [data-testid="stAppViewContainer"],
+    html[data-saju-step] [data-testid="stAppViewContainer"],
+    .stApp:has([class*="st-key-saju_router_step_mount_"]) [data-testid="stAppViewContainer"],
+    .stApp:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        min-height: 0 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: auto !important;
+        touch-action: pan-y !important;
+        display: block !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+    }
+    html body [data-testid="stAppViewContainer"] > .main,
+    html body section.main,
+    html body [data-testid="stMain"],
+    html body [data-testid="stMainBlockContainer"],
+    html body .main .block-container {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
     }
 </style>
 <script>

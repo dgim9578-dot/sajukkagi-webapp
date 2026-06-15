@@ -4715,17 +4715,24 @@ html:has(.st-key-saju_router_step_mount_01) [data-testid="stMainBlockContainer"]
   gap: 0 !important;
   row-gap: 0 !important;
 }
-html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"],
-html:has(.st-key-saju_router_step_mount_01) body,
-html:has(.st-key-saju_router_step_mount_01) .stApp {
+html:has(.st-key-saju_router_step_mount_01) body {
   min-height: 0 !important;
   height: auto !important;
 }
+html:has(.st-key-saju_router_step_mount_01) .stApp {
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
 html:has(.st-key-saju_router_step_mount_01) [data-testid="stAppViewContainer"] {
-  display: block !important;
-  flex: none !important;
-  justify-content: flex-start !important;
-  align-items: stretch !important;
+  min-height: 0 !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
 }
 .st-key-step1_solar24 iframe {
   display: block !important;

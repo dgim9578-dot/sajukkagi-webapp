@@ -9,12 +9,12 @@ from pathlib import Path
 
 import streamlit as st
 
-# GitHub raw — 카카오·SNS 크롤러가 Streamlit HTML 대신 직접 가져올 배너
-_DEFAULT_GITHUB_RAW_HERO = (
+# GitHub Pages / raw — 카카오 공유 디버거·크롤러용 (Streamlit·jsDelivr URL 은 디버거 거부)
+_DEFAULT_OG_HERO = (
     "https://raw.githubusercontent.com/dgim9578-dot/sajukkagi-webapp/main/images/step01_hero_v2.png"
 )
-_DEFAULT_GITHUB_RAW_OG = (
-    "https://raw.githubusercontent.com/dgim9578-dot/sajukkagi-webapp/main/static/og-share.png"
+_DEFAULT_SHARE_PAGE = (
+    "https://dgim9578-dot.github.io/sajukkagi-webapp/share-preview.html"
 )
 _OG_IMAGE_ALT = "사주까기 — 럭셔리 사주풀이 · 무료 사주풀이"
 
@@ -63,8 +63,8 @@ def _og_image_url() -> str:
     custom = _setting("SAJU_OG_IMAGE_URL")
     if custom:
         return _with_og_cache_bust(custom)
-    # GitHub raw — Streamlit /app/static 은 크롤러 MIME 이슈가 있어 raw URL 고정
-    return _with_og_cache_bust(_DEFAULT_GITHUB_RAW_HERO)
+    # jsDelivr — Streamlit Cloud 는 크롤러에 og HTML 을 주지 않음
+    return _with_og_cache_bust(_DEFAULT_OG_HERO)
 
 
 MOBILE_VIEWPORT_CONTENT = (

@@ -117,8 +117,13 @@ PC에서 앱을 켠 뒤 **임시 공개 URL**을 만들려면:
 4. (선택) GitHub 저장소 → Settings → Social preview → `static/og-share.png` 업로드
 
 5. 카카오 [공유 디버거](https://developers.kakao.com/tool/debugger/sharing)에서 앱 URL 입력 → **캐시 초기화** → 다시 스크랩  
-   미리보기 이미지가 안 바뀌면 최대 24시간(Cloud 스크린샷 갱신) 기다리거나,  
-   `https://<앱주소>/app/static/share-preview.html` 링크로 공유해 보세요.
+   미리보기 이미지가 안 바뀌면 카카오 [공유 디버거](https://developers.kakao.com/tool/debugger/sharing)에서 아래 URL 로 **캐시 초기화** 후 공유하세요.  
+   (jsDelivr·Streamlit `/app/static` 은 카카오 디버거에서 **Invalid URL** 또는 og 미인식)
+
+   1. GitHub 저장소 → **Settings → Pages** → Source: **main** / Folder: **/docs** → Save  
+   2. 1~2분 후 공유·디버거 URL:
+
+   `https://dgim9578-dot.github.io/sajukkagi-webapp/share-preview.html`
 
 ## 8. 다음 확장 순서
 

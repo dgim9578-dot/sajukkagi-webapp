@@ -3451,6 +3451,117 @@ def configure_application() -> None:
         color: #f5e6a8 !important;
     }
 
+    /* STEP2: 재방문 아래 이전·다음 2열 (본문 흐름, 하단 고정 없음) */
+    html[data-saju-step="2"] .st-key-step2_action_block {
+        margin-top: 0.75rem !important;
+        margin-bottom: 0.5rem !important;
+        padding: 0 !important;
+    }
+    html[data-saju-step="2"] .st-key-step2_inline_nav_row [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: stretch !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
+    }
+    html[data-saju-step="2"] .st-key-step2_inline_nav_row [data-testid="stHorizontalBlock"] > div {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        width: auto !important;
+    }
+    html[data-saju-step="2"] .st-key-step2_inline_nav_row .stButton > button {
+        min-height: 2.85rem !important;
+        font-size: max(16px, 1.02rem) !important;
+        font-weight: 800 !important;
+        border-radius: 14px !important;
+        width: 100% !important;
+    }
+    html[data-saju-step="2"] .st-key-step2_inline_nav_row .stButton > button[kind="primary"],
+    html[data-saju-step="2"] .st-key-step2_inline_nav_row .stButton > button[data-testid="baseButton-primary"] {
+        background: linear-gradient(
+            135deg,
+            light-dark(#d4af37, #c9a227) 0%,
+            light-dark(#b8922a, #a88620) 100%
+        ) !important;
+        color: light-dark(#1a1208, #1a1208) !important;
+        -webkit-text-fill-color: light-dark(#1a1208, #1a1208) !important;
+        border: none !important;
+        box-shadow: 0 4px 14px light-dark(rgba(184, 146, 42, 0.28), rgba(0, 0, 0, 0.32)) !important;
+    }
+    html[data-saju-step="2"] .st-key-step2_fixed_next_bar,
+    html[data-saju-step="2"] .st-key-step2_save_actions {
+        position: static !important;
+        box-shadow: none !important;
+        border-top: none !important;
+        padding: 0 !important;
+        background: transparent !important;
+    }
+    html[data-saju-step="2"] .st-key-step2_next_in_main_tab_wrap,
+    html[data-saju-step="2"] .st-key-step2_next_in_opp_tab_wrap {
+        display: none !important;
+    }
+
+    /* STEP3: 사주+MBTI 아래 이전·다음 2열 (본문 흐름) */
+    html[data-saju-step="3"] .st-key-step3_inline_nav_row {
+        margin-top: 1rem !important;
+        margin-bottom: 0.75rem !important;
+        padding: 0 !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_inline_nav_row [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: stretch !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_inline_nav_row [data-testid="stHorizontalBlock"] > div {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        width: auto !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_inline_nav_row .stButton > button {
+        min-height: 2.85rem !important;
+        font-size: max(16px, 1.02rem) !important;
+        font-weight: 800 !important;
+        border-radius: 14px !important;
+        width: 100% !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_inline_nav_row .stButton > button[kind="primary"],
+    html[data-saju-step="3"] .st-key-step3_inline_nav_row .stButton > button[data-testid="baseButton-primary"] {
+        background: linear-gradient(
+            135deg,
+            light-dark(#d4af37, #c9a227) 0%,
+            light-dark(#b8922a, #a88620) 100%
+        ) !important;
+        color: light-dark(#1a1208, #1a1208) !important;
+        -webkit-text-fill-color: light-dark(#1a1208, #1a1208) !important;
+        border: none !important;
+        box-shadow: 0 4px 14px light-dark(rgba(184, 146, 42, 0.28), rgba(0, 0, 0, 0.32)) !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_mbti_input_row [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: flex-end !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_mbti_input_row [data-testid="stHorizontalBlock"] > div:first-child {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_mbti_input_row [data-testid="stHorizontalBlock"] > div:last-child {
+        flex: 0 0 clamp(5.5rem, 22vw, 7rem) !important;
+        min-width: 5rem !important;
+    }
+    html[data-saju-step="3"] .st-key-step3_mbti_input_row .stButton > button {
+        min-height: clamp(2.45rem, 11vw, 3rem) !important;
+        font-weight: 800 !important;
+        border-radius: 12px !important;
+    }
+
     /* ===== 분석 카드 `.card` 스킨 (STEP3~10 — 채팅창은 별도 규칙) ===== */
     div[class*="st-key-saju_analysis_card"] {
         position: relative;
@@ -9514,6 +9625,7 @@ def configure_application() -> None:
     try:
         from saju_app.ui.execution import (
             inject_calendar_weekday_en_once,
+            inject_global_widget_focus_preserve_once,
             inject_step2_tab_manager_global_once,
             inject_step_nav_click_guard_once,
             inject_step_scroll_manager_once,
@@ -9529,6 +9641,7 @@ def configure_application() -> None:
         inject_step_scroll_manager_once()
         if not is_admin_build:
             inject_step_nav_click_guard_once()
+            inject_global_widget_focus_preserve_once()
             inject_step2_tab_manager_global_once()
             inject_calendar_weekday_en_once()
             from saju_app.ui.execution import inject_home_photo2_layout_css

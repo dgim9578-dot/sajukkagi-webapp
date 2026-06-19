@@ -2076,7 +2076,13 @@ def queue_step2_save_and_analyze() -> None:
 
     if not try_step2_save_from_session():
         st.session_state["_step2_clear_nav_pending"] = True
-        rerun_full_app()
+    rerun_full_app()
+
+
+def queue_step2_nav_prev() -> None:
+    """STEP2 「← 이previous」 — STEP1(홈)으로 (fragment 밖 전체 rerun)."""
+    navigate_to_step(1)
+    rerun_full_app()
 
 
 def assign_step_and_rerun(
@@ -2209,8 +2215,8 @@ def render_bottom_step_nav(*, current_step: int | None = None) -> None:
     reset_id = int(st.session_state.get("reset_id", 0))
 
     # STEP12(관리자): 상단 UI로 이동 — 하단 이전/다음 생략
-    # STEP2: 본문 재방문 아래 인라인 이전·다음 사용 — 글로벌 행 생략
-    if step > STEP_NAV_MIN and step not in (2, 11, 12):
+    # STEP2·3: 본문 하단 인라인 이전·다음 사용 — 글로벌 행 생략
+    if step > STEP_NAV_MIN and step not in (2, 3, 11, 12):
         # 모바일 인앱 WebView: 가운데 빈 열(1·2·1) 대신 2열 동일 비율이 세로 스택을 덜 유발합니다.
         with st.container(key="saju_bottom_prev_next_row"):
             try:

@@ -228,7 +228,7 @@ def render_step3_aptitude_mbti_block(
         unsafe_allow_html=True,
     )
     _render_step3_mbti_banner()
-    st.caption("MBTI 4자 입력 (예: ENTJ, ISFP) 후 **엔터**를 누르면 분석합니다.")
+    st.caption("MBTI 4자 입력 (예: ENTJ, ISFP) 후 **엔터** 또는 **분석하기**를 누르면 분석합니다.")
 
     def _commit_step3_mbti_input() -> None:
         draft = str(st.session_state.get("step3_mbti_text_input") or "").strip().upper()[:4]
@@ -236,15 +236,25 @@ def render_step3_aptitude_mbti_block(
 
     with st.container(key="step3_mbti_input_row"):
         st.markdown('<p class="step3-mbti-field-label">입력</p>', unsafe_allow_html=True)
-        M.text_input_no_autofill(
-            "MBTI 입력",
-            max_chars=4,
-            key="step3_mbti_text_input",
-            placeholder="ENTJ",
-            label_visibility="collapsed",
-            help="영문 4자 (예: INTJ). 모르면 비워 두셔도 됩니다.",
-            on_change=_commit_step3_mbti_input,
-        )
+        in_c, btn_c = st.columns([3, 1], gap="small")
+        with in_c:
+            M.text_input_no_autofill(
+                "MBTI 입력",
+                max_chars=4,
+                key="step3_mbti_text_input",
+                placeholder="ENTJ",
+                label_visibility="collapsed",
+                help="영문 4자 (예: INTJ). 모르면 비워 두셔도 됩니다.",
+                on_change=_commit_step3_mbti_input,
+            )
+        with btn_c:
+            st.button(
+                "분석하기",
+                type="primary",
+                use_container_width=True,
+                key="step3_mbti_analyze_btn",
+                on_click=_commit_step3_mbti_input,
+            )
 
     mbti = str(st.session_state.get("user_mbti") or "").strip().upper()[:4]
 

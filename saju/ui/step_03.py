@@ -358,3 +358,29 @@ def render() -> None:
             expanded=False,
             container_key="step3_consulting",
         )
+
+        _render_step3_inline_nav_row()
+
+
+def _render_step3_inline_nav_row() -> None:
+    """사주+MBTI 본문 하단 — ← 이전 · 다음 → 궁합 (글로벌 하단과 별도, 스크롤 끝에서 보임)."""
+    reset_id = int(st.session_state.get("reset_id", 0))
+    with st.container(key="step3_inline_nav_row"):
+        prev_c, next_c = st.columns(2, gap="small")
+        with prev_c:
+            st.button(
+                "← 이전",
+                use_container_width=True,
+                key=f"step3_inline_prev_{reset_id}",
+                on_click=M.navigate_to_step,
+                args=(2,),
+            )
+        with next_c:
+            st.button(
+                "다음 → 궁합",
+                type="primary",
+                use_container_width=True,
+                key=f"step3_inline_next_{reset_id}",
+                on_click=M.navigate_to_step,
+                args=(4,),
+            )

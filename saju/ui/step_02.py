@@ -12,7 +12,7 @@ import streamlit.components.v1 as components
 from saju_app.ui import components as M
 from saju_app.ui import execution as saju_execution
 
-STEP2_UI_BUILD = "2026-05-31-step2-apply-before-router-v11"
+STEP2_UI_BUILD = "2026-05-31-step2-save-before-widgets-v12"
 
 _STEP2_TIME_OPTIONS_FALLBACK: tuple[str, ...] = (
     "모름",
@@ -791,7 +791,10 @@ def _step2_show_validation_error(msg: str) -> None:
 
 
 def try_step2_save_from_session() -> bool:
-    """STEP2 입력 검증·payload 저장. STEP3 이동은 ``app.py`` 가 ``_step2_apply_pending`` 으로 처리."""
+    """STEP2 입력 검증·payload 저장. STEP3 이동은 ``app.py`` 가 ``_step2_apply_pending`` 으로 처리.
+
+    위젯 렌더 **전**에 호출해야 합니다. 렌더 후에는 위젯 키 session_state 를 수정할 수 없습니다.
+    """
     self_nm = _resolve_self_name_for_save()
     if not self_nm:
         _step2_show_validation_error("본인 이름을 입력해 주세요.")
@@ -801,37 +804,12 @@ def try_step2_save_from_session() -> bool:
             "본인 생년월일을 **YYYY/MM/DD** 형식으로 입력해 주세요. (예: 1995/01/01)"
         )
         return False
-    _sync_ymd_from_bdate_text(
-        bdate_key=_SELF_BDATE_KEY, y_key="u_y", m_key="u_m", d_key="u_d"
-    )
-    _opp_bdate_raw = str(st.session_state.get(_OPP_BDATE_TEXT_KEY) or "").strip()
-    if _opp_bdate_raw and _parse_bdate_text(_opp_bdate_raw) is not None:
-        _sync_ymd_from_bdate_text(
-            bdate_key=_OPP_BDATE_KEY, y_key="p_y", m_key="p_m", d_key="p_d"
-        )
     opp_nm = _resolve_opponent_name_for_save()
-    if opp_nm:
-        # 위젯 키(step2_opp_name_input)는 fragment 렌더 후 수정 불가 — p_name 등만 갱신
-        st.session_state.p_name = opp_nm
-        st.session_state.partner_name_snapshot = opp_nm
-    if opp_nm and _parse_bdate_text(
-        st.session_state.get(_OPP_BDATE_TEXT_KEY)
-        or _format_bdate_str(
-            int(st.session_state.get("p_y", 0) or 0),
-            int(st.session_state.get("p_m", 0) or 0),
-            int(st.session_state.get("p_d", 0) or 0),
-        )
-    ) is None:
+    if opp_nm and _parse_bdate_text(st.session_state.get(_OPP_BDATE_TEXT_KEY)) is None:
         _step2_show_validation_error(
             "상대방 생년월일을 **YYYY/MM/DD** 형식으로 입력해 주세요. (예: 1990/05/15)"
         )
         return False
-    if opp_nm:
-        _sync_ymd_from_bdate_text(
-            bdate_key=_OPP_BDATE_KEY, y_key="p_y", m_key="p_m", d_key="p_d"
-        )
-    _sync_birth_time_from_widget(time_key="u_time", time_options=list(M.STEP2_TIME_OPTIONS))
-    _sync_birth_time_from_widget(time_key="p_time", time_options=list(M.STEP2_TIME_OPTIONS))
     if not bool(st.session_state.get("agree", False)):
         _step2_show_validation_error(
             "개인정보 수집·이용에 **동의 체크**가 필요합니다. "
@@ -1089,6 +1067,14 @@ def render() -> None:
     if st.session_state.pop("_step2_clear_nav_pending", False):
         saju_execution.clear_step_nav_pending_now()
 
+    if st.session_state.pop("_step2_queue_save", False):
+        if try_step2_save_from_session():
+            M.rerun_full_app()
+        else:
+            st.session_state["_step2_clear_nav_pending"] = True
+            saju_execution.clear_step_nav_pending_now()
+            M.rerun_full_app()
+
     apply_err = st.session_state.pop("_step2_apply_error", None)
     top_alert = st.session_state.pop("_step2_top_alert", None)
 
@@ -1151,14 +1137,6 @@ def render() -> None:
             key="agree",
         )
         _render_step2_inline_nav_row()
-
-    if st.session_state.pop("_step2_queue_save", False):
-        if try_step2_save_from_session():
-            M.rerun_full_app()
-        else:
-            st.session_state["_step2_clear_nav_pending"] = True
-            saju_execution.clear_step_nav_pending_now()
-            M.rerun_full_app()
 
     M.inject_step2_tab_order_once()
     saju_execution.inject_step2_bdate_input_focus_guard_once()

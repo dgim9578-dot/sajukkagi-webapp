@@ -125,6 +125,13 @@ def main() -> None:
         except Exception:
             pass
 
+    from saju_app.ui.execution import clear_step_nav_pending_now
+
+    if st.session_state.pop("_step2_apply_pending", False):
+        if not M.apply_step2_next_from_payload():
+            st.session_state["_step2_clear_nav_pending"] = True
+        clear_step_nav_pending_now()
+
     step = _current_step()
     home_first = step == 1
 
@@ -137,9 +144,10 @@ def main() -> None:
     from saju_app.ui.execution import (
         finalize_scroll_to_top_if_needed,
         get_step_nav_from_step,
+        inject_global_widget_focus_preserve_once,
         inject_step_nav_transition_early,
+        inject_widget_focus_return_once,
         prime_step_nav_scroll_before_render,
-        render_step_top_anchor,
     )
 
     from saju_app.ui.steps import router as step_router
@@ -153,7 +161,6 @@ def main() -> None:
         _run_browser_privacy_widgets()
     else:
         prime_step_nav_scroll_before_render()
-        render_step_top_anchor()
         step_router.render()
         _run_browser_privacy_widgets()
 
@@ -164,6 +171,8 @@ def main() -> None:
     except Exception:
         pass
 
+    inject_global_widget_focus_preserve_once()
+    inject_widget_focus_return_once()
     finalize_scroll_to_top_if_needed()
 
 

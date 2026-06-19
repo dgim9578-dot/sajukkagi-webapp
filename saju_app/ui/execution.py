@@ -4681,7 +4681,8 @@ _STEP_NAV_CLICK_GUARD_JS = r"""
           ".st-key-saju_global_bottom_chrome, " +
             ".st-key-saju_bottom_quick_menu_panel, " +
             ".st-key-saju_bottom_prev_next_row, " +
-            ".st-key-step11_inline_nav_row"
+            ".st-key-step11_inline_nav_row, " +
+            ".st-key-step2_inline_nav_row"
         )
       ) {
         return !!el.closest("button");
@@ -4907,7 +4908,7 @@ def inject_router_step_mount_visibility_css(
         # 전환 중 pending 해제 전 — 하단 안내(푸터)만 남는 빈 화면 방지
         transition_shell_css = """
 html[data-saju-nav-pending="1"] .st-key-saju_global_bottom_chrome,
-html[data-saju-nav-pending="1"] .st-key-saju_bottom_prev_next_row,
+html[data-saju-nav-pending="1"] .st-key-saju_global_bottom_chrome .st-key-saju_bottom_prev_next_row,
 html[data-saju-nav-pending="1"] .st-key-saju_bottom_quick_menu_panel,
 html[data-saju-nav-pending="1"] .st-key-saju_policy_footer {
     display: none !important;

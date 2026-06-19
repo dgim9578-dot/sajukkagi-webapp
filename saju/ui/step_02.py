@@ -12,7 +12,7 @@ import streamlit.components.v1 as components
 from saju_app.ui import components as M
 from saju_app.ui import execution as saju_execution
 
-STEP2_UI_BUILD = "2026-05-31-step2-deferred-save-v10"
+STEP2_UI_BUILD = "2026-05-31-step2-apply-before-router-v11"
 
 _STEP2_TIME_OPTIONS_FALLBACK: tuple[str, ...] = (
     "모름",
@@ -791,7 +791,7 @@ def _step2_show_validation_error(msg: str) -> None:
 
 
 def try_step2_save_from_session() -> bool:
-    """STEP2 입력 검증·저장 후 STEP3 이동. 하단 「다음 →」 on_click 에서 호출."""
+    """STEP2 입력 검증·payload 저장. STEP3 이동은 ``app.py`` 가 ``_step2_apply_pending`` 으로 처리."""
     self_nm = _resolve_self_name_for_save()
     if not self_nm:
         _step2_show_validation_error("본인 이름을 입력해 주세요.")
@@ -846,6 +846,16 @@ def try_step2_save_from_session() -> bool:
     ).strip()
     st.session_state._step2_payload = payload
     st.session_state.pop("_step2_apply_error", None)
+    st.session_state["_step2_apply_pending"] = True
+    return True
+
+
+def try_step2_save_and_apply_from_session() -> bool:
+    """검증·payload 저장 후 즉시 apply (테스트·레거시)."""
+    if not try_step2_save_from_session():
+        return False
+    if not st.session_state.pop("_step2_apply_pending", False):
+        return False
     if not M.apply_step2_next_from_payload():
         return False
     return int(st.session_state.get("step", 2)) != 2
@@ -1079,9 +1089,6 @@ def render() -> None:
     if st.session_state.pop("_step2_clear_nav_pending", False):
         saju_execution.clear_step_nav_pending_now()
 
-    if st.session_state.pop("_step2_apply_pending", False):
-        M.apply_step2_next_from_payload()
-
     apply_err = st.session_state.pop("_step2_apply_error", None)
     top_alert = st.session_state.pop("_step2_top_alert", None)
 
@@ -1146,10 +1153,9 @@ def render() -> None:
         _render_step2_inline_nav_row()
 
     if st.session_state.pop("_step2_queue_save", False):
-        ok = try_step2_save_from_session()
-        if ok and int(st.session_state.get("step", 2)) != 2:
+        if try_step2_save_from_session():
             M.rerun_full_app()
-        elif not ok:
+        else:
             st.session_state["_step2_clear_nav_pending"] = True
             saju_execution.clear_step_nav_pending_now()
             M.rerun_full_app()

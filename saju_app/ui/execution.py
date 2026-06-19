@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 _FORCE_SCROLL_OPTS_KEY = "_saju_force_scroll_opts"
 # parent 창 JS 와 Python 세션 키를 반드시 동일 숫자로 맞출 것 (불일치 시 구버전 JS 가 남아 멈춤·스크롤 미적용)
-_SCROLL_MGR_JS_VER = 95
+_SCROLL_MGR_JS_VER = 96
 
 
 def schedule_force_scroll_after_nav(
@@ -1427,6 +1427,11 @@ _SCROLL_MANAGER_JS = r"""
                     }
                 } catch (e2) {}
             }
+            try {
+                if (pw.sessionStorage.getItem("saju_widget_editing") === "1") {
+                    return true;
+                }
+            } catch (e3) {}
         } catch (e) {}
         const lock2 = pw.__sajuStep2FocusLock;
         if (lock2 && lock2.until && Date.now() < lock2.until) return true;
@@ -4372,7 +4377,8 @@ def reset_step_dom_sync_slots_for_run() -> None:
 _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
 (function () {
   const pw = window.parent !== window ? window.parent : window;
-  if (pw.__sajuGlobalWidgetFocusV2) return;
+  if (pw.__sajuGlobalWidgetFocusV3) return;
+  pw.__sajuGlobalWidgetFocusV3 = true;
   pw.__sajuGlobalWidgetFocusV2 = true;
   pw.__sajuGlobalWidgetFocusV1 = true;
 
@@ -4457,10 +4463,20 @@ _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
 
   function hardFocus(el) {
     if (!el) return;
-    const onStep2 =
-      doc.documentElement &&
-      doc.documentElement.getAttribute("data-saju-step") === "2";
-    if (!onStep2) {
+    const de = doc.documentElement;
+    const step = de ? String(de.getAttribute("data-saju-step") || "") : "";
+    const lock = pw.__sajuWidgetFocusLock;
+    const savedY =
+      lock && lock.scrollTop != null
+        ? lock.scrollTop
+        : readSavedScrollY();
+    const inPageTab =
+      el.closest &&
+      !!el.closest(
+        ".st-key-step6_today_pick_row, .st-key-step8_pick_row, .st-key-step4_compat_tabs"
+      );
+    const skipScrollInto = step === "2" || inPageTab || savedY > 8;
+    if (!skipScrollInto) {
       try {
         el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
       } catch (e) {}
@@ -4472,8 +4488,21 @@ _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
         el.focus();
       } catch (e3) {}
     }
-    if (onStep2 && typeof pw.__sajuStep2RestoreScroll === "function") {
+    if (step === "2" && typeof pw.__sajuStep2RestoreScroll === "function") {
       pw.__sajuStep2RestoreScroll();
+    } else if (savedY > 0) {
+      restoreScroll(lock || { scrollTop: savedY, scrollY: savedY });
+    }
+  }
+
+  function readSavedScrollY() {
+    try {
+      const raw = pw.sessionStorage.getItem("saju_widget_scroll_y");
+      if (raw == null) return 0;
+      const y = parseInt(raw, 10);
+      return Number.isFinite(y) ? Math.max(0, y) : 0;
+    } catch (e) {
+      return 0;
     }
   }
 
@@ -4494,24 +4523,41 @@ _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
     pw.__sajuStep2FocusLock = lock;
     try {
       pw.sessionStorage.setItem("saju_widget_focus_v1", wk);
+      pw.sessionStorage.setItem("saju_widget_scroll_y", String(lock.scrollTop || 0));
+      pw.sessionStorage.setItem("saju_widget_editing", "1");
+      pw.setTimeout(function () {
+        try {
+          pw.sessionStorage.removeItem("saju_widget_editing");
+        } catch (e0) {}
+      }, 3200);
     } catch (e) {}
   }
 
   function restoreScroll(lock) {
-    if (!lock) return;
     const doc = pw.document;
     if (!doc) return;
     const main = getMainScrollEl(doc);
-    if (main && lock.scrollTop != null) {
+    let top =
+      lock && lock.scrollTop != null ? lock.scrollTop : readSavedScrollY();
+    top = Math.max(0, parseInt(String(top || 0), 10) || 0);
+    if (top <= 0) return;
+    const apply = function () {
+      if (main) {
+        try {
+          main.scrollTop = top;
+        } catch (e) {}
+      }
       try {
-        main.scrollTop = lock.scrollTop;
-      } catch (e) {}
-    }
-    if (lock.scrollY != null) {
-      try {
-        pw.scrollTo(0, lock.scrollY);
+        pw.scrollTo(0, top);
       } catch (e2) {}
-    }
+    };
+    apply();
+    try {
+      pw.requestAnimationFrame(apply);
+    } catch (e3) {}
+    [8, 32, 96, 200].forEach(function (ms) {
+      pw.setTimeout(apply, ms);
+    });
   }
 
   function restoreWidgetFocus() {
@@ -4585,16 +4631,17 @@ _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
 
 def inject_global_widget_focus_preserve_once() -> None:
     """전 STEP — 위젯 클릭·입력 rerun 후 포커스·스크롤 위치 유지."""
-    if st.session_state.get("_saju_global_widget_focus_v2"):
+    if st.session_state.get("_saju_global_widget_focus_v3"):
         return
-    st.session_state["_saju_global_widget_focus_v2"] = True
+    st.session_state["_saju_global_widget_focus_v3"] = True
+    st.session_state.pop("_saju_global_widget_focus_v2", None)
     st.session_state.pop("_saju_global_widget_focus_v1", None)
     html = (
         "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
         "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
         f"<script>{_GLOBAL_WIDGET_FOCUS_PRESERVE_JS}</script></body></html>"
     )
-    with st.container(key="saju_widget_focus_preserve_v2"):
+    with st.container(key="saju_widget_focus_preserve_v3"):
         components.html(html, height=0, scrolling=False)
 
 

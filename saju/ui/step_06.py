@@ -266,6 +266,7 @@ def render() -> None:
         def _pick(cat: str):
             def _h():
                 st.session_state.step6_today_pick = cat
+                M.queue_widget_focus(f"step6_pick_{cat}", kind="button")
 
             return _h
 

@@ -12,7 +12,7 @@ import streamlit.components.v1 as components
 from saju_app.ui import components as M
 from saju_app.ui import execution as saju_execution
 
-STEP2_UI_BUILD = "2026-05-31-step2-deferred-save-v9"
+STEP2_UI_BUILD = "2026-05-31-step2-deferred-save-v10"
 
 _STEP2_TIME_OPTIONS_FALLBACK: tuple[str, ...] = (
     "모름",
@@ -811,7 +811,7 @@ def try_step2_save_from_session() -> bool:
         )
     opp_nm = _resolve_opponent_name_for_save()
     if opp_nm:
-        st.session_state[_OPP_NAME_INPUT_KEY] = opp_nm
+        # 위젯 키(step2_opp_name_input)는 fragment 렌더 후 수정 불가 — p_name 등만 갱신
         st.session_state.p_name = opp_nm
         st.session_state.partner_name_snapshot = opp_nm
     if opp_nm and _parse_bdate_text(

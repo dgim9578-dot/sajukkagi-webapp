@@ -201,39 +201,19 @@ def analyze_saju_mbti_aptitude(
     return out
 
 
-def render_step3_aptitude_mbti_block(
+def _commit_step3_mbti_input() -> None:
+    draft = str(st.session_state.get("step3_mbti_text_input") or "").strip().upper()[:4]
+    st.session_state.user_mbti = draft
+
+
+@st.fragment
+def _render_step3_mbti_interactive(
     *,
-    u_name: str,
     u_gapja: list[str],
-    strength: str,
-    yongshin: str,
-    max_el: str,
-    min_el: str,
     ix3: StructuredInterpretation,
     engine: dict[str, Any],
 ) -> None:
-    """STEP3: 사주 × MBTI 적성(텍스트 입력 + 시안 카드)."""
-    _ = (strength, yongshin, max_el, min_el)
-
-    if st.session_state.get("user_mbti") == "선택 안 함":
-        st.session_state.user_mbti = ""
-    st.session_state.setdefault("user_mbti", "")
-    # `value=`와 `key=`를 동시에 쓰면 위젯 세션 키와 충돌할 수 있어, 최초 1회만 키를 시드합니다.
-    seed_mbti = str(st.session_state.get("user_mbti") or "")
-    if "step3_mbti_text_input" not in st.session_state:
-        st.session_state["step3_mbti_text_input"] = seed_mbti
-
-    st.markdown(
-        '<div class="saju-section-title-badge">사주+MBTI 분석</div>',
-        unsafe_allow_html=True,
-    )
-    _render_step3_mbti_banner()
-    st.caption("MBTI 4자 입력 (예: ENTJ, ISFP) 후 **엔터** 또는 **분석하기**를 누르면 분석합니다.")
-
-    def _commit_step3_mbti_input() -> None:
-        draft = str(st.session_state.get("step3_mbti_text_input") or "").strip().upper()[:4]
-        st.session_state.user_mbti = draft
-
+    """MBTI 입력·분석하기·결과 — fragment rerun 으로 클릭 시 스크롤이 위로 튕기지 않게."""
     with st.container(key="step3_mbti_input_row"):
         st.markdown('<p class="step3-mbti-field-label">입력</p>', unsafe_allow_html=True)
         in_c, btn_c = st.columns([3, 1], gap="small")
@@ -302,3 +282,39 @@ def render_step3_aptitude_mbti_block(
         if mbti and len(mbti) == 4 and mbti not in MBTI_16_TYPES:
             st.warning("MBTI는 INTJ, ENFP처럼 **알려진 16유형 코드**만 입력해 주세요.")
         st.info("💡 MBTI를 입력하면 사주와 결합한 맞춤형 적성 분석을 해드립니다.")
+
+
+def render_step3_aptitude_mbti_block(
+    *,
+    u_name: str,
+    u_gapja: list[str],
+    strength: str,
+    yongshin: str,
+    max_el: str,
+    min_el: str,
+    ix3: StructuredInterpretation,
+    engine: dict[str, Any],
+) -> None:
+    """STEP3: 사주 × MBTI 적성(텍스트 입력 + 시안 카드)."""
+    _ = (strength, yongshin, max_el, min_el)
+
+    if st.session_state.get("user_mbti") == "선택 안 함":
+        st.session_state.user_mbti = ""
+    st.session_state.setdefault("user_mbti", "")
+    # `value=`와 `key=`를 동시에 쓰면 위젯 세션 키와 충돌할 수 있어, 최초 1회만 키를 시드합니다.
+    seed_mbti = str(st.session_state.get("user_mbti") or "")
+    if "step3_mbti_text_input" not in st.session_state:
+        st.session_state["step3_mbti_text_input"] = seed_mbti
+
+    st.markdown(
+        '<div class="saju-section-title-badge">사주+MBTI 분석</div>',
+        unsafe_allow_html=True,
+    )
+    _render_step3_mbti_banner()
+    st.caption("MBTI 4자 입력 (예: ENTJ, ISFP) 후 **엔터** 또는 **분석하기**를 누르면 분석합니다.")
+
+    _render_step3_mbti_interactive(
+        u_gapja=list(u_gapja),
+        ix3=ix3,
+        engine=engine,
+    )

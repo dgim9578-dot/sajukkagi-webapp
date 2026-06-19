@@ -564,9 +564,6 @@ def render() -> None:
         )
 
         u_name = str(st.session_state.get("u_name") or "고객님")
-        idx = int(st.session_state.get("iching_last_idx", _today_hex_index(salt=u_name)))
-        hx = get_hexagram(idx)
-
         remain = _iching_remain_seconds()
 
         if remain > 0:
@@ -612,7 +609,11 @@ def render() -> None:
             else:
                 _commit_iching_draw(u_name=u_name)
 
+        # 버튼 클릭으로 세션이 갱신된 직후 같은 rerun 에서 괘를 표시합니다.
+        revealed = bool(st.session_state.get("iching_today_revealed"))
         if revealed:
+            idx = int(st.session_state.get("iching_last_idx", _today_hex_index(salt=u_name)))
+            hx = get_hexagram(idx)
             u_key, l_key = _upper_lower_bagua(hx.names_hanja)
             u_sym = html.escape(_TRIGRAM_SYMBOL.get(u_key, ""))
             l_sym = html.escape(_TRIGRAM_SYMBOL.get(l_key, ""))

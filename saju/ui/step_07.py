@@ -526,6 +526,158 @@ def _commit_iching_draw(*, u_name: str) -> None:
     st.session_state.iching_today_revealed = True
     st.session_state["iching_last_idx"] = int(idx)
     st.session_state["iching_question_last"] = q_saved
+    st.session_state.pop("_step7_flash", None)
+
+
+def _on_iching_draw_first() -> None:
+    """첫 점사 — on_click 으로 1회 클릭에 확정 (text_area blur rerun 과 충돌 방지)."""
+    if _iching_remain_seconds() > 0:
+        st.session_state["_step7_flash"] = "cooldown"
+        return
+    if bool(st.session_state.get("iching_today_revealed")):
+        st.session_state["_step7_flash"] = "already"
+        return
+    _commit_iching_draw(u_name=str(st.session_state.get("u_name") or "고객님"))
+
+
+def _on_iching_draw_again() -> None:
+    """다시뽑기 — 쿨다운 종료 후 on_click 1회로 확정."""
+    if _iching_remain_seconds() > 0:
+        st.session_state["_step7_flash"] = "cooldown"
+        return
+    if not bool(st.session_state.get("iching_today_revealed")):
+        st.session_state["_step7_flash"] = "need_first"
+        return
+    _commit_iching_draw(u_name=str(st.session_state.get("u_name") or "고객님"))
+
+
+@st.fragment
+def _render_step7_iching_interactive(*, u_name: str, revealed: bool) -> None:
+    """질문·뽑기·결과 — fragment rerun 으로 버튼 1회 클릭에 괘 표시."""
+    st.markdown("##### 💭 질문")
+    st.markdown(
+        '<div class="saju-step7-question-guide">'
+        '<span class="saju-guide-warn">'
+        '"누가=언제=(누구)에게=무엇을=결과" 결과는 단문 형식으로 적어 주세요. '
+        '"될까요/말까요"'
+        "</span> "
+        "형식은 안 됩니다. 간절한 마음으로 질문하고 괘를 뽑으세요."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    M.text_area_no_autofill(
+        "주역 질문",
+        height=96,
+        max_chars=500,
+        placeholder="궁금한 내용을 입력 하세요",
+        key="step7_iching_question_input",
+        label_visibility="collapsed",
+        help="선택 사항입니다. 적지 않아도 괘를 뽑을 수 있습니다.",
+    )
+
+    remain = _iching_remain_seconds()
+    revealed_now = bool(st.session_state.get("iching_today_revealed"))
+
+    if remain > 0:
+        st.markdown("##### 쿨다운")
+        _iching_cooldown_progress_ui()
+        st.caption("쿨다운 막대는 화면을 새로고침하거나 버튼을 누를 때 갱신됩니다.")
+
+    flash = st.session_state.pop("_step7_flash", None)
+    if flash == "cooldown":
+        st.warning("아직 쿨다운 중입니다.")
+    elif flash == "already":
+        st.info("이미 오늘의 괘를 확인하셨습니다. **다시뽑기**를 이용해 주세요.")
+    elif flash == "need_first":
+        st.info("먼저 **오늘의 괘 뽑기**를 눌러 주세요.")
+
+    with st.container(key="step7_action_row"):
+        try:
+            col_a, col_b = st.columns(2, gap="small")
+        except TypeError:
+            col_a, col_b = st.columns(2)
+        with col_a:
+            st.button(
+                "오늘의 괘 뽑기",
+                type="primary",
+                use_container_width=True,
+                disabled=remain > 0 or revealed_now,
+                help="첫 점사입니다. 쿨다운 중에는 비활성입니다.",
+                key="step7_draw_first_btn",
+                on_click=_on_iching_draw_first,
+            )
+        with col_b:
+            st.button(
+                "다시뽑기",
+                type="secondary",
+                use_container_width=True,
+                disabled=remain > 0 or not revealed_now,
+                help=f"이미 본 괘를 다시 확정하면 쿨다운 {WAIT_TIME // 60}분이 적용됩니다.",
+                key="step7_draw_again_btn",
+                on_click=_on_iching_draw_again,
+            )
+
+    if revealed_now:
+        idx = int(st.session_state.get("iching_last_idx", _today_hex_index(salt=u_name)))
+        hx = get_hexagram(idx)
+        u_key, l_key = _upper_lower_bagua(hx.names_hanja)
+        u_sym = html.escape(_TRIGRAM_SYMBOL.get(u_key, ""))
+        l_sym = html.escape(_TRIGRAM_SYMBOL.get(l_key, ""))
+        title_plain = html.escape(f"제{hx.index + 1}괘 {hx.name_ko}")
+        gist_line = html.escape(str(hx.gist or "").split("\n", 1)[0])
+        st.markdown(
+            f"**{html.escape(u_name)}님의 오늘의 괘:** {u_sym} {title_plain} {l_sym}  \n"
+            f"{gist_line}",
+        )
+        interp, caution = _gist_interpretation_and_caution(hx.gist)
+        hanja_line = html.escape(hx.names_hanja)
+        hangul_line = html.escape(_names_hanja_hangul(hx.names_hanja, hx.name_ko))
+        yao = _hexagram_six_yao_top_first(hx.names_hanja)
+        visual = _hexagram_display_html(
+            symbol=hx.symbol,
+            names_hanja=hx.names_hanja,
+            yao_top_first=yao,
+            name_ko=hx.name_ko,
+        )
+
+        with st.container(key="step7_hex_reveal"):
+            st.markdown(
+                '<div class="step7-hex-wrap step7-hex-wrap--reveal">'
+                f'<\u0064iv class="step7-hex-title">{u_sym} {title_plain} {l_sym}</\u0064iv>'
+                f'<\u0064iv class="step7-hex-hanja-line">({hanja_line})</\u0064iv>'
+                f'<\u0064iv class="step7-hex-hangul-line">{hangul_line}</\u0064iv>'
+                f"{visual}"
+                f"</\u0064iv>",
+                unsafe_allow_html=True,
+            )
+            _, c_mid, _ = st.columns([0.12, 0.76, 0.12])
+            with c_mid:
+                story = _juyeok_storytelling(
+                    hx,
+                    str(st.session_state.get("iching_question_last", "") or ""),
+                )
+                explanation_parts: list[str] = []
+                if story:
+                    explanation_parts.append(str(story))
+                explanation_parts.append(_md_to_step7_html(interp))
+                if caution:
+                    explanation_parts.append(
+                        f'<p class="step7-caution-lead"><b>주의</b></p>{_md_to_step7_html(caution)}'
+                    )
+                with st.expander("괘 해설 · 주의 (펼쳐보기)", expanded=True):
+                    _render_step7_frame(
+                        title="해설",
+                        body_html='<div class="step7-interpret-divider"></div>'.join(
+                            explanation_parts
+                        ),
+                        tone="#D4AF37",
+                    )
+
+        st.caption("「뽑기」/「다시뽑기」를 누르면 위 괘가 확정되며 쿨다운이 시작됩니다.")
+        if st.session_state.get("last_iching_time"):
+            st.info(
+                "요지는 참고용입니다. 괘의·효사 등 전문 해석은 사주까기님과 상담 후 드러납니다."
+            )
 
 
 def render() -> None:
@@ -542,133 +694,5 @@ def render() -> None:
         if revealed:
             st.caption("다시뽑기는 3분 후에 하세요.")
 
-        st.markdown("##### 💭 질문")
-        st.markdown(
-            '<div class="saju-step7-question-guide">'
-            '<span class="saju-guide-warn">'
-            '"누가=언제=(누구)에게=무엇을=결과" 결과는 단문 형식으로 적어 주세요. '
-            '"될까요/말까요"'
-            "</span> "
-            "형식은 안 됩니다. 간절한 마음으로 질문하고 괘를 뽑으세요."
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        M.text_area_no_autofill(
-            "주역 질문",
-            height=96,
-            max_chars=500,
-            placeholder="궁금한 내용을 입력 하세요",
-            key="step7_iching_question_input",
-            label_visibility="collapsed",
-            help="선택 사항입니다. 적지 않아도 괘를 뽑을 수 있습니다.",
-        )
-
         u_name = str(st.session_state.get("u_name") or "고객님")
-        remain = _iching_remain_seconds()
-
-        if remain > 0:
-            st.markdown("##### 쿨다운")
-            _iching_cooldown_progress_ui()
-            st.caption("쿨다운 막대는 화면을 새로고침하거나 버튼을 누를 때 갱신됩니다.")
-
-        with st.container(key="step7_action_row"):
-            try:
-                col_a, col_b = st.columns(2, gap="small")
-            except TypeError:
-                col_a, col_b = st.columns(2)
-            with col_a:
-                draw_first = st.button(
-                    "오늘의 괘 뽑기",
-                    type="primary",
-                    use_container_width=True,
-                    disabled=remain > 0 or revealed,
-                    help="첫 점사입니다. 쿨다운 중에는 비활성입니다.",
-                )
-            with col_b:
-                draw_again = st.button(
-                    "다시뽑기",
-                    type="secondary",
-                    use_container_width=True,
-                    disabled=remain > 0 or not revealed,
-                    help=f"이미 본 괘를 다시 확정하면 쿨다운 {WAIT_TIME // 60}분이 적용됩니다.",
-                )
-
-        if draw_first:
-            if remain > 0:
-                st.warning("아직 쿨다운 중입니다.")
-            elif revealed:
-                st.info("이미 오늘의 괘를 확인하셨습니다. **다시뽑기**를 이용해 주세요.")
-            else:
-                _commit_iching_draw(u_name=u_name)
-
-        if draw_again:
-            if remain > 0:
-                st.warning("아직 쿨다운 중입니다.")
-            elif not revealed:
-                st.info("먼저 **오늘의 괘 뽑기**를 눌러 주세요.")
-            else:
-                _commit_iching_draw(u_name=u_name)
-
-        # 버튼 클릭으로 세션이 갱신된 직후 같은 rerun 에서 괘를 표시합니다.
-        revealed = bool(st.session_state.get("iching_today_revealed"))
-        if revealed:
-            idx = int(st.session_state.get("iching_last_idx", _today_hex_index(salt=u_name)))
-            hx = get_hexagram(idx)
-            u_key, l_key = _upper_lower_bagua(hx.names_hanja)
-            u_sym = html.escape(_TRIGRAM_SYMBOL.get(u_key, ""))
-            l_sym = html.escape(_TRIGRAM_SYMBOL.get(l_key, ""))
-            title_plain = html.escape(f"제{hx.index + 1}괘 {hx.name_ko}")
-            gist_line = html.escape(str(hx.gist or "").split("\n", 1)[0])
-            st.markdown(
-                f"**{html.escape(u_name)}님의 오늘의 괘:** {u_sym} {title_plain} {l_sym}  \n"
-                f"{gist_line}",
-            )
-            interp, caution = _gist_interpretation_and_caution(hx.gist)
-            hanja_line = html.escape(hx.names_hanja)
-            hangul_line = html.escape(_names_hanja_hangul(hx.names_hanja, hx.name_ko))
-            yao = _hexagram_six_yao_top_first(hx.names_hanja)
-            visual = _hexagram_display_html(
-                symbol=hx.symbol,
-                names_hanja=hx.names_hanja,
-                yao_top_first=yao,
-                name_ko=hx.name_ko,
-            )
-
-            with st.container(key="step7_hex_reveal"):
-                st.markdown(
-                    '<div class="step7-hex-wrap step7-hex-wrap--reveal">'
-                    f'<\u0064iv class="step7-hex-title">{u_sym} {title_plain} {l_sym}</\u0064iv>'
-                    f'<\u0064iv class="step7-hex-hanja-line">({hanja_line})</\u0064iv>'
-                    f'<\u0064iv class="step7-hex-hangul-line">{hangul_line}</\u0064iv>'
-                    f"{visual}"
-                    f"</\u0064iv>",
-                    unsafe_allow_html=True,
-                )
-                _, c_mid, _ = st.columns([0.12, 0.76, 0.12])
-                with c_mid:
-                    story = _juyeok_storytelling(
-                        hx,
-                        str(st.session_state.get("iching_question_last", "") or ""),
-                    )
-                    explanation_parts: list[str] = []
-                    if story:
-                        explanation_parts.append(str(story))
-                    explanation_parts.append(_md_to_step7_html(interp))
-                    if caution:
-                        explanation_parts.append(
-                            f'<p class="step7-caution-lead"><b>주의</b></p>{_md_to_step7_html(caution)}'
-                        )
-                    with st.expander("괘 해설 · 주의 (펼쳐보기)", expanded=True):
-                        _render_step7_frame(
-                            title="해설",
-                            body_html='<div class="step7-interpret-divider"></div>'.join(
-                                explanation_parts
-                            ),
-                            tone="#D4AF37",
-                        )
-
-            st.caption("「뽑기」/「다시뽑기」를 누르면 위 괘가 확정되며 쿨다운이 시작됩니다.")
-            if st.session_state.get("last_iching_time"):
-                st.info(
-                    "요지는 참고용입니다. 괘의·효사 등 전문 해석은 사주까기님과 상담 후 드러납니다."
-                )
+        _render_step7_iching_interactive(u_name=u_name, revealed=revealed)

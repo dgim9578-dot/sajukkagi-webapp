@@ -12,7 +12,7 @@ import streamlit.components.v1 as components
 from saju_app.ui import components as M
 from saju_app.ui import execution as saju_execution
 
-STEP2_UI_BUILD = "2026-05-31-step2-fragment-v7"
+STEP2_UI_BUILD = "2026-05-31-step2-deferred-save-v9"
 
 _STEP2_TIME_OPTIONS_FALLBACK: tuple[str, ...] = (
     "모름",
@@ -725,7 +725,7 @@ def _collect_step2_payload_from_session() -> dict[str, object]:
         or st.session_state.get("u_name")
         or ""
     ).strip()
-    opp_name = str(st.session_state.get(_OPP_NAME_INPUT_KEY) or "").strip()
+    opp_name = _resolve_opponent_name_for_save()
     pl = str(st.session_state.get("p_lunar") or "양력")
     if pl not in ("양력", "음력"):
         pl = "양력"
@@ -775,6 +775,16 @@ def _resolve_self_name_for_save() -> str:
     ).strip()
 
 
+def _resolve_opponent_name_for_save() -> str:
+    """상대방 이름 — fragment 입력 직후 저장 시 위젯 키·스냅샷 모두 확인."""
+    return str(
+        st.session_state.get(_OPP_NAME_INPUT_KEY)
+        or st.session_state.get("p_name")
+        or st.session_state.get("partner_name_snapshot")
+        or ""
+    ).strip()
+
+
 def _step2_show_validation_error(msg: str) -> None:
     st.session_state["_step2_top_alert"] = str(msg)
     st.session_state["_step2_scroll_to_alert"] = True
@@ -794,8 +804,24 @@ def try_step2_save_from_session() -> bool:
     _sync_ymd_from_bdate_text(
         bdate_key=_SELF_BDATE_KEY, y_key="u_y", m_key="u_m", d_key="u_d"
     )
-    opp_nm = str(st.session_state.get(_OPP_NAME_INPUT_KEY) or "").strip()
-    if opp_nm and _parse_bdate_text(st.session_state.get(_OPP_BDATE_TEXT_KEY)) is None:
+    _opp_bdate_raw = str(st.session_state.get(_OPP_BDATE_TEXT_KEY) or "").strip()
+    if _opp_bdate_raw and _parse_bdate_text(_opp_bdate_raw) is not None:
+        _sync_ymd_from_bdate_text(
+            bdate_key=_OPP_BDATE_KEY, y_key="p_y", m_key="p_m", d_key="p_d"
+        )
+    opp_nm = _resolve_opponent_name_for_save()
+    if opp_nm:
+        st.session_state[_OPP_NAME_INPUT_KEY] = opp_nm
+        st.session_state.p_name = opp_nm
+        st.session_state.partner_name_snapshot = opp_nm
+    if opp_nm and _parse_bdate_text(
+        st.session_state.get(_OPP_BDATE_TEXT_KEY)
+        or _format_bdate_str(
+            int(st.session_state.get("p_y", 0) or 0),
+            int(st.session_state.get("p_m", 0) or 0),
+            int(st.session_state.get("p_d", 0) or 0),
+        )
+    ) is None:
         _step2_show_validation_error(
             "상대방 생년월일을 **YYYY/MM/DD** 형식으로 입력해 주세요. (예: 1990/05/15)"
         )
@@ -972,8 +998,7 @@ def _render_step2_inline_nav_row() -> None:
                 "← 이전",
                 use_container_width=True,
                 key="step2_inline_prev_btn",
-                on_click=M.navigate_to_step,
-                args=(1,),
+                on_click=M.queue_step2_nav_prev,
             )
         with next_c:
             st.button(
@@ -986,8 +1011,8 @@ def _render_step2_inline_nav_row() -> None:
 
 
 @st.fragment
-def _render_step2_input_fragment(*, show_action_warning: bool) -> None:
-    """입력란·탭·동의 — fragment rerun 만 사용해 클릭 시 스크롤이 위로 튕기지 않게."""
+def _render_step2_input_fragment() -> None:
+    """입력란·탭 — fragment rerun 만 사용해 클릭 시 스크롤이 위로 튕기지 않게."""
     tab_main, tab_opp = st.tabs(["본인정보", "상대방정보"])
 
     with tab_main:
@@ -1044,18 +1069,6 @@ def _render_step2_input_fragment(*, show_action_warning: bool) -> None:
                     placeholder="한 번 더 입력",
                 )
 
-    with st.container(key="step2_action_block"):
-        if show_action_warning:
-            st.warning(
-                "⚠️ 위 안내를 확인해 주세요. "
-                "**개인정보 동의(필수)** 체크 후 **다음 → 사주 분석**을 눌러 주세요."
-            )
-        st.checkbox(
-            "개인정보 수집·이용에 동의합니다. (필수)",
-            key="agree",
-        )
-        _render_step2_inline_nav_row()
-
 
 def render() -> None:
     if "_step2_prefill_payload" not in st.session_state:
@@ -1065,14 +1078,6 @@ def render() -> None:
 
     if st.session_state.pop("_step2_clear_nav_pending", False):
         saju_execution.clear_step_nav_pending_now()
-
-    if st.session_state.pop("_step2_queue_save", False):
-        ok = try_step2_save_from_session()
-        if ok and int(st.session_state.get("step", 2)) != 2:
-            M.rerun_full_app()
-        elif not ok:
-            st.session_state["_step2_clear_nav_pending"] = True
-            saju_execution.clear_step_nav_pending_now()
 
     if st.session_state.pop("_step2_apply_pending", False):
         M.apply_step2_next_from_payload()
@@ -1126,7 +1131,28 @@ def render() -> None:
     )
 
     saju_execution.ensure_calendar_locale_on_step2()
-    _render_step2_input_fragment(show_action_warning=bool(top_alert or apply_err))
+    _render_step2_input_fragment()
+
+    with st.container(key="step2_action_block"):
+        if top_alert or apply_err:
+            st.warning(
+                "⚠️ 위 안내를 확인해 주세요. "
+                "**개인정보 동의(필수)** 체크 후 **다음 → 사주 분석**을 눌러 주세요."
+            )
+        st.checkbox(
+            "개인정보 수집·이용에 동의합니다. (필수)",
+            key="agree",
+        )
+        _render_step2_inline_nav_row()
+
+    if st.session_state.pop("_step2_queue_save", False):
+        ok = try_step2_save_from_session()
+        if ok and int(st.session_state.get("step", 2)) != 2:
+            M.rerun_full_app()
+        elif not ok:
+            st.session_state["_step2_clear_nav_pending"] = True
+            saju_execution.clear_step_nav_pending_now()
+            M.rerun_full_app()
 
     M.inject_step2_tab_order_once()
     saju_execution.inject_step2_bdate_input_focus_guard_once()

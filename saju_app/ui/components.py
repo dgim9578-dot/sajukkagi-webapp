@@ -156,6 +156,49 @@ def _partner_session_data_ready() -> bool:
     return False
 
 
+def restore_partner_from_step4_bundle() -> bool:
+    """STEP2 저장 시 고정한 ``_step4_partner_bundle`` 로 상대방 세션을 복구합니다."""
+    bundle = st.session_state.get("_step4_partner_bundle")
+    if not isinstance(bundle, dict):
+        return False
+    pn = str(bundle.get("name") or "").strip()
+    gj = bundle.get("gapja")
+    raw_birth = bundle.get("birth")
+    if not pn or not isinstance(gj, (list, tuple)) or not _gapja_pillars_valid(gj, min_pillars=3):
+        return False
+    st.session_state.partner_name_snapshot = pn
+    st.session_state.p_name = pn
+    st.session_state.p_gapja = [str(x) for x in gj]
+    if isinstance(raw_birth, (list, tuple)) and len(raw_birth) >= 6:
+        st.session_state.p_data = tuple(raw_birth[:6])
+        try:
+            py, pm, pd = int(raw_birth[0]), int(raw_birth[1]), int(raw_birth[2])
+            st.session_state.p_y = py
+            st.session_state.p_m = pm
+            st.session_state.p_d = pd
+            st.session_state.p_time = coerce_step2_time_option(str(raw_birth[3] or "모름"))
+            st.session_state.p_lunar = "음력" if bool(raw_birth[4]) else "양력"
+            st.session_state.p_leap = "윤달" if bool(raw_birth[5]) else "평달"
+        except (TypeError, ValueError):
+            pass
+    mark_partner_registered(active=True)
+    return True
+
+
+def hydrate_partner_for_match_step() -> bool:
+    """STEP4 진입 — 상대방 등록·간지 복구(저장 데이터 삭제 없이)."""
+    if partner_is_registered():
+        return sync_partner_gapja_for_match_analysis()
+    if reconcile_partner_registration():
+        return sync_partner_gapja_for_match_analysis()
+    if restore_partner_from_step4_bundle():
+        return sync_partner_gapja_for_match_analysis()
+    if _partner_session_data_ready() and bool(st.session_state.get("_personal_input_saved")):
+        mark_partner_registered(active=True)
+        return sync_partner_gapja_for_match_analysis()
+    return ensure_partner_session_from_state()
+
+
 def reconcile_partner_registration() -> bool:
     """저장 직후 visit 불일치·플래그 누락 시 상대방 등록 상태를 복구합니다."""
     if not personal_input_owner_matches():
@@ -169,7 +212,8 @@ def reconcile_partner_registration() -> bool:
 def partner_is_registered() -> bool:
     """STEP2에서 상대방 이름·생년월일을 저장한 경우에만 True."""
     if not _partner_name_from_session():
-        return False
+        if not restore_partner_from_step4_bundle():
+            return False
     if not bool(st.session_state.get("_partner_registered")):
         return reconcile_partner_registration()
     owner_visit = _partner_visit_owner()
@@ -178,6 +222,11 @@ def partner_is_registered() -> bool:
         return True
     if personal_input_owner_matches() and _partner_session_data_ready():
         mark_partner_registered(active=True)
+        return True
+    if bool(st.session_state.get("_personal_input_saved")) and _partner_session_data_ready():
+        mark_partner_registered(active=True)
+        return True
+    if restore_partner_from_step4_bundle():
         return True
     return False
 
@@ -2071,18 +2120,18 @@ def prepare_step_change_ui(*, dest: int | None = None) -> None:
 
 
 def queue_step2_save_and_analyze() -> None:
-    """STEP2 하단 「다음 →」 — 저장·검증 후 STEP3(사주분석)으로 이동."""
-    from saju.ui.step_02 import try_step2_save_from_session
+    """STEP2 하단 「다음 →」 — fragment·입력 위젯 동기화 후 저장 (on_click 에서는 플래그만).
 
-    if not try_step2_save_from_session():
-        st.session_state["_step2_clear_nav_pending"] = True
-    rerun_full_app()
+    ``on_click`` 은 위젯 값이 session_state 에 반영되기 **전**에 실행됩니다.
+    특히 ``@st.fragment`` 안 본인/상대 탭 입력은 콜백 시점에 비어 있어
+    2~3번 클릭해야 넘어가는 현상이 납니다. 실제 저장은 ``step_02.render`` 마지막에서 처리합니다.
+    """
+    st.session_state["_step2_queue_save"] = True
 
 
 def queue_step2_nav_prev() -> None:
-    """STEP2 「← 이previous」 — STEP1(홈)으로 (fragment 밖 전체 rerun)."""
+    """STEP2 「← 이previous」 — STEP1(홈)으로 (``on_click`` — rerun 은 Streamlit 자동)."""
     navigate_to_step(1)
-    rerun_full_app()
 
 
 def assign_step_and_rerun(
@@ -2168,10 +2217,13 @@ def _toggle_quick_menu() -> None:
 
 
 def render_step11_inline_step_nav() -> None:
-    """STEP11 챗봇 본문 하단 — 상담 연결 아래 ``← 총평`` / ``관리자 이동 →``."""
+    """STEP11 챗봇 본문 하단 — 상담 연결 아래 ``← 총평`` / ``관리자 이동 →``.
+
+    ``saju_bottom_prev_next_row`` 키는 STEP 전환(pending) CSS 에서 숨겨지므로
+    STEP11 전용 ``step11_inline_nav_row`` 를 씁니다.
+    """
     reset_id = int(st.session_state.get("reset_id", 0))
-    # ``saju_bottom_prev_next_row`` 키 — 모바일 WebView 가로 2열 CSS 재사용
-    with st.container(key="saju_bottom_prev_next_row"):
+    with st.container(key="step11_inline_nav_row"):
         try:
             nav_cols = st.columns([1, 1], gap="small")
         except TypeError:
@@ -3171,11 +3223,10 @@ def sync_partner_gapja_for_match_analysis() -> bool:
     from saju.core.gapja_utils import day_pillar_from_gapja, is_valid_pillar
 
     if not partner_is_registered():
-        clear_partner_analysis_state()
-        return False
+        if not restore_partner_from_step4_bundle():
+            return False
     pn = _partner_name_from_session()
     if not pn:
-        clear_partner_analysis_state()
         return False
     birth = _partner_birth_for_step4()
     if not birth:
@@ -3226,8 +3277,9 @@ def _partner_name_from_session() -> str:
 
 def ensure_partner_session_from_state() -> bool:
     """STEP4 등: STEP2에서 등록한 상대방만 p_gapja·p_data를 복구합니다."""
-    if not partner_is_registered():
-        clear_partner_analysis_state()
+    if not _partner_name_from_session():
+        restore_partner_from_step4_bundle()
+    if not _partner_name_from_session() and not _partner_session_data_ready():
         return False
     _resync_partner_gapja_from_p_data()
     if _gapja_pillars_valid(st.session_state.get("p_gapja"), min_pillars=3):
@@ -3235,13 +3287,12 @@ def ensure_partner_session_from_state() -> bool:
         if pn:
             st.session_state.p_name = pn
             st.session_state.partner_name_snapshot = pn
+            mark_partner_registered(active=True)
             return True
-        clear_partner_analysis_state()
         return False
 
     pn = _partner_name_from_session()
     if not pn:
-        clear_partner_analysis_state()
         return False
 
     p_data = st.session_state.get("p_data")
@@ -3290,6 +3341,7 @@ def ensure_partner_session_from_state() -> bool:
     st.session_state.p_data = (py, pm, pd, pt_str, bool(p_is_lunar), bool(p_is_leap))
     pg = str(st.session_state.get("p_gender") or "여자")
     st.session_state.p_gender = pg if pg in ("남자", "여자") else "여자"
+    mark_partner_registered(active=True)
     return True
 
 

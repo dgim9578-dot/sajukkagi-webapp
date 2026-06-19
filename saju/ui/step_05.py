@@ -109,6 +109,18 @@ def _render_step5_meaning_card(title: str, body: str, *, tone: str) -> None:
     )
 
 
+@st.fragment
+def _render_step5_sinsal_deck_interactive(*, unique_sins: list[str]) -> None:
+    """신살 카드 덱 — fragment rerun 만 사용해 선택 시 스크롤이 위로 튕기지 않게."""
+    with st.container(key="step5_sinsal_deck"):
+        st.subheader("🧿 신살 카드 덱")
+        BSlides.render_sinsal_card_deck(
+            unique_sins,
+            SINSAL_MEANINGS,
+            display_fn=_display_sinsal,
+        )
+
+
 def render() -> None:
     u_gapja = M._require_u_gapja_or_halt(
         message="사주 정보가 없습니다.",
@@ -135,13 +147,8 @@ def render() -> None:
         st.markdown(f"## 🔥 {u_name}님의 12신살 분석")
         st.divider()
 
-        with st.container(key="step5_sinsal_deck"):
-            st.subheader("🧿 신살 카드 덱")
-            BSlides.render_sinsal_card_deck(
-                unique_sins,
-                SINSAL_MEANINGS,
-                display_fn=_display_sinsal,
-            )
+        _render_step5_sinsal_deck_interactive(unique_sins=unique_sins)
+        with st.container(key="step5_sinsal_list"):
             with st.expander("12신살 전체 목록", expanded=False):
                 for k, v in sinsal_result.items():
                     if isinstance(v, dict):

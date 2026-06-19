@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 _FORCE_SCROLL_OPTS_KEY = "_saju_force_scroll_opts"
 # parent 창 JS 와 Python 세션 키를 반드시 동일 숫자로 맞출 것 (불일치 시 구버전 JS 가 남아 멈춤·스크롤 미적용)
-_SCROLL_MGR_JS_VER = 97
+_SCROLL_MGR_JS_VER = 98
 
 
 def schedule_force_scroll_after_nav(
@@ -4441,7 +4441,7 @@ _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
     const inPageTab =
       el.closest &&
       !!el.closest(
-        ".st-key-step3_mbti_input_row, .st-key-step3_aptitude_mbti, .st-key-step6_today_pick_row, .st-key-step8_pick_row, .st-key-step4_compat_tabs"
+        ".st-key-step3_mbti_input_row, .st-key-step3_aptitude_mbti, .st-key-step5_sinsal_deck, .st-key-step6_today_pick_row, .st-key-step8_pick_row, .st-key-step4_compat_tabs"
       );
     const skipScrollInto = step === "2" || step === "3" || inPageTab || savedY > 8;
     if (!skipScrollInto) {

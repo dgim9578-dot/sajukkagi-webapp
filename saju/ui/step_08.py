@@ -11,7 +11,6 @@ import math
 import os
 import random
 import re
-import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -29,7 +28,6 @@ from saju_app.ui import consulting_knowledge as K
 from saju_app.ui import consulting_corpus as CC
 from saju_app.ui import components as M
 from saju_app.ui import tarot_consulting as T
-from saju_app.ui.execution import rerun_full_app
 from tarot_assets import UNIVERSAL_DIR, resolve_card_back_path, resolve_card_image_path
 from tarot_data import SPREADS, TAROT_CARDS, draw_cards, reading_signature
 
@@ -471,6 +469,64 @@ def _render_ai_summary(reading: dict, consulting_tip: str) -> None:
         st.caption("AI 타로 상담은 API 키 설정 후 사용할 수 있습니다.")
 
 
+def _on_pick_tarot_card(card_idx: int) -> None:
+    """카드 공개 — 세션에서 reading 을 읽어 1회 클릭에 반영."""
+    reading = st.session_state.get(_READING_KEY)
+    if isinstance(reading, dict):
+        _reveal_card(reading, int(card_idx))
+
+
+@st.fragment
+def _render_step8_tarot_interactive() -> None:
+    """질문·뽑기·카드 공개 — form + fragment 로 1회 클릭/제출에 반영."""
+    submitted = False
+    if not isinstance(st.session_state.get(_READING_KEY), dict):
+        st.caption("질문 입력후 카드 숫자를 선택 하세요")
+        st.markdown("---")
+        with st.form("step8_tarot_form", clear_on_submit=False, border=False):
+            M.text_area_no_autofill(
+                "궁금 사항 입력",
+                key=_QUESTION_KEY,
+                placeholder="궁금한 내용을 입력 하세요",
+                label_visibility="collapsed",
+                height=120,
+            )
+            st.radio(
+                "몇 장의 카드를 볼까요?",
+                options=["1카드", "3카드", "5카드"],
+                key=_SPREAD_KEY,
+                index=1,
+                horizontal=True,
+                help="1장: 핵심만 · 3장: 현재·흐름·조언(권장) · 5장: 현재·막힘·도움·가까운 흐름·실천",
+            )
+            submitted = st.form_submit_button(
+                "🔮 카드 뽑기",
+                type="primary",
+                use_container_width=True,
+            )
+
+        alert = st.session_state.pop("_step8_top_alert", None)
+        if alert:
+            st.warning(str(alert))
+
+        if submitted:
+            q = str(st.session_state.get(_QUESTION_KEY) or "").strip()
+            sp = str(st.session_state.get(_SPREAD_KEY) or "3카드").strip()
+            if not q:
+                st.warning("질문을 먼저 입력해 주세요.")
+            else:
+                _prepare_reading(q, sp)
+
+    if isinstance(st.session_state.get(_READING_KEY), dict):
+        st.button(
+            "↩ 새 질문으로 다시하기",
+            use_container_width=True,
+            key="step8_clear_reading_btn",
+            on_click=_clear_reading,
+        )
+        _render_reading()
+
+
 def _render_reading() -> None:
     reading = st.session_state.get(_READING_KEY)
     if not isinstance(reading, dict):
@@ -515,15 +571,13 @@ def _render_reading() -> None:
             with cols[col_idx % len(cols)]:
                 st.caption(position)
                 _render_card_back_image()
-                def _pick_card(idx: int = card_idx) -> None:
-                    _reveal_card(reading, idx)
-
                 st.button(
                     "카드 보기",
                     key=f"step8_pick_{sig}_{card_idx}",
                     use_container_width=True,
                     type="primary",
-                    on_click=_pick_card,
+                    on_click=_on_pick_tarot_card,
+                    args=(card_idx,),
                 )
 
     # 공개된 카드 + 해석
@@ -654,47 +708,4 @@ img {
             "전문가 상담과 현실 정보를 우선해 주세요."
         )
 
-        has_reading = isinstance(st.session_state.get(_READING_KEY), dict)
-
-        if not has_reading:
-            st.caption("질문 입력후 카드 숫자를 선택 하세요")
-
-            st.markdown("---")
-            question = M.text_area_no_autofill(
-                "궁금 사항 입력",
-                key=_QUESTION_KEY,
-                placeholder="궁금한 내용을 입력 하세요",
-                label_visibility="collapsed",
-                height=120,
-            )
-            spread_name = st.radio(
-                "몇 장의 카드를 볼까요?",
-                options=["1카드", "3카드", "5카드"],
-                key=_SPREAD_KEY,
-                index=1,
-                horizontal=True,
-                help="1장: 핵심만 · 3장: 현재·흐름·조언(권장) · 5장: 현재·막힘·도움·가까운 흐름·실천",
-            )
-
-            def _shuffle_cards() -> None:
-                q = str(st.session_state.get(_QUESTION_KEY) or "").strip()
-                sp = str(st.session_state.get(_SPREAD_KEY) or "3카드").strip()
-                if not q:
-                    st.session_state["_step8_top_alert"] = "질문을 먼저 입력해 주세요."
-                    return
-                with st.spinner(random.choice(loading_messages)):
-                    time.sleep(0.9)
-                _prepare_reading(q, sp)
-
-            alert = st.session_state.pop("_step8_top_alert", None)
-            if alert:
-                st.warning(str(alert))
-            st.button("🔮 카드 뽑기", type="primary", use_container_width=True, on_click=_shuffle_cards)
-        else:
-            st.button(
-                "↩ 새 질문으로 다시하기",
-                use_container_width=True,
-                on_click=_clear_reading,
-            )
-
-        _render_reading()
+        _render_step8_tarot_interactive()

@@ -529,31 +529,9 @@ def _commit_iching_draw(*, u_name: str) -> None:
     st.session_state.pop("_step7_flash", None)
 
 
-def _on_iching_draw_first() -> None:
-    """첫 점사 — on_click 으로 1회 클릭에 확정 (text_area blur rerun 과 충돌 방지)."""
-    if _iching_remain_seconds() > 0:
-        st.session_state["_step7_flash"] = "cooldown"
-        return
-    if bool(st.session_state.get("iching_today_revealed")):
-        st.session_state["_step7_flash"] = "already"
-        return
-    _commit_iching_draw(u_name=str(st.session_state.get("u_name") or "고객님"))
-
-
-def _on_iching_draw_again() -> None:
-    """다시뽑기 — 쿨다운 종료 후 on_click 1회로 확정."""
-    if _iching_remain_seconds() > 0:
-        st.session_state["_step7_flash"] = "cooldown"
-        return
-    if not bool(st.session_state.get("iching_today_revealed")):
-        st.session_state["_step7_flash"] = "need_first"
-        return
-    _commit_iching_draw(u_name=str(st.session_state.get("u_name") or "고객님"))
-
-
 @st.fragment
 def _render_step7_iching_interactive(*, u_name: str, revealed: bool) -> None:
-    """질문·뽑기·결과 — fragment rerun 으로 버튼 1회 클릭에 괘 표시."""
+    """질문·뽑기·결과 — form + fragment 로 1회 클릭에 괘 표시."""
     st.markdown("##### 💭 질문")
     st.markdown(
         '<div class="saju-step7-question-guide">'
@@ -565,15 +543,6 @@ def _render_step7_iching_interactive(*, u_name: str, revealed: bool) -> None:
         "</div>",
         unsafe_allow_html=True,
     )
-    M.text_area_no_autofill(
-        "주역 질문",
-        height=96,
-        max_chars=500,
-        placeholder="궁금한 내용을 입력 하세요",
-        key="step7_iching_question_input",
-        label_visibility="collapsed",
-        help="선택 사항입니다. 적지 않아도 괘를 뽑을 수 있습니다.",
-    )
 
     remain = _iching_remain_seconds()
     revealed_now = bool(st.session_state.get("iching_today_revealed"))
@@ -583,6 +552,53 @@ def _render_step7_iching_interactive(*, u_name: str, revealed: bool) -> None:
         _iching_cooldown_progress_ui()
         st.caption("쿨다운 막대는 화면을 새로고침하거나 버튼을 누를 때 갱신됩니다.")
 
+    draw_first = False
+    draw_again = False
+    with st.form("step7_iching_form", clear_on_submit=False, border=False):
+        M.text_area_no_autofill(
+            "주역 질문",
+            height=96,
+            max_chars=500,
+            placeholder="궁금한 내용을 입력 하세요",
+            key="step7_iching_question_input",
+            label_visibility="collapsed",
+            help="선택 사항입니다. 적지 않아도 괘를 뽑을 수 있습니다.",
+        )
+        try:
+            col_a, col_b = st.columns(2, gap="small")
+        except TypeError:
+            col_a, col_b = st.columns(2)
+        with col_a:
+            draw_first = st.form_submit_button(
+                "오늘의 괘 뽑기",
+                type="primary",
+                use_container_width=True,
+                disabled=remain > 0 or revealed_now,
+                help="첫 점사입니다. 쿨다운 중에는 비활성입니다.",
+            )
+        with col_b:
+            draw_again = st.form_submit_button(
+                "다시뽑기",
+                use_container_width=True,
+                disabled=remain > 0 or not revealed_now,
+                help=f"이미 본 괘를 다시 확정하면 쿨다운 {WAIT_TIME // 60}분이 적용됩니다.",
+            )
+
+    if draw_first:
+        if _iching_remain_seconds() > 0:
+            st.session_state["_step7_flash"] = "cooldown"
+        elif bool(st.session_state.get("iching_today_revealed")):
+            st.session_state["_step7_flash"] = "already"
+        else:
+            _commit_iching_draw(u_name=str(st.session_state.get("u_name") or "고객님"))
+    elif draw_again:
+        if _iching_remain_seconds() > 0:
+            st.session_state["_step7_flash"] = "cooldown"
+        elif not bool(st.session_state.get("iching_today_revealed")):
+            st.session_state["_step7_flash"] = "need_first"
+        else:
+            _commit_iching_draw(u_name=str(st.session_state.get("u_name") or "고객님"))
+
     flash = st.session_state.pop("_step7_flash", None)
     if flash == "cooldown":
         st.warning("아직 쿨다운 중입니다.")
@@ -591,32 +607,7 @@ def _render_step7_iching_interactive(*, u_name: str, revealed: bool) -> None:
     elif flash == "need_first":
         st.info("먼저 **오늘의 괘 뽑기**를 눌러 주세요.")
 
-    with st.container(key="step7_action_row"):
-        try:
-            col_a, col_b = st.columns(2, gap="small")
-        except TypeError:
-            col_a, col_b = st.columns(2)
-        with col_a:
-            st.button(
-                "오늘의 괘 뽑기",
-                type="primary",
-                use_container_width=True,
-                disabled=remain > 0 or revealed_now,
-                help="첫 점사입니다. 쿨다운 중에는 비활성입니다.",
-                key="step7_draw_first_btn",
-                on_click=_on_iching_draw_first,
-            )
-        with col_b:
-            st.button(
-                "다시뽑기",
-                type="secondary",
-                use_container_width=True,
-                disabled=remain > 0 or not revealed_now,
-                help=f"이미 본 괘를 다시 확정하면 쿨다운 {WAIT_TIME // 60}분이 적용됩니다.",
-                key="step7_draw_again_btn",
-                on_click=_on_iching_draw_again,
-            )
-
+    revealed_now = bool(st.session_state.get("iching_today_revealed"))
     if revealed_now:
         idx = int(st.session_state.get("iching_last_idx", _today_hex_index(salt=u_name)))
         hx = get_hexagram(idx)

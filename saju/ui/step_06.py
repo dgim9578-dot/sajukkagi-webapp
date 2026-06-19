@@ -80,6 +80,121 @@ def _step6_score_bar_html(score: int, tone: str) -> str:
     )
 
 
+def _render_step6_category_panel(
+    cat: str,
+    *,
+    daily_scores: dict[str, int],
+    daily_comments: dict[str, str],
+    category_meta: dict[str, dict[str, str]],
+    ten_detail: str,
+    ten_group: str,
+    day_branch_rel: str,
+    yongshin: str,
+) -> None:
+    sc = int(daily_scores[cat])
+    meta = category_meta[cat]
+    msg = to_plain_text(daily_comments.get(cat, ""))
+    tone = str(meta["tone"])
+    st.subheader(f"{meta['icon']} {cat}")
+    st.markdown(_step6_score_bar_html(sc, tone), unsafe_allow_html=True)
+    st.markdown(
+        f"""
+<div style="
+    margin:0.8rem 0 0.75rem;
+    padding:1rem 1.05rem 1.05rem;
+    border-radius:16px;
+    border:1px solid {tone};
+    background:
+        radial-gradient(circle at 12% 18%, {tone}24 0 3px, transparent 4px),
+        linear-gradient(135deg, {tone}22 0%, rgba(255,255,255,0.06) 100%);
+    box-shadow:0 10px 28px rgba(0,0,0,0.12), inset 0 0 0 1px rgba(255,255,255,0.08);
+">
+  <div style="font-weight:800;color:{tone};margin-bottom:0.5rem;">{html.escape(str(cat))} 해석 포인트</div>
+  <div style="line-height:1.72;">{html.escape(msg)}</div>
+  <div style="
+      margin-top:0.8rem;
+      padding:0.62rem 0.72rem;
+      border-radius:12px;
+      background:rgba(255,255,255,0.08);
+      border:1px solid rgba(148,163,184,0.22);
+      font-size:0.92rem;
+      line-height:1.55;
+  ">
+    체크포인트: 십성 {html.escape(str(ten_detail))}({html.escape(str(ten_group))}) · 일지 {html.escape(day_branch_rel or '무특별')} · 용신 {html.escape(str(yongshin))}
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+@st.fragment
+def _render_step6_category_tabs(
+    *,
+    cats: tuple[str, ...],
+    category_meta: dict[str, dict[str, str]],
+    daily_scores: dict[str, int],
+    daily_comments: dict[str, str],
+    ten_detail: str,
+    ten_group: str,
+    day_branch_rel: str,
+    yongshin: str,
+) -> None:
+    """재물·연애 등 카테고리 탭 — fragment 로만 rerun 해 스크롤이 위로 튕기지 않게."""
+    if "step6_today_pick" not in st.session_state:
+        st.session_state.step6_today_pick = "재물"
+
+    picked = str(st.session_state.get("step6_today_pick") or "재물")
+    if picked not in cats:
+        picked = cats[0]
+        st.session_state.step6_today_pick = picked
+
+    def _pick(cat: str):
+        def _h():
+            st.session_state.step6_today_pick = cat
+
+        return _h
+
+    with st.container(key="step6_today_pick_row"):
+        pick_cols = M._columns_compat(len(cats))
+        for i, cat in enumerate(cats):
+            with pick_cols[i]:
+                emo = category_meta[cat]["icon"]
+                st.button(
+                    emo,
+                    key=f"step6_pick_{cat}",
+                    on_click=_pick(cat),
+                    use_container_width=True,
+                    type="primary" if cat == picked else "secondary",
+                    help=f"{cat}운 상세 보기",
+                )
+                st.markdown(
+                    f'<p class="step6-pick-cap">{html.escape(cat)}</p>',
+                    unsafe_allow_html=True,
+                )
+
+    st.divider()
+
+    with st.container(key="step6_detail_panel"):
+        _render_step6_category_panel(
+            picked,
+            daily_scores=daily_scores,
+            daily_comments=daily_comments,
+            category_meta=category_meta,
+            ten_detail=ten_detail,
+            ten_group=ten_group,
+            day_branch_rel=day_branch_rel,
+            yongshin=yongshin,
+        )
+        CC.render_consulting_panel(
+            f"{CC.query_for_step('step6', topic=picked)} 오늘 운세 타이밍",
+            apply="step6",
+            title="📎 현장 상담 참고 (일반 사례)",
+            expanded=False,
+            container_key="step6_consulting",
+        )
+
+
 def render() -> None:
     M._resync_user_gapja_from_u_data()
     u_name = st.session_state.get("u_name", "사주까기님")
@@ -156,43 +271,6 @@ def render() -> None:
 
         render_step06_hero_banner()
 
-        def render_panel(cat: str) -> None:
-            sc = int(daily_scores[cat])
-            meta = category_meta[cat]
-            msg = to_plain_text(daily_comments.get(cat, ""))
-            tone = str(meta["tone"])
-            st.subheader(f"{meta['icon']} {cat}")
-            st.markdown(_step6_score_bar_html(sc, tone), unsafe_allow_html=True)
-            st.markdown(
-                f"""
-<div style="
-    margin:0.8rem 0 0.75rem;
-    padding:1rem 1.05rem 1.05rem;
-    border-radius:16px;
-    border:1px solid {tone};
-    background:
-        radial-gradient(circle at 12% 18%, {tone}24 0 3px, transparent 4px),
-        linear-gradient(135deg, {tone}22 0%, rgba(255,255,255,0.06) 100%);
-    box-shadow:0 10px 28px rgba(0,0,0,0.12), inset 0 0 0 1px rgba(255,255,255,0.08);
-">
-  <div style="font-weight:800;color:{tone};margin-bottom:0.5rem;">{html.escape(str(cat))} 해석 포인트</div>
-  <div style="line-height:1.72;">{html.escape(msg)}</div>
-  <div style="
-      margin-top:0.8rem;
-      padding:0.62rem 0.72rem;
-      border-radius:12px;
-      background:rgba(255,255,255,0.08);
-      border:1px solid rgba(148,163,184,0.22);
-      font-size:0.92rem;
-      line-height:1.55;
-  ">
-    체크포인트: 십성 {html.escape(str(ten_detail))}({html.escape(str(ten_group))}) · 일지 {html.escape(day_branch_rel or '무특별')} · 용신 {html.escape(str(yongshin))}
-  </div>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
-
         def _render_daily_focus_cards() -> None:
             cards = [
                 (
@@ -260,40 +338,13 @@ def render() -> None:
 
         st.divider()
 
-        if "step6_today_pick" not in st.session_state:
-            st.session_state.step6_today_pick = "재물"
-
-        def _pick(cat: str):
-            def _h():
-                st.session_state.step6_today_pick = cat
-                M.queue_widget_focus(f"step6_pick_{cat}", kind="button")
-
-            return _h
-
-        with st.container(key="step6_today_pick_row"):
-            pick_cols = M._columns_compat(len(cats))
-            for i, cat in enumerate(cats):
-                with pick_cols[i]:
-                    emo = category_meta[cat]["icon"]
-                    st.button(
-                        emo,
-                        key=f"step6_pick_{cat}",
-                        on_click=_pick(cat),
-                        use_container_width=True,
-                        help=f"{cat}운 상세 보기",
-                    )
-                    st.markdown(
-                        f'<p class="step6-pick-cap">{html.escape(cat)}</p>',
-                        unsafe_allow_html=True,
-                    )
-
-        st.divider()
-        _pick6 = str(st.session_state.get("step6_today_pick") or "재물")
-        render_panel(_pick6)
-        CC.render_consulting_panel(
-            f"{CC.query_for_step('step6', topic=_pick6)} 오늘 운세 타이밍",
-            apply="step6",
-            title="📎 현장 상담 참고 (일반 사례)",
-            expanded=False,
-            container_key="step6_consulting",
+        _render_step6_category_tabs(
+            cats=cats,
+            category_meta=category_meta,
+            daily_scores=daily_scores,
+            daily_comments=daily_comments,
+            ten_detail=ten_detail,
+            ten_group=ten_group,
+            day_branch_rel=day_branch_rel,
+            yongshin=yongshin,
         )

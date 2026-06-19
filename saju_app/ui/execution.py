@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 _FORCE_SCROLL_OPTS_KEY = "_saju_force_scroll_opts"
 # parent 창 JS 와 Python 세션 키를 반드시 동일 숫자로 맞출 것 (불일치 시 구버전 JS 가 남아 멈춤·스크롤 미적용)
-_SCROLL_MGR_JS_VER = 94
+_SCROLL_MGR_JS_VER = 95
 
 
 def schedule_force_scroll_after_nav(
@@ -1414,6 +1414,27 @@ _SCROLL_MANAGER_JS = r"""
         );
     };
 
+    pw.__sajuShouldPreserveWidgetFocus = function () {
+        try {
+            const de = pw.document && pw.document.documentElement;
+            if (de && de.getAttribute("data-saju-nav-pending") === "1") {
+                return false;
+            }
+            if (de && de.getAttribute("data-saju-step") === "2") {
+                try {
+                    if (pw.sessionStorage.getItem("saju_step2_editing") === "1") {
+                        return true;
+                    }
+                } catch (e2) {}
+            }
+        } catch (e) {}
+        const lock2 = pw.__sajuStep2FocusLock;
+        if (lock2 && lock2.until && Date.now() < lock2.until) return true;
+        const lock = pw.__sajuWidgetFocusLock;
+        if (lock && lock.until && Date.now() < lock.until) return true;
+        return false;
+    };
+
     pw.__sajuUserIsScrolling = false;
     pw.__sajuBindUserScrollGuard = function () {
         if (pw.__sajuUserScrollGuardBound) return;
@@ -1529,6 +1550,12 @@ _SCROLL_MANAGER_JS = r"""
     /* STEP 이동 전용 — DOM 전체 walk 없이 main+window+mount 만 (멈춤 방지) */
     pw.__sajuSnapNavTop = function (opts) {
         opts = opts || {};
+        if (
+            typeof pw.__sajuShouldPreserveWidgetFocus === "function" &&
+            pw.__sajuShouldPreserveWidgetFocus()
+        ) {
+            return;
+        }
         const doc = pw.document || document;
         if (!doc) return;
         const step = String(opts.step != null ? opts.step : "1");
@@ -1572,6 +1599,12 @@ _SCROLL_MANAGER_JS = r"""
 
     /* 이전/다음·메뉴 — 즉시+rAF+1회 보정(최대 3회 스냅, setTimeout 스택 없음) */
     pw.__sajuNavScrollOnce = function (epoch, source, stepHint) {
+        if (
+            typeof pw.__sajuShouldPreserveWidgetFocus === "function" &&
+            pw.__sajuShouldPreserveWidgetFocus()
+        ) {
+            return;
+        }
         const key = String(epoch || "0");
         if (String(source || "") === "tail") {
             pw.__sajuNavScrollDoneEpoch = null;
@@ -1658,6 +1691,13 @@ _SCROLL_MANAGER_JS = r"""
 
     pw.__sajuSnapViewportTop = function (opts) {
         opts = opts || {};
+        if (
+            !opts.force &&
+            typeof pw.__sajuShouldPreserveWidgetFocus === "function" &&
+            pw.__sajuShouldPreserveWidgetFocus()
+        ) {
+            return;
+        }
         const doc = pw.document || document;
         if (!doc) return;
         const mobile = isMobileView(pw, doc);
@@ -1884,6 +1924,12 @@ _SCROLL_MANAGER_JS = r"""
     /* 홈 진입 — 갤럭시·모바일은 window/body 스크롤도 0 (삼성 인터넷은 main 이 아닌 document 를 스크롤) */
     pw.__sajuScrollHomeTopOnce = function () {
         if (pw.__sajuUserIsScrolling) return;
+        if (
+            typeof pw.__sajuShouldPreserveWidgetFocus === "function" &&
+            pw.__sajuShouldPreserveWidgetFocus()
+        ) {
+            return;
+        }
         const doc = pw.document || document;
         const mobile = isMobileView(pw, doc);
         const galaxy =
@@ -3376,7 +3422,7 @@ _STEP2_TAB_ORDER_SELF = (
     "u_gender",
     "step2_u_bdate_text",
     "u_lunar",
-    "u_time",
+    "u_time_select_idx",
     "u_contact",
 )
 _STEP2_TAB_ORDER_OPP = (
@@ -3384,12 +3430,13 @@ _STEP2_TAB_ORDER_OPP = (
     "p_gender",
     "step2_p_bdate_text",
     "p_lunar",
-    "p_time",
+    "p_time_select_idx",
 )
 _STEP2_TAB_ORDER_SAVE = (
     "agree",
     "step2_revisit_pin",
     "step2_revisit_pin_confirm",
+    "step2_inline_prev_btn",
     "step2_save_and_analyze_btn",
 )
 
@@ -3409,10 +3456,10 @@ def _step2_tab_order_json() -> str:
 
 def inject_step2_tab_manager_global_once() -> None:
     """STEP2 Tab 순서 — parent 문서에 1회 설치 (components.html iframe)."""
-    if st.session_state.get("_saju_step2_tab_mgr_v12"):
+    if st.session_state.get("_saju_step2_tab_mgr_v13"):
         return
-    st.session_state["_saju_step2_tab_mgr_v12"] = True
-    st.session_state.pop("_saju_step2_tab_mgr_v11", None)
+    st.session_state["_saju_step2_tab_mgr_v13"] = True
+    st.session_state.pop("_saju_step2_tab_mgr_v12", None)
     order_js = _step2_tab_order_json()
     mgr_js = _STEP2_TAB_MANAGER_JS.replace("__ORDER_JSON__", order_js)
     html = (
@@ -3420,7 +3467,7 @@ def inject_step2_tab_manager_global_once() -> None:
         "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
         f"<script>{mgr_js}</script></body></html>"
     )
-    with st.container(key="saju_step2_tab_mgr_v12"):
+    with st.container(key="saju_step2_tab_mgr_v13"):
         components.html(html, height=1, scrolling=False)
 
 
@@ -3429,7 +3476,7 @@ _STEP2_TAB_MANAGER_JS = r"""
   const pw = window.parent !== window ? window.parent : window;
   const ORDER = __ORDER_JSON__;
   const SCOPE_SEL =
-    ".st-key-step2_navertone_self, .st-key-step2_navertone_opp, .st-key-step2_save_actions";
+    ".st-key-step2_navertone_self, .st-key-step2_navertone_opp, .st-key-step2_save_actions, .st-key-step2_fixed_next_bar, .st-key-step2_action_block";
 
   pw.__sajuStep2TabOrder = ORDER;
 
@@ -3609,9 +3656,21 @@ _STEP2_TAB_MANAGER_JS = r"""
     if (!el) return;
     const win = el.ownerDocument.defaultView || pw;
     if (!isVisible(el, win)) return;
+    const onStep2 =
+      pw.document &&
+      pw.document.documentElement &&
+      pw.document.documentElement.getAttribute("data-saju-step") === "2";
     try {
-      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
-    } catch (e) {}
+      if (typeof pw.__sajuStep2SaveScroll === "function") pw.__sajuStep2SaveScroll();
+    } catch (e0) {}
+    if (!onStep2) {
+      try {
+        el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
+      } catch (e) {}
+    }
+    try {
+      if (typeof pw.__sajuStep2RestoreScroll === "function") pw.__sajuStep2RestoreScroll();
+    } catch (e1) {}
     const snap = function () {
       try {
         el.focus({ preventScroll: true });
@@ -3787,6 +3846,63 @@ _STEP2_TAB_MANAGER_JS = r"""
 
   pw.__sajuStep2TabRefresh = scheduleRefresh;
 
+  function rememberFocus(el) {
+    if (!el || !isStep2FieldTarget(el)) return;
+    const wk = widgetKeyFrom(el);
+    if (!wk) return;
+    try {
+      pw.sessionStorage.setItem("saju_step2_last_focus", wk);
+    } catch (e) {}
+    pw.__sajuStep2FocusLock = { key: wk, until: Date.now() + 1800 };
+  }
+
+  function restoreLastFocus() {
+    if (!step2Active()) return;
+    let wk = null;
+    try {
+      wk = pw.sessionStorage.getItem("saju_step2_last_focus");
+    } catch (e) {}
+    const lock = pw.__sajuStep2FocusLock;
+    if (lock && lock.key && lock.until && Date.now() < lock.until) {
+      wk = lock.key;
+    }
+    if (!wk) return;
+    const root = findRootAny(wk);
+    const win = root ? root.ownerDocument.defaultView || pw : pw;
+    const el = pickPrimary(root, win);
+    if (el) hardFocus(el);
+  }
+
+  if (!pw.__sajuStep2FocusInBound) {
+    pw.__sajuStep2FocusInBound = true;
+    forEachDoc(function (doc) {
+      doc.addEventListener(
+        "focusin",
+        function (ev) {
+          if (!step2Active()) return;
+          rememberFocus(ev.target);
+        },
+        true
+      );
+      doc.addEventListener(
+        "mousedown",
+        function (ev) {
+          if (!step2Active()) return;
+          rememberFocus(ev.target);
+        },
+        true
+      );
+    });
+  }
+
+  const origRefresh = scheduleRefresh;
+  pw.__sajuStep2TabRefresh = function () {
+    origRefresh();
+    [0, 48, 120, 240, 420].forEach(function (ms) {
+      setTimeout(restoreLastFocus, ms);
+    });
+  };
+
   let tabMoTimer = null;
   try {
     const root =
@@ -3798,16 +3914,202 @@ _STEP2_TAB_MANAGER_JS = r"""
         if (tabMoTimer) clearTimeout(tabMoTimer);
         tabMoTimer = setTimeout(function () {
           tabMoTimer = null;
-          scheduleRefresh();
+          if (typeof pw.__sajuStep2TabRefresh === "function") {
+            pw.__sajuStep2TabRefresh();
+          } else {
+            scheduleRefresh();
+          }
         }, 140);
       });
       obs.observe(root, { childList: true, subtree: true });
     }
   } catch (e) {}
 
-  scheduleRefresh();
+  if (typeof pw.__sajuStep2TabRefresh === "function") {
+    pw.__sajuStep2TabRefresh();
+  } else {
+    scheduleRefresh();
+  }
 })();
 """
+
+
+def inject_step2_scroll_preserve_once() -> None:
+    """STEP2 — 위젯 rerun 시 스크롤·포커스가 화면 상단으로 튕기지 않도록 유지."""
+    ver = "v3"
+    if not st.session_state.get(f"_saju_step2_scroll_preserve_{ver}"):
+        st.session_state[f"_saju_step2_scroll_preserve_{ver}"] = True
+        st.session_state.pop("_saju_step2_scroll_preserve_v2", None)
+        js = r"""
+(function () {
+  const pw = window.parent !== window ? window.parent : window;
+  const doc = pw.document;
+  if (!doc) return;
+  if (pw.__sajuStep2ScrollPreserveV3) return;
+  pw.__sajuStep2ScrollPreserveV3 = true;
+  pw.__sajuStep2ScrollPreserveV2 = true;
+
+  const KEY = "saju_step2_scroll_y";
+  const EDIT_KEY = "saju_step2_editing";
+  const FIELD_SEL =
+    ".st-key-step2_navertone_self, .st-key-step2_navertone_opp, .st-key-step2_revisit_expander_wrap, .st-key-step2_fixed_next_bar, .st-key-step2_action_block, .st-key-step2_save_actions";
+
+  function onStep2() {
+    try {
+      return doc.documentElement.getAttribute("data-saju-step") === "2";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function getMainScrollEl() {
+    const cands = [
+      doc.querySelector('[data-testid="stMain"]'),
+      doc.querySelector("section.main"),
+      doc.querySelector('[data-testid="stMainBlockContainer"]'),
+      doc.querySelector('[data-testid="stAppViewContainer"]'),
+      doc.scrollingElement,
+      doc.documentElement,
+    ];
+    for (let i = 0; i < cands.length; i++) {
+      const el = cands[i];
+      if (!el) continue;
+      try {
+        if ((el.scrollHeight || 0) - (el.clientHeight || 0) > 4) return el;
+      } catch (e) {}
+    }
+    return (
+      doc.querySelector('[data-testid="stMain"]') ||
+      doc.querySelector("section.main") ||
+      doc.documentElement
+    );
+  }
+
+  function scrollTargets() {
+    const out = [];
+    const main = getMainScrollEl();
+    if (main) out.push(main);
+    [
+      doc.querySelector('[data-testid="stMainBlockContainer"]'),
+      doc.querySelector('[data-testid="stAppViewContainer"]'),
+      doc.scrollingElement,
+      doc.documentElement,
+    ].forEach(function (el) {
+      if (el && out.indexOf(el) < 0) out.push(el);
+    });
+    return out;
+  }
+
+  function markEditing() {
+    if (!onStep2()) return;
+    try {
+      pw.sessionStorage.setItem(EDIT_KEY, "1");
+    } catch (e) {}
+    pw.__sajuStep2FocusLock = { key: "step2", until: Date.now() + 2800 };
+    saveScroll();
+  }
+
+  function readY() {
+    let y = 0;
+    scrollTargets().forEach(function (el) {
+      try {
+        y = Math.max(y, el.scrollTop || 0);
+      } catch (e) {}
+    });
+    try {
+      y = Math.max(y, pw.scrollY || doc.documentElement.scrollTop || 0);
+    } catch (e2) {}
+    return y;
+  }
+
+  function writeY(y) {
+    const top = Math.max(0, parseInt(String(y || 0), 10) || 0);
+    scrollTargets().forEach(function (el) {
+      try {
+        el.scrollTop = top;
+      } catch (e) {}
+    });
+    try {
+      pw.scrollTo(0, top);
+    } catch (e2) {}
+  }
+
+  function saveScroll() {
+    if (!onStep2()) return;
+    try {
+      pw.sessionStorage.setItem(KEY, String(readY()));
+    } catch (e) {}
+  }
+
+  function restoreScroll() {
+    if (!onStep2()) return;
+    let raw = null;
+    try {
+      raw = pw.sessionStorage.getItem(KEY);
+    } catch (e) {}
+    if (raw == null) return;
+    const y = parseInt(raw, 10);
+    if (!Number.isFinite(y)) return;
+    const apply = function () {
+      writeY(y);
+    };
+    apply();
+    try {
+      pw.requestAnimationFrame(apply);
+    } catch (e) {}
+    [8, 32, 96].forEach(function (ms) {
+      pw.setTimeout(apply, ms);
+    });
+  }
+
+  pw.__sajuStep2SaveScroll = saveScroll;
+  pw.__sajuStep2RestoreScroll = restoreScroll;
+
+  if (!pw.__sajuStep2ScrollSaveBound) {
+    pw.__sajuStep2ScrollSaveBound = true;
+    doc.addEventListener("input", markEditing, true);
+    doc.addEventListener("change", markEditing, true);
+    ["focusin", "mousedown", "pointerdown", "touchstart"].forEach(function (ev) {
+      doc.addEventListener(
+        ev,
+        function (e) {
+          if (!onStep2()) return;
+          const t = e.target;
+          if (!t || !t.closest) return;
+          if (t.closest(FIELD_SEL)) markEditing();
+        },
+        true
+      );
+    });
+  }
+
+  restoreScroll();
+})();
+"""
+        with st.container(key="saju_step2_scroll_preserve_v3"):
+            components.html(
+                "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+                "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+                f"<script>{js}</script></body></html>",
+                height=1,
+                scrolling=False,
+            )
+
+    restore_js = r"""
+(function () {
+  const pw = window.parent !== window ? window.parent : window;
+  if (typeof pw.__sajuStep2RestoreScroll === "function") pw.__sajuStep2RestoreScroll();
+})();
+"""
+    token = int(st.session_state.get("_saju_step2_scroll_restore_token", 0)) + 1
+    st.session_state["_saju_step2_scroll_restore_token"] = token
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
+        f"<script>{restore_js}</script></body></html>"
+    )
+    with st.container(key=f"saju_step2_scroll_restore_{token % 100000}"):
+        components.html(html, height=1, scrolling=False)
 
 
 def inject_step2_tab_order_once() -> None:
@@ -3843,6 +4145,7 @@ def queue_widget_focus(widget_key: str, *, kind: str = "control") -> None:
     st.session_state["_saju_focus_return_key"] = wk
     st.session_state["_saju_focus_return_kind"] = str(kind or "control")
     st.session_state["_saju_nav_preserve_scroll"] = True
+    st.session_state["_saju_widget_skip_finalize_scroll"] = True
 
 
 def inject_widget_focus_return_once() -> None:
@@ -3906,6 +4209,18 @@ def inject_widget_focus_return_once() -> None:
         return summary;
       }}
     }}
+    if (kind === "control") {{
+      return (
+        root.querySelector(
+          '[data-baseweb="select"] [role="combobox"], [data-baseweb="select"] [aria-haspopup="listbox"]'
+        ) ||
+        root.querySelector('[data-baseweb="popover"] button') ||
+        root.querySelector("button:not([disabled])") ||
+        root.querySelector(
+          'input:not([type="hidden"]):not([disabled]), textarea:not([disabled])'
+        )
+      );
+    }}
     if (kind === "input") {{
       return root.querySelector(
         'input:not([type="hidden"]):not([disabled]), textarea:not([disabled])'
@@ -3940,8 +4255,16 @@ def inject_widget_focus_return_once() -> None:
       ) {{
         target.setAttribute("tabindex", "-1");
       }}
-      target.scrollIntoView({{ block: "nearest", inline: "nearest", behavior: "auto" }});
+      const onStep2 =
+        doc.documentElement &&
+        doc.documentElement.getAttribute("data-saju-step") === "2";
+      if (!onStep2) {{
+        target.scrollIntoView({{ block: "nearest", inline: "nearest", behavior: "auto" }});
+      }}
       target.focus({{ preventScroll: true }});
+      if (onStep2 && typeof pw.__sajuStep2RestoreScroll === "function") {{
+        pw.__sajuStep2RestoreScroll();
+      }}
       if (
         sel &&
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
@@ -3970,6 +4293,14 @@ def inject_widget_focus_return_once() -> None:
     try {{
       pw.__sajuStep2FocusLock = {{ key: widgetKey, until: Date.now() + 900 }};
     }} catch (e) {{}}
+  }} else if (widgetKey) {{
+    try {{
+      const lock = {{ key: widgetKey, until: Date.now() + 2200 }};
+      pw.__sajuWidgetFocusLock = lock;
+      pw.__sajuStep2FocusLock = lock;
+      pw.sessionStorage.setItem("saju_widget_focus_v1", widgetKey);
+      pw.sessionStorage.setItem("saju_step2_last_focus", widgetKey);
+    }} catch (e2) {{}}
   }}
 }})();
 """
@@ -3982,14 +4313,11 @@ def inject_widget_focus_return_once() -> None:
     st.session_state["_saju_focus_return_token"] = token
     with st.container(key=f"saju_focus_return_{token}"):
         components.html(html, height=1, scrolling=False)
-    inject_cancel_step_scroll_lock_once()
+    inject_cancel_step_scroll_lock()
 
 
-def inject_cancel_step_scroll_lock_once() -> None:
-    """기능 바로가기 등 — 이전 STEP 전환의 스크롤 잠금 해제."""
-    if st.session_state.get("_saju_cancel_scroll_lock_injected"):
-        return
-    st.session_state["_saju_cancel_scroll_lock_injected"] = True
+def inject_cancel_step_scroll_lock() -> None:
+    """위젯 rerun·포커스 복귀 — STEP 전환용 스크롤 잠금 해제."""
     st.markdown(
         "<script>(function(){const pw=window.parent||window;"
         "if(typeof pw.__sajuCancelStepScroll==='function'){pw.__sajuCancelStepScroll();}"
@@ -3997,6 +4325,11 @@ def inject_cancel_step_scroll_lock_once() -> None:
         "})();</script>",
         unsafe_allow_html=True,
     )
+
+
+def inject_cancel_step_scroll_lock_once() -> None:
+    """레거시 — 매 run ``inject_cancel_step_scroll_lock`` 호출."""
+    inject_cancel_step_scroll_lock()
 
 
 def _trigger_home_solar_iframe_fit_js() -> None:
@@ -4034,6 +4367,235 @@ def inject_step_dom_boot_once() -> None:
 def reset_step_dom_sync_slots_for_run() -> None:
     """라우터 rerun 시작 시 호출 — ``sync_step_dom_now`` slot 중복 key 방지."""
     st.session_state["_saju_html_sync_slots"] = []
+
+
+_GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
+(function () {
+  const pw = window.parent !== window ? window.parent : window;
+  if (pw.__sajuGlobalWidgetFocusV2) return;
+  pw.__sajuGlobalWidgetFocusV2 = true;
+  pw.__sajuGlobalWidgetFocusV1 = true;
+
+  const SKIP_KEY_RE =
+    /^(saju_global_bottom|saju_bottom_prev_next|saju_bottom_quick|saju_scroll_mgr|saju_step2_tab|saju_focus_return|saju_widget_focus|saju_nav_pending|saju_step_nav_click)/;
+
+  function getMainScrollEl(doc) {
+    const cands = [
+      doc.querySelector('[data-testid="stMain"]'),
+      doc.querySelector("section.main"),
+      doc.querySelector('[data-testid="stMainBlockContainer"]'),
+      doc.querySelector('[data-testid="stAppViewContainer"]'),
+      doc.scrollingElement,
+      doc.documentElement,
+    ];
+    for (let i = 0; i < cands.length; i++) {
+      const el = cands[i];
+      if (!el) continue;
+      try {
+        if ((el.scrollHeight || 0) - (el.clientHeight || 0) > 4) return el;
+      } catch (e) {}
+    }
+    return (
+      doc.querySelector('[data-testid="stMain"]') ||
+      doc.querySelector("section.main") ||
+      doc.documentElement
+    );
+  }
+
+  function widgetKeyFrom(el) {
+    let node = el;
+    while (node) {
+      if (node.classList) {
+        for (let i = 0; i < node.classList.length; i++) {
+          const c = node.classList[i];
+          if (c.indexOf("st-key-") !== 0) continue;
+          const key = c.slice(7);
+          if (SKIP_KEY_RE.test(key)) continue;
+          return key;
+        }
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function isInteractive(el) {
+    if (!el) return false;
+    const tag = String(el.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON") {
+      return true;
+    }
+    try {
+      if (el.getAttribute && el.getAttribute("role") === "combobox") return true;
+      if (el.closest && el.closest('[data-baseweb="select"]')) return true;
+      if (el.closest && el.closest('[data-testid="stExpander"] summary')) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function pickTarget(root) {
+    if (!root) return null;
+    const combo = root.querySelector(
+      '[data-baseweb="select"] [role="combobox"], [data-baseweb="select"] [aria-haspopup="listbox"]'
+    );
+    if (combo) return combo;
+    const inputs = root.querySelectorAll(
+      'input:not([type="hidden"]):not([disabled]), textarea:not([disabled])'
+    );
+    for (let i = 0; i < inputs.length; i++) {
+      if ((inputs[i].type || "").toLowerCase() !== "checkbox") return inputs[i];
+    }
+    for (let j = 0; j < inputs.length; j++) {
+      if ((inputs[j].type || "").toLowerCase() === "checkbox") return inputs[j];
+    }
+    const summary = root.querySelector(
+      '[data-testid="stExpander"] summary, details > summary'
+    );
+    if (summary) return summary;
+    return root.querySelector("button:not([disabled])");
+  }
+
+  function hardFocus(el) {
+    if (!el) return;
+    const onStep2 =
+      doc.documentElement &&
+      doc.documentElement.getAttribute("data-saju-step") === "2";
+    if (!onStep2) {
+      try {
+        el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
+      } catch (e) {}
+    }
+    try {
+      el.focus({ preventScroll: true });
+    } catch (e2) {
+      try {
+        el.focus();
+      } catch (e3) {}
+    }
+    if (onStep2 && typeof pw.__sajuStep2RestoreScroll === "function") {
+      pw.__sajuStep2RestoreScroll();
+    }
+  }
+
+  function rememberFocus(target) {
+    if (!target || !isInteractive(target)) return;
+    const doc = pw.document;
+    if (!doc) return;
+    const wk = widgetKeyFrom(target);
+    if (!wk) return;
+    const main = getMainScrollEl(doc);
+    const lock = {
+      key: wk,
+      until: Date.now() + 2600,
+      scrollTop: main ? main.scrollTop : 0,
+      scrollY: pw.scrollY || 0,
+    };
+    pw.__sajuWidgetFocusLock = lock;
+    pw.__sajuStep2FocusLock = lock;
+    try {
+      pw.sessionStorage.setItem("saju_widget_focus_v1", wk);
+    } catch (e) {}
+  }
+
+  function restoreScroll(lock) {
+    if (!lock) return;
+    const doc = pw.document;
+    if (!doc) return;
+    const main = getMainScrollEl(doc);
+    if (main && lock.scrollTop != null) {
+      try {
+        main.scrollTop = lock.scrollTop;
+      } catch (e) {}
+    }
+    if (lock.scrollY != null) {
+      try {
+        pw.scrollTo(0, lock.scrollY);
+      } catch (e2) {}
+    }
+  }
+
+  function restoreWidgetFocus() {
+    const doc = pw.document;
+    if (!doc) return;
+    const de = doc.documentElement;
+    if (de && de.getAttribute("data-saju-nav-pending") === "1") return;
+
+    let wk = null;
+    const lock = pw.__sajuWidgetFocusLock;
+    if (lock && lock.until && Date.now() < lock.until) {
+      wk = lock.key;
+      restoreScroll(lock);
+    }
+    if (!wk) {
+      try {
+        wk = pw.sessionStorage.getItem("saju_widget_focus_v1");
+      } catch (e) {}
+    }
+    if (!wk) return;
+
+    const exact = "st-key-" + wk;
+    const nodes = doc.querySelectorAll('[class*="st-key-"]');
+    let root = null;
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].classList && nodes[i].classList.contains(exact)) {
+        root = nodes[i];
+        break;
+      }
+    }
+    const target = pickTarget(root);
+    if (target) hardFocus(target);
+  }
+
+  pw.__sajuRestoreWidgetFocus = restoreWidgetFocus;
+
+  const doc = pw.document;
+  if (!doc) return;
+
+  function onInteract(ev) {
+    rememberFocus(ev.target);
+  }
+
+  ["focusin", "mousedown", "pointerdown", "touchstart"].forEach(function (ev) {
+    try {
+      doc.addEventListener(ev, onInteract, true);
+    } catch (e) {}
+  });
+
+  let moTimer = null;
+  try {
+    const root =
+      doc.querySelector('[data-testid="stAppViewContainer"]') || doc.body;
+    if (root && pw.MutationObserver) {
+      new pw.MutationObserver(function () {
+        if (moTimer) clearTimeout(moTimer);
+        moTimer = setTimeout(function () {
+          moTimer = null;
+          restoreWidgetFocus();
+        }, 80);
+      }).observe(root, { childList: true, subtree: true });
+    }
+  } catch (e) {}
+
+  [0, 48, 120, 240, 420, 680].forEach(function (ms) {
+    pw.setTimeout(restoreWidgetFocus, ms);
+  });
+})();
+"""
+
+
+def inject_global_widget_focus_preserve_once() -> None:
+    """전 STEP — 위젯 클릭·입력 rerun 후 포커스·스크롤 위치 유지."""
+    if st.session_state.get("_saju_global_widget_focus_v2"):
+        return
+    st.session_state["_saju_global_widget_focus_v2"] = True
+    st.session_state.pop("_saju_global_widget_focus_v1", None)
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+        "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
+        f"<script>{_GLOBAL_WIDGET_FOCUS_PRESERVE_JS}</script></body></html>"
+    )
+    with st.container(key="saju_widget_focus_preserve_v2"):
+        components.html(html, height=0, scrolling=False)
 
 
 _STEP_NAV_CLICK_GUARD_JS = r"""
@@ -4109,6 +4671,10 @@ _STEP_NAV_CLICK_GUARD_JS = r"""
 
   function onNavPointer(e) {
     if (!isStepNavControl(e.target)) return;
+    try {
+      pw.__sajuWidgetFocusLock = null;
+      pw.__sajuStep2FocusLock = null;
+    } catch (e0) {}
     pw.__sajuArmStepNavPending(readStep());
   }
 
@@ -4153,7 +4719,7 @@ def inject_step2_validation_alert_scroll_once() -> None:
         "var pw=(window.parent&&window.parent!==window)?window.parent:window;"
         "var doc=pw.document;if(!doc)return;"
         "function scrollToAlert(){"
-        "var el=doc.querySelector('.st-key-step2_validation_alert,.st-key-step2_save_actions');"
+        "var el=doc.querySelector('.st-key-step2_validation_alert,.st-key-step2_action_block,.st-key-step2_fixed_next_bar,.st-key-step2_save_actions');"
         "if(!el)return;"
         "try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){"
         "try{el.scrollIntoView(true);}catch(e2){}"
@@ -4947,24 +5513,41 @@ def finalize_scroll_to_top_if_needed() -> None:
     step = int(st.session_state.get("step", 1))
 
     if int(step) == 1:
+        if not pending and scrolled_epoch == nav_epoch:
+            inject_cancel_step_scroll_lock()
+            mark_scroll_completed_for_current_nav()
+            return
         inject_home_top_snap_tail_force()
         st.session_state.pop("_saju_nav_from_step", None)
         _pop_force_scroll_nav_opts()
         sync_step_nav_scroll_at_page_tail()
-        if not pending and scrolled_epoch == nav_epoch:
-            mark_scroll_completed_for_current_nav()
-            return
         if pending or scrolled_epoch != nav_epoch:
             inject_nav_scroll_tail_once(nav_epoch=nav_epoch)
         mark_scroll_completed_for_current_nav()
         return
 
-    if not pending and scrolled_epoch == nav_epoch:
+    if int(step) == 2:
+        if st.session_state.pop("_saju_widget_skip_finalize_scroll", False):
+            inject_cancel_step_scroll_lock()
+            mark_scroll_completed_for_current_nav()
+            return
+        if st.session_state.pop("_saju_nav_preserve_scroll", False):
+            inject_cancel_step_scroll_lock()
+            mark_scroll_completed_for_current_nav()
+            return
+        if not pending:
+            inject_cancel_step_scroll_lock()
+            mark_scroll_completed_for_current_nav()
+            return
+
+    if st.session_state.pop("_saju_widget_skip_finalize_scroll", False):
+        inject_cancel_step_scroll_lock()
+        mark_scroll_completed_for_current_nav()
         return
 
     if not pending:
-        if scrolled_epoch != nav_epoch:
-            mark_scroll_completed_for_current_nav()
+        inject_cancel_step_scroll_lock()
+        mark_scroll_completed_for_current_nav()
         return
 
     nav_from_step: int | None = None

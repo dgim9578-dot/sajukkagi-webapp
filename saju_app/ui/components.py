@@ -1698,7 +1698,7 @@ _GLOBAL_AUTOFILL_GUARD_SCRIPT = """
         try {{
             doc.querySelectorAll('[data-testid="InputInstructions"]').forEach((node) => {{
                 const inStep2 = node.closest(
-                    ".st-key-step2_navertone_self, .st-key-step2_navertone_opp, .st-key-step2_save_actions"
+                    ".st-key-step2_navertone_self, .st-key-step2_navertone_opp, .st-key-step2_action_block, .st-key-step2_fixed_next_bar, .st-key-step2_save_actions"
                 );
                 if (inStep2) node.remove();
             }});
@@ -2076,6 +2076,7 @@ def queue_step2_save_and_analyze() -> None:
 
     if not try_step2_save_from_session():
         st.session_state["_step2_clear_nav_pending"] = True
+        rerun_full_app()
 
 
 def assign_step_and_rerun(
@@ -2208,7 +2209,8 @@ def render_bottom_step_nav(*, current_step: int | None = None) -> None:
     reset_id = int(st.session_state.get("reset_id", 0))
 
     # STEP12(관리자): 상단 UI로 이동 — 하단 이전/다음 생략
-    if step > STEP_NAV_MIN and step not in (11, 12):
+    # STEP2: 본문 재방문 아래 인라인 이전·다음 사용 — 글로벌 행 생략
+    if step > STEP_NAV_MIN and step not in (2, 11, 12):
         # 모바일 인앱 WebView: 가운데 빈 열(1·2·1) 대신 2열 동일 비율이 세로 스택을 덜 유발합니다.
         with st.container(key="saju_bottom_prev_next_row"):
             try:
@@ -2226,23 +2228,14 @@ def render_bottom_step_nav(*, current_step: int | None = None) -> None:
                 )
             with nav_cols[1]:
                 if step < STEP_NAV_MAX:
-                    if step == 2:
-                        st.button(
-                            "다음 →",
-                            type="primary",
-                            use_container_width=True,
-                            key=f"saju_bottom_next_btn_{reset_id}",
-                            on_click=queue_step2_save_and_analyze,
-                        )
-                    else:
-                        st.button(
-                            "다음 →",
-                            type="primary",
-                            use_container_width=True,
-                            key=f"saju_bottom_next_btn_{reset_id}",
-                            on_click=navigate_to_step,
-                            args=(min(STEP_NAV_MAX, step + 1),),
-                        )
+                    st.button(
+                        "다음 →",
+                        type="primary",
+                        use_container_width=True,
+                        key=f"saju_bottom_next_btn_{reset_id}",
+                        on_click=navigate_to_step,
+                        args=(min(STEP_NAV_MAX, step + 1),),
+                    )
                 else:
                     st.empty()
 

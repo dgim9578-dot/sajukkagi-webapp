@@ -3040,8 +3040,9 @@ def inject_step2_bdate_input_focus_guard_once() -> None:
 def protect_step2_birth_time_selects() -> None:
     """STEP2 태어난 시간 selectbox — 달력 월 패치가 건드리지 않도록 보호."""
     inject_calendar_locale_installer_once()
-    nonce = int(st.session_state.get("_saju_step2_time_protect_nonce", 0)) + 1
-    st.session_state["_saju_step2_time_protect_nonce"] = nonce
+    if st.session_state.get("_saju_step2_time_protect_done_v1"):
+        return
+    st.session_state["_saju_step2_time_protect_done_v1"] = True
     trigger_js = (
         "(function(){"
         "const pw=window.parent||window;"
@@ -3053,7 +3054,7 @@ def protect_step2_birth_time_selects() -> None:
         "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
         f"<script>{trigger_js}</script></body></html>"
     )
-    with st.container(key=f"saju_step2_time_protect_{nonce % 100000}"):
+    with st.container(key="saju_step2_time_protect_v1"):
         components.html(html, height=1, scrolling=False)
 
 
@@ -4100,46 +4101,12 @@ def inject_step2_scroll_preserve_once() -> None:
                 scrolling=False,
             )
 
-    restore_js = r"""
-(function () {
-  const pw = window.parent !== window ? window.parent : window;
-  if (typeof pw.__sajuStep2RestoreScroll === "function") pw.__sajuStep2RestoreScroll();
-})();
-"""
-    token = int(st.session_state.get("_saju_step2_scroll_restore_token", 0)) + 1
-    st.session_state["_saju_step2_scroll_restore_token"] = token
-    html = (
-        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
-        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
-        f"<script>{restore_js}</script></body></html>"
-    )
-    with st.container(key=f"saju_step2_scroll_restore_{token % 100000}"):
-        components.html(html, height=1, scrolling=False)
+    # 스크롤 복원은 1회 설치 JS(이벤트·__sajuStep2RestoreScroll)에 맡김 — rerun마다 iframe 추가 금지
 
 
 def inject_step2_tab_order_once() -> None:
     """STEP2 정보 입력 — Tab/다음 키로 성함→년월일→시간→… 순서 이동."""
     inject_step2_tab_manager_global_once()
-    order_js = _step2_tab_order_json()
-    bump_js = f"""
-(function() {{
-  const pw = window.parent !== window ? window.parent : window;
-  const order = {order_js};
-  pw.__sajuStep2TabOrder = order;
-  if (typeof pw.__sajuStep2TabSetOrder === "function") pw.__sajuStep2TabSetOrder(order);
-  else if (typeof pw.__sajuStep2TabRefresh === "function") pw.__sajuStep2TabRefresh();
-}})();
-"""
-    st.markdown(f"<script>{bump_js}</script>", unsafe_allow_html=True)
-    token = int(st.session_state.get("_saju_step2_tab_order_token", 0)) + 1
-    st.session_state["_saju_step2_tab_order_token"] = token
-    html = (
-        "<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
-        "<body style='margin:0;padding:0;height:1px;overflow:hidden;'>"
-        f"<script>{bump_js}</script></body></html>"
-    )
-    with st.container(key=f"saju_step2_tab_order_{token}"):
-        components.html(html, height=1, scrolling=False)
 
 
 def queue_widget_focus(widget_key: str, *, kind: str = "control") -> None:
@@ -4377,7 +4344,8 @@ def reset_step_dom_sync_slots_for_run() -> None:
 _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
 (function () {
   const pw = window.parent !== window ? window.parent : window;
-  if (pw.__sajuGlobalWidgetFocusV3) return;
+  if (pw.__sajuGlobalWidgetFocusV4) return;
+  pw.__sajuGlobalWidgetFocusV4 = true;
   pw.__sajuGlobalWidgetFocusV3 = true;
   pw.__sajuGlobalWidgetFocusV2 = true;
   pw.__sajuGlobalWidgetFocusV1 = true;
@@ -4566,6 +4534,22 @@ _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
     const de = doc.documentElement;
     if (de && de.getAttribute("data-saju-nav-pending") === "1") return;
 
+    if (de && de.getAttribute("data-saju-step") === "2") {
+      try {
+        if (
+          pw.sessionStorage.getItem("saju_step2_editing") === "1" ||
+          pw.sessionStorage.getItem("saju_widget_editing") === "1"
+        ) {
+          const lock2 = pw.__sajuWidgetFocusLock;
+          restoreScroll(lock2);
+          if (typeof pw.__sajuStep2RestoreScroll === "function") {
+            pw.__sajuStep2RestoreScroll();
+          }
+          return;
+        }
+      } catch (eStep2) {}
+    }
+
     let wk = null;
     const lock = pw.__sajuWidgetFocusLock;
     if (lock && lock.until && Date.now() < lock.until) {
@@ -4631,9 +4615,10 @@ _GLOBAL_WIDGET_FOCUS_PRESERVE_JS = r"""
 
 def inject_global_widget_focus_preserve_once() -> None:
     """전 STEP — 위젯 클릭·입력 rerun 후 포커스·스크롤 위치 유지."""
-    if st.session_state.get("_saju_global_widget_focus_v3"):
+    if st.session_state.get("_saju_global_widget_focus_v4"):
         return
-    st.session_state["_saju_global_widget_focus_v3"] = True
+    st.session_state["_saju_global_widget_focus_v4"] = True
+    st.session_state.pop("_saju_global_widget_focus_v3", None)
     st.session_state.pop("_saju_global_widget_focus_v2", None)
     st.session_state.pop("_saju_global_widget_focus_v1", None)
     html = (
@@ -4641,7 +4626,7 @@ def inject_global_widget_focus_preserve_once() -> None:
         "<body style='margin:0;padding:0;height:0;overflow:hidden;'>"
         f"<script>{_GLOBAL_WIDGET_FOCUS_PRESERVE_JS}</script></body></html>"
     )
-    with st.container(key="saju_widget_focus_preserve_v3"):
+    with st.container(key="saju_widget_focus_preserve_v4"):
         components.html(html, height=0, scrolling=False)
 
 

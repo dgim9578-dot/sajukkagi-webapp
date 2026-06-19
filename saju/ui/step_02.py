@@ -12,7 +12,7 @@ import streamlit.components.v1 as components
 from saju_app.ui import components as M
 from saju_app.ui import execution as saju_execution
 
-STEP2_UI_BUILD = "2026-05-31-step2-next-fix"
+STEP2_UI_BUILD = "2026-05-31-step2-fragment-v7"
 
 _STEP2_TIME_OPTIONS_FALLBACK: tuple[str, ...] = (
     "모름",
@@ -272,6 +272,8 @@ def _normalize_bdate_text_on_change(
 
 
 def _bdate_text_change_callback(*, y_key: str, m_key: str, d_key: str, bdate_key: str):
+    text_key = _bdate_text_key(bdate_key)
+
     def _cb() -> None:
         _normalize_bdate_text_on_change(
             bdate_key=bdate_key,
@@ -827,6 +829,17 @@ def _try_begin_step2_save() -> None:
     try_step2_save_from_session()
 
 
+def _queue_step2_focus(widget_key: str, *, kind: str = "input") -> None:
+    M.queue_widget_focus(widget_key, kind=kind)
+
+
+def _focus_after_widget(widget_key: str, *, kind: str = "input"):
+    def _cb() -> None:
+        _queue_step2_focus(widget_key, kind=kind)
+
+    return _cb
+
+
 def _on_lunar_change_self() -> None:
     if str(st.session_state.get("u_lunar") or "양력") == "양력":
         st.session_state.u_leap = "평달"
@@ -904,7 +917,11 @@ def _render_person_form(
                     name_kwargs["autocomplete"] = "one-time-code"
                 M.text_input_no_autofill(**name_kwargs)
             with gender_c:
-                st.selectbox("성별", ("남자", "여자"), key=gender_key)
+                st.selectbox(
+                    "성별",
+                    ("남자", "여자"),
+                    key=gender_key,
+                )
 
         with st.container(key=f"step2_{row_key}_row2_bdate_cal"):
             bdate_c, cal_c = st.columns(2, gap="small")
@@ -944,6 +961,100 @@ def _render_person_form(
                     )
                 else:
                     st.empty()
+
+
+def _render_step2_inline_nav_row() -> None:
+    """재방문 설정 아래 — 이전·다음 2열(고정 하단 아님)."""
+    with st.container(key="step2_inline_nav_row"):
+        prev_c, next_c = st.columns(2, gap="small")
+        with prev_c:
+            st.button(
+                "← 이전",
+                use_container_width=True,
+                key="step2_inline_prev_btn",
+                on_click=M.navigate_to_step,
+                args=(1,),
+            )
+        with next_c:
+            st.button(
+                "다음 → 사주 분석",
+                type="primary",
+                use_container_width=True,
+                key="step2_save_and_analyze_btn",
+                on_click=M.queue_step2_save_and_analyze,
+            )
+
+
+@st.fragment
+def _render_step2_input_fragment(*, show_action_warning: bool) -> None:
+    """입력란·탭·동의 — fragment rerun 만 사용해 클릭 시 스크롤이 위로 튕기지 않게."""
+    tab_main, tab_opp = st.tabs(["본인정보", "상대방정보"])
+
+    with tab_main:
+        st.caption(
+            "이름 · 생년월일(YYYY/MM/DD) · 달력 · 시간 · 성별 · 연락처(선택) 순으로 입력하세요."
+        )
+        _render_person_form(
+            name_label="성함",
+            name_key=_SELF_NAME_INPUT_KEY,
+            lunar_key="u_lunar",
+            leap_key="u_leap",
+            y_key="u_y",
+            m_key="u_m",
+            d_key="u_d",
+            bdate_key=_SELF_BDATE_KEY,
+            time_key="u_time",
+            gender_key="u_gender",
+            container_key="step2_navertone_self",
+            on_lunar_change=_on_lunar_change_self,
+            show_contact=True,
+        )
+
+    with tab_opp:
+        st.caption("궁합·상대 분석 시에만 입력하세요. (선택)")
+        _render_person_form(
+            name_label="상대방 이름",
+            name_key=_OPP_NAME_INPUT_KEY,
+            lunar_key="p_lunar",
+            leap_key="p_leap",
+            y_key="p_y",
+            m_key="p_m",
+            d_key="p_d",
+            bdate_key=_OPP_BDATE_KEY,
+            time_key="p_time",
+            gender_key="p_gender",
+            container_key="step2_navertone_opp",
+            on_lunar_change=_on_lunar_change_opp,
+        )
+
+    with st.container(key="step2_revisit_expander_wrap"):
+        with st.expander("재방문 비밀번호 설정 (선택)", expanded=False):
+            st.caption("다음 방문 시 본인 정보로 바로 이동합니다.")
+            rp1, rp2 = st.columns(2, gap="small")
+            with rp1:
+                M.revisit_pin_input_no_autofill(
+                    "재방문 비밀번호",
+                    key="step2_revisit_pin",
+                    placeholder="새 비밀번호",
+                )
+            with rp2:
+                M.revisit_pin_input_no_autofill(
+                    "비밀번호 확인",
+                    key="step2_revisit_pin_confirm",
+                    placeholder="한 번 더 입력",
+                )
+
+    with st.container(key="step2_action_block"):
+        if show_action_warning:
+            st.warning(
+                "⚠️ 위 안내를 확인해 주세요. "
+                "**개인정보 동의(필수)** 체크 후 **다음 → 사주 분석**을 눌러 주세요."
+            )
+        st.checkbox(
+            "개인정보 수집·이용에 동의합니다. (필수)",
+            key="agree",
+        )
+        _render_step2_inline_nav_row()
 
 
 def render() -> None:
@@ -1015,73 +1126,9 @@ def render() -> None:
     )
 
     saju_execution.ensure_calendar_locale_on_step2()
-
-    tab_main, tab_opp = st.tabs(["본인정보", "상대방정보"])
-
-    with tab_main:
-        st.caption(
-            "이름 · 생년월일(YYYY/MM/DD) · 달력 · 시간 · 성별 · 연락처(선택) 순으로 입력하세요."
-        )
-        _render_person_form(
-            name_label="성함",
-            name_key=_SELF_NAME_INPUT_KEY,
-            lunar_key="u_lunar",
-            leap_key="u_leap",
-            y_key="u_y",
-            m_key="u_m",
-            d_key="u_d",
-            bdate_key=_SELF_BDATE_KEY,
-            time_key="u_time",
-            gender_key="u_gender",
-            container_key="step2_navertone_self",
-            on_lunar_change=_on_lunar_change_self,
-            show_contact=True,
-        )
-
-    with tab_opp:
-        st.caption("궁합·상대 분석 시에만 입력하세요. (선택)")
-        _render_person_form(
-            name_label="상대방 이름",
-            name_key=_OPP_NAME_INPUT_KEY,
-            lunar_key="p_lunar",
-            leap_key="p_leap",
-            y_key="p_y",
-            m_key="p_m",
-            d_key="p_d",
-            bdate_key=_OPP_BDATE_KEY,
-            time_key="p_time",
-            gender_key="p_gender",
-            container_key="step2_navertone_opp",
-            on_lunar_change=_on_lunar_change_opp,
-        )
-
-    with st.container(key="step2_save_actions"):
-        if top_alert or apply_err:
-            st.warning(
-                "⚠️ 위 안내를 확인해 주세요. "
-                "**개인정보 동의(필수)** 체크 후 하단 **다음 →**를 눌러 주세요."
-            )
-        st.checkbox(
-            "개인정보 수집·이용에 동의합니다. (필수)",
-            key="agree",
-        )
-        with st.expander("재방문 비밀번호 설정 (선택)", expanded=False):
-            st.caption("다음 방문 시 본인 정보로 바로 이동합니다.")
-            rp1, rp2 = st.columns(2, gap="small")
-            with rp1:
-                M.revisit_pin_input_no_autofill(
-                    "재방문 비밀번호",
-                    key="step2_revisit_pin",
-                    placeholder="새 비밀번호",
-                )
-            with rp2:
-                M.revisit_pin_input_no_autofill(
-                    "비밀번호 확인",
-                    key="step2_revisit_pin_confirm",
-                    placeholder="한 번 더 입력",
-                )
+    _render_step2_input_fragment(show_action_warning=bool(top_alert or apply_err))
 
     M.inject_step2_tab_order_once()
-    M.inject_widget_focus_return_once()
     saju_execution.inject_step2_bdate_input_focus_guard_once()
+    saju_execution.inject_step2_scroll_preserve_once()
     protect_step2_birth_time_selects()
